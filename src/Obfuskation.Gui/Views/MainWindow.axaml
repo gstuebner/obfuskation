@@ -1,0 +1,311 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="720"
+        x:Class="Obfuskation.Gui.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="{Binding ProfileTitle}"
+        Width="1040" Height="720"
+        MinWidth="760" MinHeight="520"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="12" >
+    <Grid.Styles>
+      <Style Selector="Border.card">
+        <Setter Property="Margin" Value="0,0,0,12"/>
+      </Style>
+    </Grid.Styles>
+
+    <!-- ============================================== Kopfzeile ======== -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8"
+                  VerticalAlignment="Center">
+        <TextBlock Text="Obfuskation" Classes="heading" VerticalAlignment="Center"/>
+        <TextBlock Text="{Binding ProfileName}" Classes="muted"
+                   VerticalAlignment="Center" Margin="4,0,0,0"/>
+      </StackPanel>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+        <Button Content="Neu aus Datei…" Command="{Binding NewProfileCommand}"
+                ToolTip.Tip="Regelgeruest aus einer vorhandenen Datei ableiten"/>
+        <Button Content="Profil öffnen…" Command="{Binding OpenProfileCommand}"/>
+        <Button Content="Speichern" Command="{Binding SaveProfileCommand}"/>
+
+        <Button Content="Mehr ▾">
+          <Button.Flyout>
+            <MenuFlyout>
+              <MenuItem Header="Textregeln…" Command="{Binding ShowTextRulesCommand}"/>
+              <MenuItem Header="Ersetzungstabelle…" Command="{Binding ShowMappingCommand}"/>
+              <Separator/>
+              <MenuItem Header="Über Obfuskation…" Command="{Binding ShowAboutCommand}"/>
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
+
+        <Button Classes="flat" Command="{Binding ToggleThemeCommand}"
+                ToolTip.Tip="Ansicht umschalten: System, Dunkel, Hell">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{Binding ThemeSymbol}" FontSize="15"/>
+            <TextBlock Text="{Binding ThemeName}" Classes="small" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Grid>
+
+    <!-- ================================================== Datei ======== -->
+    <Border Grid.Row="1" Classes="card">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Column="0" Text="Datei" Classes="card-title"
+                   VerticalAlignment="Center" Margin="0,0,16,0"/>
+
+        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+          <TextBlock Text="{Binding DataFileName}" FontWeight="SemiBold"/>
+          <TextBlock Text="{Binding DataFileDetails}" Classes="muted small"
+                     IsVisible="{Binding HasDataFile}"/>
+        </StackPanel>
+
+        <Button Grid.Column="2" Content="Öffnen…" Classes="primary"
+                Command="{Binding OpenDataFileCommand}" VerticalAlignment="Center"/>
+      </Grid>
+    </Border>
+
+    <!-- ====================================== Felder und Regel ========= -->
+    <Grid Grid.Row="2" ColumnDefinitions="320,12,*">
+
+      <!-- Feldliste -->
+      <Border Grid.Column="0" Classes="card" Margin="0">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Grid.Row="0" Text="Felder" Classes="card-title"/>
+
+          <TextBlock Grid.Row="1" Text="{Binding EmptyHint}" Classes="muted"
+                     IsVisible="{Binding ShowEmptyHint}"
+                     VerticalAlignment="Center" TextWrapping="Wrap"/>
+
+          <ListBox Grid.Row="1" ItemsSource="{Binding Fields}"
+                   IsVisible="{Binding !ShowEmptyHint}"
+                   SelectedItem="{Binding SelectedField}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:FieldRuleViewModel">
+                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                  <!-- Statuspunkt: gefuellt und in der Akzentfarbe heisst
+                       entschieden; ein offener Kreis in Warnfarbe heisst, dass
+                       ein Lauf an diesem Feld abbrechen wuerde. Zwei getrennte
+                       Elemente statt einer umgefaerbten Anzeige — so bleibt die
+                       Farbe an den Zustand gebunden. -->
+                  <TextBlock Grid.Column="0" Text="●" FontSize="13"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource BrushAccent}"
+                             IsVisible="{Binding IsDecided}"/>
+                  <TextBlock Grid.Column="0" Text="○" FontSize="13"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource BrushError}"
+                             IsVisible="{Binding !IsDecided}"/>
+
+                  <TextBlock Grid.Column="1" Text="{Binding FieldName}"
+                             TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                             VerticalAlignment="Center"/>
+
+                  <TextBlock Grid.Column="2" Text="{Binding Summary}"
+                             Classes="muted small" VerticalAlignment="Center"
+                             TextWrapping="NoWrap"/>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </Grid>
+      </Border>
+
+      <!-- Regel zum ausgewaehlten Feld -->
+      <Border Grid.Column="2" Classes="card" Margin="0">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Grid.Row="0" Text="{Binding SelectedFieldTitle}" Classes="card-title"/>
+
+          <TextBlock Grid.Row="1" Classes="muted" VerticalAlignment="Center"
+                     IsVisible="{Binding !HasSelectedField}"
+                     Text="Links ein Feld wählen, um seine Behandlung festzulegen."/>
+
+          <ScrollViewer Grid.Row="1" IsVisible="{Binding HasSelectedField}">
+            <StackPanel Spacing="12">
+
+              <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Aktion"
+                           Classes="muted" VerticalAlignment="Center"/>
+                <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding Actions}"
+                          SelectedItem="{Binding SelectedField.SelectedAction}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ActionOption">
+                      <TextBlock Text="{Binding Label}"/>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small"
+                           Text="{Binding SelectedField.SelectedAction.Hint}"
+                           TextWrapping="Wrap"/>
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Generator"
+                           Classes="muted" VerticalAlignment="Center"
+                           IsVisible="{Binding SelectedField.NeedsGenerator}"/>
+                <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding Generators}"
+                          SelectedItem="{Binding SelectedField.SelectedGenerator}"
+                          IsVisible="{Binding SelectedField.NeedsGenerator}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GeneratorOption">
+                      <!-- Der Name steht so in der Konfigurationsdatei; die
+                           Erklaerung daneben sagt, was dabei herauskommt. -->
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Name}" MinWidth="96"/>
+                        <TextBlock Text="{Binding Description}" Classes="muted"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+
+              <!-- Vorschau am echten Wert aus der Datei -->
+              <Border Classes="card card-raised" Padding="10"
+                      IsVisible="{Binding SelectedField.HasPreview}">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="Vorschau" Classes="card-title" Margin="0"/>
+
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding SelectedField.SampleValue}"
+                               Classes="mono muted" TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="→" Classes="accent"/>
+                    <TextBlock Text="{Binding SelectedField.Preview}"
+                               Classes="mono accent" TextTrimming="CharacterEllipsis"/>
+                  </StackPanel>
+
+                  <!-- Ohne bestehende Tabelle entsteht das Salt fluechtig; der
+                       spaetere echte Lauf liefert dann andere Werte. -->
+                  <TextBlock Classes="muted small"
+                             IsVisible="{Binding SelectedField.PreviewIsExample}"
+                             Text="Nur ein Beispiel — es gibt noch keine Ersetzungstabelle. Der erste echte Lauf legt sie an und bestimmt die endgültigen Werte."/>
+                </StackPanel>
+              </Border>
+
+              <!-- Befunde der Profilpruefung -->
+              <StackPanel Spacing="4" IsVisible="{Binding HasIssues}">
+                <TextBlock Text="Hinweise zur Konfiguration" Classes="card-title" Margin="0"/>
+                <ItemsControl ItemsSource="{Binding Issues}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
+                        <TextBlock Grid.Column="0" Text="{Binding Path}"
+                                   Classes="mono small muted" VerticalAlignment="Top"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Message}"
+                                   Classes="small" TextWrapping="Wrap"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ================================================ Ergebnis ======= -->
+    <Border Grid.Row="3" Classes="card" Margin="0,12,0,0"
+            IsVisible="{Binding HasResult}">
+      <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="Auto,*">
+          <TextBlock Grid.Column="0" Text="{Binding LastResult.Headline}"
+                     FontWeight="SemiBold"/>
+          <TextBlock Grid.Column="1" Text="{Binding LastResult.Summary}"
+                     Classes="muted small" HorizontalAlignment="Right"
+                     VerticalAlignment="Center"/>
+        </Grid>
+
+        <ItemsControl ItemsSource="{Binding LastResult.RuleHits}"
+                      IsVisible="{Binding LastResult.HasRuleHits}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel/>
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:NamedCount">
+              <Border Classes="card card-raised" Padding="8,3" Margin="0,0,6,6">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="{Binding Name}" Classes="small"/>
+                  <TextBlock Text="{Binding Count}" Classes="small accent"/>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Befunde der Pruefung -->
+        <StackPanel Spacing="4" IsVisible="{Binding LastResult.HasFindings}">
+          <TextBlock Text="Verdachtsfälle" Classes="error" FontWeight="SemiBold"/>
+          <ScrollViewer MaxHeight="140">
+            <ItemsControl ItemsSource="{Binding LastResult.Findings}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:FindingItem">
+                  <Grid ColumnDefinitions="200,120,*" Margin="0,1">
+                    <TextBlock Grid.Column="0" Text="{Binding Location}" Classes="mono small"/>
+                    <TextBlock Grid.Column="1" Text="{Binding Rule}" Classes="small muted"/>
+                    <TextBlock Grid.Column="2" Text="{Binding Kind}" Classes="small"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <TextBlock Text="{Binding LastResult.FindingsNote}" Classes="muted small"
+                     IsVisible="{Binding LastResult.HasFindingsNote}"/>
+        </StackPanel>
+
+        <ItemsControl ItemsSource="{Binding LastResult.Warnings}"
+                      IsVisible="{Binding LastResult.HasWarnings}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding}" Classes="warning small" Margin="0,1"/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <!-- ============================================ Aktionsleiste ====== -->
+    <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
+
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+        <Button Content="Ersetzen" Classes="primary" Command="{Binding ObfuscateCommand}"/>
+        <Button Content="Zurückholen" Command="{Binding DeobfuscateCommand}"/>
+        <Button Content="Prüfen" Command="{Binding ScanCommand}"/>
+
+        <!-- Der Schritt vor der Weitergabe soll nicht untergehen. -->
+        <TextBlock Text="↖ vor der Weitergabe prüfen" Classes="warning small"
+                   VerticalAlignment="Center" Margin="4,0,0,0"
+                   IsVisible="{Binding ScanRecommended}"/>
+      </StackPanel>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="16,0"
+                  VerticalAlignment="Center" IsVisible="{Binding IsBusy}">
+        <ProgressBar IsIndeterminate="True" Width="160" VerticalAlignment="Center"/>
+        <TextBlock Text="{Binding ProgressText}" Classes="muted small"
+                   VerticalAlignment="Center" MinWidth="120"/>
+        <Button Content="Abbrechen" Classes="flat" Command="{Binding CancelCommand}"/>
+      </StackPanel>
+
+      <TextBlock Grid.Column="2" Text="{Binding UndecidedText}"
+                 VerticalAlignment="Center" Classes="small"
+                 IsVisible="{Binding HasDataFile}"/>
+    </Grid>
+
+    <!-- Statuszeile ganz unten, ueber die volle Breite -->
+    <TextBlock Grid.Row="5" Text="{Binding StatusText}" Classes="muted small"
+               Margin="0,10,0,0" TextWrapping="Wrap" MaxLines="3"/>
+
+  </Grid>
+</Window>

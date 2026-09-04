@@ -1,0 +1,88 @@
+<!--
+    Die Farbwelt, hell und dunkel.
+
+    Avalonia kennt Theme-Varianten von Haus aus: beide Saetze stehen
+    nebeneinander in ThemeDictionaries, die Steuerelemente greifen mit
+    {DynamicResource ...} zu und holen sich den neuen Wert selbst, und
+    Application.RequestedThemeVariant schaltet um. Die Variante "Default" folgt
+    der Einstellung des Betriebssystems.
+
+    Beide Saetze muessen dieselben Schluessel fuehren - ein Schluessel, den nur
+    einer kennt, faellt beim Umschalten weg.
+
+    Masse, Radien und Schriften stehen in Metrics.axaml: sie sind in beiden
+    Varianten gleich und sollen nicht doppelt gepflegt werden.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <ResourceDictionary.ThemeDictionaries>
+
+    <!-- ===================================================== dunkel ===== -->
+    <!-- Die Vorgabe der Anwendung. -->
+    <ResourceDictionary x:Key="Dark">
+
+      <!-- Flaechen, von hinten nach vorn -->
+      <SolidColorBrush x:Key="BrushBackground" Color="#0F141B"/>
+      <SolidColorBrush x:Key="BrushCard" Color="#161D26"/>
+      <SolidColorBrush x:Key="BrushCardRaised" Color="#1D2634"/>
+      <SolidColorBrush x:Key="BrushBorder" Color="#243040"/>
+
+      <!-- Schrift -->
+      <SolidColorBrush x:Key="BrushText" Color="#E6EDF3"/>
+      <SolidColorBrush x:Key="BrushTextMuted" Color="#8B98A8"/>
+      <SolidColorBrush x:Key="BrushTextDisabled" Color="#5A6675"/>
+
+      <!-- Akzent -->
+      <SolidColorBrush x:Key="BrushAccent" Color="#22D3EE"/>
+      <SolidColorBrush x:Key="BrushAccentDimmed" Color="#0E7490"/>
+      <SolidColorBrush x:Key="BrushAccentText" Color="#0F141B"/>
+
+      <!-- Zustaende. Rot bleibt echten Fehlern vorbehalten. -->
+      <SolidColorBrush x:Key="BrushOk" Color="#22C55E"/>
+      <SolidColorBrush x:Key="BrushNeutral" Color="#64748B"/>
+      <SolidColorBrush x:Key="BrushUnknown" Color="#475569"/>
+      <SolidColorBrush x:Key="BrushError" Color="#F43F5E"/>
+      <SolidColorBrush x:Key="BrushWarning" Color="#FBBF24"/>
+
+      <!-- Fuellungen fuer Auswahl und Ueberfahren -->
+      <SolidColorBrush x:Key="BrushHover" Color="#22D3EE" Opacity="0.10"/>
+      <SolidColorBrush x:Key="BrushSelected" Color="#22D3EE" Opacity="0.18"/>
+
+    </ResourceDictionary>
+
+    <!-- ====================================================== hell ====== -->
+    <!--
+        Nicht gespiegelt, sondern uebersetzt: Flaechen und Schrift kehren sich
+        um, der Akzent wird dunkler statt heller - das helle Tuerkis waere auf
+        Weiss nicht mehr zu lesen.
+    -->
+    <ResourceDictionary x:Key="Light">
+
+      <SolidColorBrush x:Key="BrushBackground" Color="#EEF1F5"/>
+      <SolidColorBrush x:Key="BrushCard" Color="#FFFFFF"/>
+      <SolidColorBrush x:Key="BrushCardRaised" Color="#E4EAF0"/>
+      <SolidColorBrush x:Key="BrushBorder" Color="#C8D2DC"/>
+
+      <SolidColorBrush x:Key="BrushText" Color="#131C26"/>
+      <SolidColorBrush x:Key="BrushTextMuted" Color="#5B6875"/>
+      <SolidColorBrush x:Key="BrushTextDisabled" Color="#96A2AE"/>
+
+      <SolidColorBrush x:Key="BrushAccent" Color="#0E7490"/>
+      <SolidColorBrush x:Key="BrushAccentDimmed" Color="#BFE7F0"/>
+      <SolidColorBrush x:Key="BrushAccentText" Color="#FFFFFF"/>
+
+      <!-- Gruen und Rot kraeftiger, damit sie auf Weiss tragen. -->
+      <SolidColorBrush x:Key="BrushOk" Color="#15803D"/>
+      <SolidColorBrush x:Key="BrushNeutral" Color="#64748B"/>
+      <SolidColorBrush x:Key="BrushUnknown" Color="#94A3B8"/>
+      <SolidColorBrush x:Key="BrushError" Color="#DC2626"/>
+      <SolidColorBrush x:Key="BrushWarning" Color="#B45309"/>
+
+      <SolidColorBrush x:Key="BrushHover" Color="#0E7490" Opacity="0.08"/>
+      <SolidColorBrush x:Key="BrushSelected" Color="#0E7490" Opacity="0.15"/>
+
+    </ResourceDictionary>
+
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

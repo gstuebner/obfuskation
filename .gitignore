@@ -1,0 +1,21 @@
+# Build
+bin/
+obj/
+publish/
+*.user
+
+# Entwicklungsumgebungen
+.vs/
+.vscode/
+.idea/
+*.swp
+
+# NIEMALS committen: enthaelt saemtliche Echtdaten
+mapping.json
+*.map.json
+mapping.lock
+
+# Pseudonymisierte Ausgaben und eigene Profile
+*.pseudo.*
+*.klartext.*
+obfuskation.json

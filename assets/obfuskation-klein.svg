@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Anwendungssymbol, vereinfachte Ausfuehrung fuer 16 und 24 px.
+
+    Dasselbe Motiv wie obfuskation.svg, aber auf das reduziert, was bei dieser
+    Groesse noch traegt: das Blatt und zwei kraeftige Balken. Die duennen
+    Klartextzeilen und das Eselsohr entfallen - herunterskaliert wuerden sie zu
+    grauem Brei, und ein Symbol, das man nicht mehr unterscheiden kann, ist
+    kein Symbol mehr.
+
+    Groessere Flaechen, weniger Rundung, kraeftigere Balken: bei 16 px zaehlt
+    jedes einzelne Pixel.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+
+  <!-- Grundflaeche einfarbig: ein Verlauf ist bei 16 px nicht zu sehen und
+       kostet nur Kontrast. -->
+  <rect x="0" y="0" width="256" height="256" rx="48" fill="#0F141B"/>
+
+  <!-- Das Blatt, groesser und ohne Eselsohr -->
+  <rect x="52" y="36" width="152" height="184" rx="16" fill="#E6EDF3"/>
+
+  <!-- Oben eine gedaempfte Zeile als Andeutung des Klartexts -->
+  <rect x="76" y="72" width="104" height="22" rx="11" fill="#8B98A8"/>
+
+  <!-- Unten ein einzelner voller Block: das Ersetzte.
+       Zwei Balken wie in der grossen Vorlage waeren hier falsch - bei 16 px
+       liegt zwischen ihnen weniger als ein Pixel, sie flossen zu einem
+       unklaren Klumpen zusammen. Ein Block mit deutlichem Abstand darueber
+       sagt dasselbe und bleibt sauber. -->
+  <rect x="76" y="140" width="104" height="44" rx="16" fill="#22D3EE"/>
+
+</svg>

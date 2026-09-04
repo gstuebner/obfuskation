@@ -1,0 +1,202 @@
+<!--
+    Die Stile der Oberflaeche.
+
+    Aufgesetzt auf das Fluent-Thema von Avalonia; hier steht nur, was von der
+    Vorgabe abweicht. Saemtliche Farben kommen ueber {DynamicResource ...} aus
+    Colors.axaml, damit das Umschalten zwischen hell und dunkel im laufenden
+    Betrieb greift - eine fest eingetragene Farbe bliebe beim Umschalten stehen.
+-->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <!-- ============================================================ Karte -->
+  <!-- Die tragende Form der Oberflaeche. -->
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource BrushCard}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusCard}"/>
+    <Setter Property="Padding" Value="{DynamicResource PaddingCard}"/>
+  </Style>
+
+  <Style Selector="Border.card-raised">
+    <Setter Property="Background" Value="{DynamicResource BrushCardRaised}"/>
+  </Style>
+
+  <!-- ========================================================== Schrift -->
+  <Style Selector="TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource BrushText}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource FontUi}"/>
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeNormal}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+
+  <!-- Ueberschrift einer Karte -->
+  <Style Selector="TextBlock.card-title">
+    <Setter Property="Foreground" Value="{DynamicResource BrushTextMuted}"/>
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Margin" Value="0,0,0,8"/>
+  </Style>
+
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource BrushTextMuted}"/>
+  </Style>
+
+  <Style Selector="TextBlock.small">
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeSmall}"/>
+  </Style>
+
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource FontMono}"/>
+  </Style>
+
+  <Style Selector="TextBlock.heading">
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeLarge}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style Selector="TextBlock.error">
+    <Setter Property="Foreground" Value="{DynamicResource BrushError}"/>
+  </Style>
+
+  <Style Selector="TextBlock.warning">
+    <Setter Property="Foreground" Value="{DynamicResource BrushWarning}"/>
+  </Style>
+
+  <Style Selector="TextBlock.ok">
+    <Setter Property="Foreground" Value="{DynamicResource BrushOk}"/>
+  </Style>
+
+  <Style Selector="TextBlock.accent">
+    <Setter Property="Foreground" Value="{DynamicResource BrushAccent}"/>
+  </Style>
+
+  <!-- ==================================================== Schaltflaeche -->
+  <Style Selector="Button">
+    <Setter Property="Background" Value="{DynamicResource BrushCardRaised}"/>
+    <Setter Property="Foreground" Value="{DynamicResource BrushText}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusButton}"/>
+    <Setter Property="Padding" Value="{DynamicResource PaddingButton}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource FontUi}"/>
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeNormal}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+
+  <Style Selector="Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrushHover}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushAccent}"/>
+  </Style>
+
+  <Style Selector="Button:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrushCard}"/>
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource BrushTextDisabled}"/>
+  </Style>
+
+  <!-- Die betonte Schaltflaeche einer Karte; hoechstens eine je Ansicht. -->
+  <Style Selector="Button.primary">
+    <Setter Property="Background" Value="{DynamicResource BrushAccent}"/>
+    <Setter Property="Foreground" Value="{DynamicResource BrushAccentText}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushAccent}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrushAccentDimmed}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushAccent}"/>
+  </Style>
+
+  <!-- Flache Schaltflaeche fuer Nebensaechliches -->
+  <Style Selector="Button.flat">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Foreground" Value="{DynamicResource BrushTextMuted}"/>
+    <Setter Property="Padding" Value="8,5"/>
+  </Style>
+
+  <Style Selector="Button.flat:pointerover /template/ ContentPresenter">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource BrushAccent}"/>
+  </Style>
+
+  <!-- ========================================================= Eingaben -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource BrushCardRaised}"/>
+    <Setter Property="Foreground" Value="{DynamicResource BrushText}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusButton}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource FontUi}"/>
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeNormal}"/>
+    <Setter Property="Padding" Value="8,6"/>
+  </Style>
+
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushAccent}"/>
+  </Style>
+
+  <Style Selector="TextBox.mono">
+    <Setter Property="FontFamily" Value="{DynamicResource FontMono}"/>
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource BrushCardRaised}"/>
+    <Setter Property="Foreground" Value="{DynamicResource BrushText}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource BrushBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusButton}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource FontUi}"/>
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeNormal}"/>
+    <Setter Property="Padding" Value="8,6"/>
+  </Style>
+
+  <Style Selector="CheckBox">
+    <Setter Property="Foreground" Value="{DynamicResource BrushText}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource FontUi}"/>
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeNormal}"/>
+  </Style>
+
+  <!-- ============================================================ Liste -->
+  <Style Selector="ListBox">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+
+  <Style Selector="ListBoxItem">
+    <Setter Property="Padding" Value="8,6"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSmall}"/>
+    <Setter Property="Foreground" Value="{DynamicResource BrushText}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource FontUi}"/>
+    <Setter Property="FontSize" Value="{DynamicResource FontSizeNormal}"/>
+  </Style>
+
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrushHover}"/>
+  </Style>
+
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource BrushSelected}"/>
+  </Style>
+
+  <!-- ========================================================= Sonstige -->
+  <Style Selector="ProgressBar">
+    <Setter Property="Foreground" Value="{DynamicResource BrushAccent}"/>
+    <Setter Property="Background" Value="{DynamicResource BrushCardRaised}"/>
+    <Setter Property="Height" Value="4"/>
+    <Setter Property="CornerRadius" Value="2"/>
+  </Style>
+
+  <Style Selector="Separator">
+    <Setter Property="Background" Value="{DynamicResource BrushBorder}"/>
+    <Setter Property="Height" Value="1"/>
+  </Style>
+
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource BrushBackground}"/>
+    <Setter Property="FontFamily" Value="{DynamicResource FontUi}"/>
+  </Style>
+
+</Styles>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Anwendungssymbol, volle Ausfuehrung (ab 32 px).
+
+    Motiv: ein Blatt, dessen obere Zeilen im Klartext stehen (duenn, gedaempft)
+    und dessen untere ersetzt sind (volle Balken in der Akzentfarbe). Das ist
+    genau das, was das Werkzeug tut.
+
+    Farben aus der dunklen Farbwelt, damit Symbol und Oberflaeche
+    zusammengehoeren - siehe src/Obfuskation.Gui/Themes/Colors.axaml.
+
+    Fuer 16 und 24 px gibt es obfuskation-klein.svg: die Haarstriche hier
+    wuerden dort zu grauem Brei.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+
+  <defs>
+    <linearGradient id="grund" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1D2634"/>   <!-- FarbeKarteHell -->
+      <stop offset="1" stop-color="#0F141B"/>   <!-- FarbeHintergrund -->
+    </linearGradient>
+  </defs>
+
+  <!-- Grundflaeche -->
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#grund)"/>
+
+  <!-- Das Blatt. Die abgeknickte Ecke oben rechts macht es auch ohne
+       Beschriftung als Dokument erkennbar. -->
+  <path d="M 56 40
+           h 108
+           l 36 36
+           v 140
+           a 12 12 0 0 1 -12 12
+           h -132
+           a 12 12 0 0 1 -12 -12
+           v -164
+           a 12 12 0 0 1 12 -12 z"
+        fill="#E6EDF3"/>
+
+  <!-- Der Eselsohr-Knick, etwas dunkler als das Blatt -->
+  <path d="M 164 40 l 36 36 h -30 a 6 6 0 0 1 -6 -6 z" fill="#B9C6D4"/>
+
+  <!-- Klartext: duenne, gedaempfte Zeilen -->
+  <g fill="#8B98A8">
+    <rect x="80" y="92"  width="96" height="8" rx="4"/>
+    <rect x="80" y="112" width="68" height="8" rx="4"/>
+    <rect x="80" y="132" width="88" height="8" rx="4"/>
+  </g>
+
+  <!-- Ersetzt: volle Balken in der Akzentfarbe -->
+  <g fill="#22D3EE">
+    <rect x="80" y="162" width="96" height="14" rx="7"/>
+    <rect x="80" y="186" width="68" height="14" rx="7"/>
+  </g>
+
+</svg>

@@ -1,0 +1,130 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="620"
+        x:Class="Obfuskation.Gui.Views.TextRulesWindow"
+        x:DataType="vm:TextRulesViewModel"
+        Title="Textregeln"
+        Width="900" Height="620" MinWidth="700" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+
+    <TextBlock Grid.Row="0" Classes="muted" Margin="0,0,0,12" TextWrapping="Wrap"
+               Text="Textregeln greifen in Freitextfeldern und in unstrukturierten Dateien. Sie sind ein Ausschlussverfahren: was kein Muster trifft, bleibt stehen. Unten lässt sich jedes Muster an echtem Text erproben — zu weit gefasste Muster fallen dort sofort auf."/>
+
+    <Grid Grid.Row="1" ColumnDefinitions="240,12,*">
+
+      <!-- Regelliste -->
+      <Border Grid.Column="0" Classes="card">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <TextBlock Grid.Row="0" Text="Regeln" Classes="card-title"/>
+
+          <ListBox Grid.Row="1" ItemsSource="{Binding Rules}"
+                   SelectedItem="{Binding Selected}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:TextRuleViewModel">
+                <TextBlock Text="{Binding Display}" TextWrapping="NoWrap"/>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+
+          <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+            <Button Content="Hinzufügen" Command="{Binding AddCommand}"/>
+            <Button Content="Entfernen" Command="{Binding RemoveCommand}"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <!-- Formular und Erprobung -->
+      <Grid Grid.Column="2" RowDefinitions="Auto,12,*">
+
+        <Border Grid.Row="0" Classes="card">
+          <StackPanel Spacing="8" IsVisible="{Binding HasSelected}">
+            <TextBlock Text="Regel" Classes="card-title" Margin="0"/>
+
+            <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto"
+                  RowSpacing="8" ColumnSpacing="8">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
+                         Classes="muted" VerticalAlignment="Center"/>
+              <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Selected.Name}"/>
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Muster"
+                         Classes="muted" VerticalAlignment="Center"/>
+              <TextBox Grid.Row="1" Grid.Column="1" Classes="mono"
+                       Text="{Binding Selected.Pattern}"
+                       PlaceholderText="Regulärer Ausdruck"/>
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="Generator"
+                         Classes="muted" VerticalAlignment="Center"/>
+              <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
+                        ItemsSource="{Binding Generators}"
+                        SelectedItem="{Binding Selected.Generator}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:GeneratorOption">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Name}" MinWidth="96"/>
+                      <TextBlock Text="{Binding Description}" Classes="muted"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="Priorität"
+                         Classes="muted" VerticalAlignment="Center"/>
+              <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                <NumericUpDown Value="{Binding Selected.Priority}" Width="110"
+                               Minimum="0" Maximum="1000" Increment="10"
+                               FormatString="0"/>
+                <CheckBox Content="Groß-/Kleinschreibung egal"
+                          IsChecked="{Binding Selected.IgnoreCase}"
+                          VerticalAlignment="Center"/>
+                <TextBlock Classes="muted small" VerticalAlignment="Center"
+                           Text="höhere Priorität gewinnt bei Überlappung"/>
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <!-- Erprobung -->
+        <Border Grid.Row="2" Classes="card">
+          <Grid RowDefinitions="Auto,*,Auto,Auto">
+            <TextBlock Grid.Row="0" Text="Erprobung" Classes="card-title"/>
+
+            <TextBox Grid.Row="1" Classes="mono" AcceptsReturn="True"
+                     Text="{Binding SampleText}" MinHeight="90"
+                     TextWrapping="Wrap"/>
+
+            <TextBlock Grid.Row="2" Text="{Binding MatchSummary}"
+                       Classes="muted small" Margin="0,8,0,4"/>
+
+            <ScrollViewer Grid.Row="3" MaxHeight="130">
+              <ItemsControl ItemsSource="{Binding Matches}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:MatchPreview">
+                    <Grid ColumnDefinitions="110,60,*" Margin="0,1">
+                      <TextBlock Grid.Column="0" Text="{Binding Rule}" Classes="small accent"/>
+                      <TextBlock Grid.Column="1" Classes="small muted"
+                                 Text="{Binding Line, StringFormat='Zeile {0}'}"/>
+                      <TextBlock Grid.Column="2" Text="{Binding Value}" Classes="small mono"/>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                Spacing="8" Margin="0,12,0,0">
+      <Button Content="Schließen" Classes="primary" Click="OnClose"/>
+    </StackPanel>
+
+  </Grid>
+</Window>

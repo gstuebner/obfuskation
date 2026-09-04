@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Der Aufrufname. Bewusst verschieden vom Kommandozeilenprogramm
+         ("obfuskation"): Windows unterscheidet Gross- und Kleinschreibung im
+         Dateinamen nicht, beide landen aber im selben Verzeichnis. -->
+    <AssemblyName>obfuskation-gui</AssemblyName>
+    <RootNamespace>Obfuskation.Gui</RootNamespace>
+
+    <ApplicationIcon>Assets\obfuskation.ico</ApplicationIcon>
+    <Version>1.0.0</Version>
+
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <!-- Mitgelieferte Schrift: das Dashboard setzt auf Segoe UI, die es unter
+         Linux nicht gibt. Ohne eigene Schrift saehe die Oberflaeche auf beiden
+         Systemen verschieden aus. -->
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Obfuskation.Core\Obfuskation.Core.csproj" />
+  </ItemGroup>
+
+</Project>

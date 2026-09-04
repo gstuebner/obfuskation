@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Obfuskation
+GenericName=Pseudonymisierung
+Comment=Tauscht Echtdaten gegen Pseudodaten und macht den Austausch rückgängig
+Comment[en]=Replaces real data with pseudonyms and can undo the replacement
+Exec=obfuskation-gui %f
+Icon=obfuskation
+Terminal=false
+Categories=Utility;
+MimeType=text/csv;application/json;text/plain;
+Keywords=Pseudonymisierung;Anonymisierung;CSV;JSON;Datenschutz;
+StartupWMClass=obfuskation-gui

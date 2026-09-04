@@ -1,0 +1,72 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="480"
+        x:Class="Obfuskation.Gui.Views.MappingWindow"
+        x:DataType="vm:MappingViewModel"
+        Title="Ersetzungstabelle"
+        Width="640" Height="480" MinWidth="520" MinHeight="380"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
+
+    <!-- Der Hinweis steht bewusst ganz oben und nicht im Kleingedruckten. -->
+    <Border Grid.Row="0" Classes="card" BorderBrush="{DynamicResource BrushWarning}">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Diese Datei enthält sämtliche Echtdaten" Classes="warning"
+                   FontWeight="SemiBold"/>
+        <TextBlock Classes="small" TextWrapping="Wrap"
+                   Text="Sie ist das schützenswerteste Artefakt des ganzen Vorgangs — niemals in ein Repository, niemals in ein Verzeichnis, aus dem Dateien nach außen gehen, niemals in ein Backup, das das Haus verlässt. Deshalb werden hier nur Anzahlen gezeigt, keine Werte."/>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="1" Classes="card">
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="4"
+            ColumnSpacing="12">
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="Profil" Classes="muted"/>
+        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding ProfileName}"/>
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="Datei" Classes="muted"/>
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StorePath}"
+                   Classes="mono small" TextWrapping="Wrap"/>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" Text="Rechte" Classes="muted"/>
+        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Permissions}" Classes="mono small"/>
+      </Grid>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Margin="0,12,0,0">
+      <Grid RowDefinitions="Auto,*">
+        <TextBlock Grid.Row="0" Text="Namensräume" Classes="card-title"/>
+
+        <TextBlock Grid.Row="1" Text="{Binding EmptyText}" Classes="muted"
+                   VerticalAlignment="Center" IsVisible="{Binding IsEmpty}"
+                   TextWrapping="Wrap"/>
+
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding !IsEmpty}">
+          <ItemsControl ItemsSource="{Binding Namespaces}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:NamedCount">
+                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                  <TextBlock Grid.Column="0" Text="{Binding Name}"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Count}" Classes="accent"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="3" ColumnDefinitions="*,Auto" Margin="0,12,0,0">
+      <TextBlock Grid.Column="0" Text="{Binding TotalText}" VerticalAlignment="Center"
+                 FontWeight="SemiBold"/>
+      <Button Grid.Column="1" Content="Schließen" Classes="primary" Click="OnClose"/>
+    </Grid>
+
+  </Grid>
+</Window>

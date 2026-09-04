@@ -1,0 +1,38 @@
+<!--
+    Masse, Radien und Schriften.
+
+    Bewusst getrennt von den Farben: die Ansicht laesst sich zwischen hell und
+    dunkel umschalten, Abstaende und Schriftgroessen bleiben dabei gleich und
+    sollen nicht in zwei Dateien gepflegt werden muessen.
+-->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+  <!-- Masse. Als Token, damit Abstaende ueberall gleich ausfallen. -->
+  <CornerRadius x:Key="RadiusCard">6</CornerRadius>
+  <CornerRadius x:Key="RadiusButton">4</CornerRadius>
+  <CornerRadius x:Key="RadiusSmall">3</CornerRadius>
+
+  <Thickness x:Key="PaddingCard">12</Thickness>
+  <Thickness x:Key="PaddingInner">8</Thickness>
+  <Thickness x:Key="PaddingButton">14,7</Thickness>
+
+  <sys:Double x:Key="SpacingSmall">4</sys:Double>
+  <sys:Double x:Key="SpacingNormal">8</sys:Double>
+  <sys:Double x:Key="SpacingLarge">12</sys:Double>
+
+  <!--
+      Inter wird mit der Anwendung ausgeliefert (Avalonia.Fonts.Inter). Auf
+      eine Systemschrift zu setzen ginge nicht: Segoe UI gibt es unter Linux
+      nicht, und die Oberflaeche saehe auf beiden Systemen verschieden aus.
+  -->
+  <FontFamily x:Key="FontUi">avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+  <FontFamily x:Key="FontMono">Cascadia Mono, Consolas, DejaVu Sans Mono, Liberation Mono, monospace</FontFamily>
+
+  <sys:Double x:Key="FontSizeSmall">11</sys:Double>
+  <sys:Double x:Key="FontSizeNormal">13</sys:Double>
+  <sys:Double x:Key="FontSizeMedium">15</sys:Double>
+  <sys:Double x:Key="FontSizeLarge">20</sys:Double>
+
+</ResourceDictionary>

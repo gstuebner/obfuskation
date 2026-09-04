@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Obfuskation.Core\Obfuskation.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.11" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- Der Aufrufname des Programms, unabhaengig vom Projektnamen. -->
+    <AssemblyName>obfuskation</AssemblyName>
+    <RootNamespace>Obfuskation.Cli</RootNamespace>
+  </PropertyGroup>
+
+</Project>

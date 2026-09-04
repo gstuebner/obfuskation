@@ -1,0 +1,76 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="560"
+        x:Class="Obfuskation.Gui.Views.AboutWindow"
+        Title="Über Obfuskation"
+        Width="560" Height="560" MinWidth="480" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="14" Margin="0,0,0,16">
+      <Image Source="avares://obfuskation-gui/Assets/obfuskation.png"
+             Width="56" Height="56" VerticalAlignment="Top"/>
+      <StackPanel Spacing="2" VerticalAlignment="Center">
+        <TextBlock Text="Obfuskation" Classes="heading"/>
+        <TextBlock Name="VersionText" Classes="muted small"/>
+        <TextBlock Classes="muted small"
+                   Text="Reversible Pseudonymisierung von Beispieldaten"/>
+        <!-- Damit Kollegen bei Fragen wissen, an wen sie sich wenden. -->
+        <TextBlock Classes="small" Margin="0,6,0,0"
+                   Text="Erstellt von Gregor Stübner und Claude (Anthropic)"/>
+      </StackPanel>
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Spacing="12">
+
+        <Border Classes="card" BorderBrush="{DynamicResource BrushWarning}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Bitte im Blick behalten" Classes="warning" FontWeight="SemiBold"/>
+
+            <StackPanel Spacing="6">
+              <TextBlock TextWrapping="Wrap" Classes="small"
+                         Text="1.  Das Werkzeug pseudonymisiert, es anonymisiert nicht. Postleitzahl, Geburtsjahr und Kontostand zusammen können weiterhin auf eine Person zurückführen. Ob das vertretbar ist, entscheidet der Datenschutzbeauftragte."/>
+              <TextBlock TextWrapping="Wrap" Classes="small"
+                         Text="2.  Die Ersetzungstabelle enthält sämtliche Echtdaten. Niemals in ein Repository, niemals dorthin, wo Dateien nach außen gehen, niemals in ein Backup, das das Haus verlässt."/>
+              <TextBlock TextWrapping="Wrap" Classes="small"
+                         Text="3.  Textregeln sind ein Ausschlussverfahren. Was kein Muster trifft, bleibt stehen — Namen und Adressen in Freitext lassen sich nicht zuverlässig erkennen. Dort im Zweifel „redact“ oder „drop“ wählen."/>
+              <TextBlock TextWrapping="Wrap" Classes="small"
+                         Text="4.  Vor jeder Weitergabe prüfen. Nicht optional."/>
+              <TextBlock TextWrapping="Wrap" Classes="small"
+                         Text="5.  Die Ausgabe erkennbar benennen, damit Original und Pseudonymisat nicht verwechselt werden."/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Pfade" Classes="card-title" Margin="0"/>
+            <TextBlock Text="Ersetzungstabelle" Classes="muted small"/>
+            <TextBlock Name="StoreText" Classes="mono small" TextWrapping="Wrap"/>
+            <TextBlock Text="Einstellungen der Oberfläche" Classes="muted small" Margin="0,6,0,0"/>
+            <TextBlock Name="SettingsText" Classes="mono small" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Auf der Kommandozeile" Classes="card-title" Margin="0"/>
+            <TextBlock Classes="mono small" TextWrapping="Wrap"
+                       Text="obfuskation init --from &lt;datei&gt;&#10;obfuskation obfuscate &lt;datei&gt; -o &lt;ziel&gt; --strict&#10;obfuskation scan &lt;datei&gt;&#10;obfuskation deobfuscate            (liest von der Standardeingabe)"/>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <Button Grid.Row="2" Content="Schließen" Classes="primary"
+            HorizontalAlignment="Right" Margin="0,12,0,0" Click="OnClose"/>
+
+  </Grid>
+</Window>

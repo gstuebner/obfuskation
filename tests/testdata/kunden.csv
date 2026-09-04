@@ -1,0 +1,5 @@
+Kundennummer;Kundenname;IBAN;BIC;Geburtsdatum;Betrag;Verwendungszweck;Bemerkung
+4711;Max Mustermann;DE73999999990000001234;TESTDEFFXXX;15.03.1980;1234,56;"Miete März; Konto DE72999999990000007654";Stammkunde seit 1999
+4712;Erika Musterfrau;DE72999999990000007654;MUSTDEFF001;22.11.1975;-89,90;Rückzahlung an erika.musterfrau@beispiel.de;
+4713;Grünwald & Söhne GmbH;DE24999999990000009876;DEMODEFFXXX;01.01.2001;15000,00;Rechnung 2024-0815, Rückfragen unter +49 30 12345678;Großkunde
+4711;Max Mustermann;DE73999999990000001234;TESTDEFFXXX;15.03.1980;42,00;Dauerauftrag;Stammkunde seit 1999
