@@ -1,216 +1,155 @@
 # Obfuskation
 
-Tauscht Echtdaten in CSV-, JSON- und Textdateien gegen plausible Pseudodaten aus
-und kann den Austausch wieder rückgängig machen. Gedacht für den Fall, dass
-Beispieldaten an eine KI gegeben werden sollen, die Echtdaten aber das Haus nicht
-verlassen dürfen.
+**English** · [Deutsch](README.de.md)
 
-Der eigentliche Nutzen liegt im Rückweg: die Antwort der KI — generierter Code,
-Analysen, Beispielausgaben — lässt sich mit `deobfuscate` wieder auf die
-Echtwerte abbilden.
+Replaces sensitive data in CSV, JSON, and plain text files with plausible pseudonyms and can fully reverse the substitutions. Designed for scenarios where sample data needs to be fed to an AI or LLM, but real data must never leave the organization.
 
-Es gibt zwei Wege zum selben Werkzeug: das Kommandozeilenprogramm
-`obfuskation` für Skripte und die Oberfläche `obfuskation-gui` für die
-tägliche Arbeit. Beide nutzen dieselbe Bibliothek und dieselbe
-Ersetzungstabelle — was der eine ersetzt, holt der andere zurück.
+The primary value lies in the return path: the AI's response — generated code, analyses, sample outputs — can be mapped back to real values using `deobfuscate`.
 
-## Herunterladen
+There are two interfaces to the same core: the command-line tool `obfuskation` for scripts and automation, and the graphical interface `obfuskation-gui` for everyday work. Both share the same underlying library and substitution table — whatever one replaces, the other can restore.
 
-Fertige Programme für Windows und Linux liegen unter
-[Releases](../../releases). Je Plattform zwei Dateien, ohne Installation
-lauffähig:
+## Download
 
-| Datei | Zweck |
+Pre-built binaries for Windows and Linux are available under [Releases](../../releases). Two portable files per platform, no installation required:
+
+| File | Purpose |
 |---|---|
-| `obfuskation` / `obfuskation.exe` | Kommandozeile |
-| `obfuskation-gui` / `obfuskation-gui.exe` | Oberfläche |
+| `obfuskation` / `obfuskation.exe` | Command-line interface |
+| `obfuskation-gui` / `obfuskation-gui.exe` | Graphical user interface |
 
-Voraussetzung ist die **.NET-8-Runtime**. Wer sie nicht installieren möchte,
-baut sich mit `./build-release.sh --self-contained` eine Fassung, die alles
-mitbringt.
+Prerequisite is the **.NET 8 runtime**. If you prefer not to install it, you can build a self-contained version using `./build-release.sh --self-contained` that bundles everything.
 
-Unter Linux die Dateien ausführbar machen (`chmod +x`). Unter Windows warnt
-SmartScreen beim ersten Start, weil die Programme nicht signiert sind —
-*Weitere Informationen* → *Trotzdem ausführen*.
+On Linux, make the files executable (`chmod +x`). On Windows, SmartScreen warns on first launch because binaries are unsigned — click *More info* → *Run anyway*.
 
 ---
 
-## Bitte zuerst lesen
+## Please Read First
 
-**1. Das Werkzeug pseudonymisiert, es anonymisiert nicht.**
-Namen und Kontonummern verschwinden, Struktur und Verteilung bleiben. Eine
-Kombination aus Postleitzahl, Geburtsjahr und Kontostand kann weiterhin auf eine
-Person zurückführen. Ob das im Einzelfall vertretbar ist, entscheidet der
-Datenschutzbeauftragte — nicht dieses Programm.
+**1. The tool pseudonymizes, it does not anonymize.**  
+Names and account numbers disappear, while structure and distribution remain. A combination of postal code, birth year, and account balance may still trace back to an individual. Whether this is acceptable in your specific case is determined by your Data Protection Officer (DPO) — not by this tool.
 
-**2. `mapping.json` ist das schützenswerteste Artefakt des ganzen Vorgangs.**
-Die Datei enthält sämtliche Echtdaten in kompakter, maschinenlesbarer Form. Sie
-gehört niemals in ein Repository, niemals in ein Verzeichnis, aus dem Dateien
-nach außen gegeben werden, und niemals in ein Backup, das das Haus verlässt. Das
-Programm legt sie deshalb außerhalb des Projekts ab, setzt die Rechte auf `0600`
-und verweigert die Ablage in einem Git-Arbeitsverzeichnis.
+**2. `mapping.json` is the most sensitive artifact of the entire process.**  
+The file contains all real data in a compact, machine-readable form. It must never be committed to a repository, placed in a directory shared externally, or stored in an off-premises backup. The tool deliberately stores it outside the project directory, sets permissions to `0600`, and refuses storage inside a Git working tree.
 
-**3. Textregeln sind ein Ausschlussverfahren.**
-Was kein Muster trifft, bleibt stehen. IBAN, BIC, E-Mail und Telefonnummer lassen
-sich zuverlässig erkennen — Personennamen, Firmennamen und Adressen in Freitext
-praktisch nicht. Für Freitextfelder ist im Zweifel `redact` oder `drop` die
-richtige Wahl, nicht `scanText`.
+**3. Text rules are a process of exclusion.**  
+Whatever matches no pattern remains unchanged. IBAN, BIC, email, and phone numbers can be detected reliably — person names, company names, and addresses in free text practically cannot. When in doubt, `redact` or `drop` is the correct choice for free-text fields, not `scanText`.
 
-**4. `scan` vor jeder Weitergabe ausführen.** Nicht optional.
+**4. Run `scan` before every external transfer.** Not optional.
 
-**5. Die Ausgabe erkennbar benennen** (`kunden.pseudo.csv`), damit Original und
-Pseudonymisat nicht verwechselt werden.
+**5. Name output files recognizably** (`customers.pseudo.csv`) so that originals and pseudonymized files are never confused.
 
 ---
 
-## Ablauf
+## Workflow
 
 ```fish
-# 1. Regelgeruest aus einer echten Datei ableiten
-obfuskation init --profile kontoauszuege --from kunden.csv
+# 1. Derive rule scaffold from a real sample file
+obfuskation init --profile bank-statements --from customers.csv
 
-# 2. obfuskation.json durchgehen: jede Spalte steht auf "error" und
-#    braucht eine bewusste Entscheidung
+# 2. Review obfuskation.json: every column defaults to "error" and
+#    requires a deliberate human decision
 
-# 3. Ersetzen
-obfuskation obfuscate kunden.csv -o kunden.pseudo.csv --strict
+# 3. Replace
+obfuskation obfuscate customers.csv -o customers.pseudo.csv --strict
 
-# 4. Nachpruefen — erst danach weitergeben
-obfuskation scan kunden.pseudo.csv
+# 4. Verify — only share after this check passes
+obfuskation scan customers.pseudo.csv
 
-# 5. Antwort der KI zurueckuebersetzen
+# 5. Translate AI response back
 pbpaste | obfuskation deobfuscate
 ```
 
-`init --from` liest die Spaltenköpfe aus und legt für jede eine Regel mit
-`"action": "error"` an, zusammen mit einem Vorschlag im Kommentar. Der Vorschlag
-wird bewusst nicht übernommen: was mit einem Feld geschieht, soll ein Mensch
-entscheiden. Solange auch nur eine Spalte auf `error` steht, bricht der Lauf ab,
-bevor irgendetwas geschrieben wurde.
+`init --from` inspects the column headers and generates a rule with `"action": "error"` for each, accompanied by a suggestion in a comment. Suggestions are intentionally not applied automatically: what happens to a field must be decided by a human. As long as even a single column is set to `error`, execution halts before anything is written.
 
 ---
 
-## Die Oberfläche
+## The Graphical User Interface
 
 ```fish
-obfuskation-gui                        # sucht obfuskation.json wie die CLI
-obfuskation-gui kunden.csv             # Datei gleich mit öffnen
-obfuskation-gui --config profil.json kunden.csv
+obfuskation-gui                        # looks for obfuskation.json like the CLI
+obfuskation-gui customers.csv          # open file immediately
+obfuskation-gui --config profile.json customers.csv
 ```
 
-Ohne Angabe sucht sie eine `obfuskation.json` im aktuellen Verzeichnis und
-fällt sonst auf das zuletzt benutzte Profil zurück.
+When started without arguments, it looks for an `obfuskation.json` in the current working directory, falling back to the most recently used profile.
 
-**Aufbau:** oben die geöffnete Datei mit erkanntem Format, Zeichensatz und
-Trennzeichen. Links die Felder, jedes mit einem Statuspunkt — gefüllt und
-türkis heißt *entschieden*, ein roter Kreis heißt *offen*, und solange auch nur
-einer davon offen ist, bricht jeder Lauf ab. Rechts die Behandlung des
-gewählten Feldes samt einer Vorschau am echten Wert aus der Datei
-(»Max Mustermann → Paul Gerber«). Unten die drei Vorgänge.
+**Layout:** At the top, the opened file with detected format, character encoding, and delimiter. On the left, the fields, each with a status indicator — solid turquoise means *decided*, a red circle means *pending*, and as long as even one is pending, processing will abort. On the right, the handling of the selected field alongside a live preview using an actual value from the file (»Max Mustermann → Paul Gerber«). At the bottom, the three actions.
 
-Über **Mehr** erreichbar:
+Accessible via **More**:
 
-- **Textregeln** — mit einem Erprobungsfeld. Muster an echtem Text ausprobieren,
-  bevor sie auf Daten losgelassen werden; zu weit gefasste Muster fallen dort
-  sofort auf.
-- **Ersetzungstabelle** — Pfad, Anzahl je Namensraum und die Dateirechte.
-  Zeigt **keine Werte**, gleich wie `mapping list`.
-- **Über** — die fünf Hinweise von oben und die verwendeten Pfade.
+- **Text Rules** — with an interactive test input. Test patterns against real sample text before running them on actual data; overbroad patterns become apparent immediately.
+- **Substitution Table** — path, record counts per namespace, and file permissions. Displays **no values**, identical to `mapping list`.
+- **About** — the five notices above and the paths in use.
 
-**Hell und dunkel:** der Umschalter rechts oben geht durch drei Zustände —
-Systemvorgabe (folgt der Einstellung des Betriebssystems), dunkel, hell. Die
-Wahl wird in `~/.config/obfuskation/gui.json` gemerkt. Dort stehen nur
-Bequemlichkeiten: gewählte Ansicht, zuletzt geöffnete Profile, Fenstergröße —
-**keine Dateiinhalte und keine verarbeiteten Werte**.
+**Light and Dark:** The toggle in the top right cycles through three states — system default (follows operating system setting), dark, light. The preference is remembered in `~/.config/obfuskation/gui.json`. That file only stores convenience settings: selected view, recently opened profiles, window dimensions — **no file contents and no processed data**.
 
-Bei großen Dateien zeigt die Oberfläche den Fortschritt und lässt sich
-abbrechen; ein Abbruch schreibt weder eine Ausgabedatei noch Einträge in die
-Ersetzungstabelle.
+For large files, the GUI displays progress and allows cancellation; cancelling writes neither an output file nor entries to the substitution table.
 
-### Ins Anwendungsmenü aufnehmen (Linux)
+### Desktop Menu Integration (Linux)
 
-Siehe `packaging/README.md` — `.desktop`-Datei und Symbol für GNOME.
+See `packaging/README.md` — `.desktop` entry and icon for GNOME.
 
 ---
 
-## Mehrere Dateien mit gemeinsamen Schlüsselfeldern
+## Multiple Files with Shared Key Fields
 
-Der übliche Fall: Stammdaten, Konten und Buchungen liegen in getrennten Dateien
-und hängen über eine Personennummer zusammen. Diese Nummer muss in allen
-Dateien gleich ersetzt werden — sonst zerfallen die Verknüpfungen und die
-Testdaten sind wertlos.
+The typical scenario: master data, accounts, and transactions reside in separate files and are linked by a customer ID or person number. This number must be substituted identically across all files — otherwise relationships break and test datasets become useless.
 
-**Das geschieht von selbst.** Es ist keine Einstellung nötig, nur eine
-Bedingung: **alle Dateien mit demselben Profil verarbeiten.**
+**This happens automatically.** No special configuration is needed, only one condition: **process all files using the same profile.**
 
 ```fish
-obfuskation obfuscate stammdaten.csv -o stammdaten.pseudo.csv --strict
-obfuskation obfuscate konten.csv     -o konten.pseudo.csv     --strict
-obfuskation obfuscate buchungen.csv  -o buchungen.pseudo.csv  --strict
+obfuskation obfuscate master-data.csv   -o master-data.pseudo.csv   --strict
+obfuskation obfuscate accounts.csv      -o accounts.pseudo.csv      --strict
+obfuskation obfuscate transactions.csv  -o transactions.pseudo.csv  --strict
 ```
 
-In der Oberfläche entsprechend: Profil einmal öffnen, dann die Dateien
-nacheinander über **Öffnen…** hereinholen und je **Ersetzen**. Das Profil
-bleibt dabei geladen.
+In the GUI accordingly: open the profile once, load files sequentially via **Open…**, and click **Obfuscate** for each. The profile remains loaded.
 
-Aus `4711` wird in allen drei Dateien derselbe Wert, weil das Pseudonym
-deterministisch aus dem Klartext abgeleitet und in der gemeinsamen
-Ersetzungstabelle festgehalten wird. Der zweite und dritte Lauf melden dann
-`0 neue Einträge` für dieses Feld — ein guter Hinweis darauf, dass die
-Verknüpfung sitzt.
+ID `4711` becomes the exact same value across all three files because pseudonyms are derived deterministically from the plaintext and recorded in the shared substitution table. The second and third runs report `0 new entries` for that field — a reliable confirmation that links are preserved.
 
-**Die Spaltennamen dürfen sich unterscheiden.** Heißt die Spalte in der einen
-Datei `Personennummer` und in der anderen `PersNr`, genügt es, für beide eine
-Regel mit **demselben Generator** anzulegen — der Generator bestimmt den
-Namensraum, nicht der Spaltenname.
+**Column names may differ.** If a column is named `Personennummer` in one file and `PersNr` in another, configuring both rules with the **same generator** is sufficient — the generator determines the namespace, not the column name.
 
 ```jsonc
 { "match": "Personennummer", "action": "pseudonymize", "generator": "numericId" },
 { "match": "PersNr",         "action": "pseudonymize", "generator": "numericId" }
 ```
 
-### Wenn zwei Felder *nicht* zusammengehören
+### When two fields should *not* be linked
 
-Umgekehrt gilt dasselbe, und das ist der Fallstrick: Personennummer `4711` und
-Belegnummer `4711` bekämen mit demselben Generator auch dasselbe Pseudonym. Die
-Testdaten zeigten dann eine Verbindung, die es nie gab.
+The reverse also applies, and this is a common pitfall: customer ID `4711` and invoice number `4711` would receive the exact same pseudonym if using the same generator. The test data would then suggest a link that never existed.
 
-Dagegen hilft ein eigener Namensraum — ein Eintrag unter `generators`, der auf
-einen eingebauten Generator aufsetzt:
+To prevent this, define a custom namespace under `generators` based on a built-in generator:
 
 ```jsonc
 "generators": {
-  "belegNummer": { "type": "numericId" }
+  "invoiceNumber": { "type": "numericId" }
 }
 ```
 
 ```jsonc
-{ "match": "Personennummer", "action": "pseudonymize", "generator": "numericId" },
-{ "match": "Belegnummer",    "action": "pseudonymize", "generator": "belegNummer" }
+{ "match": "CustomerID",    "action": "pseudonymize", "generator": "numericId" },
+{ "match": "InvoiceNumber", "action": "pseudonymize", "generator": "invoiceNumber" }
 ```
 
-Beide erzeugen Zahlenkennungen derselben Form, ziehen aber aus getrennten
-Töpfen. In der Oberfläche erscheint `belegNummer` danach in der
-Generatorauswahl, gekennzeichnet als eigener Namensraum.
+Both produce numeric IDs of the same format, but draw from separate pools. In the GUI, `invoiceNumber` then appears in the generator dropdown, marked as a distinct namespace.
 
-### Wichtig für die Rückabbildung
+### Important for De-obfuscation
 
-Auch `deobfuscate` braucht dasselbe Profil — es liest aus derselben Tabelle.
-Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
+`deobfuscate` also requires the same profile — it reads from the same table. A different profile means: different table, different salt, no matching entries.
 
 ---
 
-## Konfiguration
+## Configuration
 
 ```jsonc
 {
   "version": 1,
-  "profileName": "kontoauszuege",
-  "mappingStore": "~/.local/share/obfuskation/kontoauszuege/mapping.json",
+  "profileName": "bank-statements",
+  "mappingStore": "~/.local/share/obfuskation/bank-statements/mapping.json",
 
   "input": {
-    "csvDelimiter": null,   // null = erkennen (";" ist der deutsche Normalfall)
-    "encoding": null,       // null = erkennen (BOM, sonst UTF-8-Pruefung, sonst Windows-1252)
+    "csvDelimiter": null,   // null = auto-detect (";" is the common default in European CSVs)
+    "encoding": null,       // null = auto-detect (BOM, then UTF-8 check, then Windows-1252)
     "hasHeaderRecord": true
   },
 
@@ -219,15 +158,15 @@ Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
     "redactionPlaceholder": "***"
   },
 
-  // Gilt fuer CSV-Spalten und JSON-Eigenschaften.
-  // Die erste passende Regel gewinnt — die Reihenfolge ist die Prioritaet.
+  // Applies to CSV columns and JSON properties.
+  // The first matching rule wins — order defines priority.
   "fields": [
-    { "match": "Kundenname",       "matchType": "exact", "action": "pseudonymize", "generator": "personName" },
+    { "match": "CustomerName",     "matchType": "exact", "action": "pseudonymize", "generator": "personName" },
     { "match": "^IBAN",            "matchType": "regex", "action": "pseudonymize", "generator": "iban" },
-    { "match": "Geburtsdatum",     "matchType": "exact", "action": "pseudonymize", "generator": "dateShift" },
-    { "match": "Betrag",           "matchType": "exact", "action": "passthrough" },
-    { "match": "Verwendungszweck", "matchType": "exact", "action": "scanText", "textRules": ["iban", "email"] },
-    { "match": "$.kunden[*].ssn",  "matchType": "jsonPath", "action": "redact" }
+    { "match": "DateOfBirth",      "matchType": "exact", "action": "pseudonymize", "generator": "dateShift" },
+    { "match": "Amount",           "matchType": "exact", "action": "passthrough" },
+    { "match": "PaymentReference", "matchType": "exact", "action": "scanText", "textRules": ["iban", "email"] },
+    { "match": "$.customers[*].ssn","matchType": "jsonPath", "action": "redact" }
   ],
 
   "textRules": [
@@ -241,171 +180,134 @@ Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
 }
 ```
 
-### Behandlungen
+### Actions
 
-| `action` | Wirkung | Umkehrbar |
+| `action` | Effect | Reversible |
 |---|---|:--:|
-| `pseudonymize` | Wert durch ein typgerechtes Pseudonym ersetzen | ja |
-| `passthrough` | Wert unverändert übernehmen | — |
-| `scanText` | Inhalt mit den Textregeln durchsuchen und Treffer ersetzen | ja |
-| `redact` | durch `***` ersetzen | **nein** |
-| `drop` | Feld ganz aus der Ausgabe entfernen | **nein** |
-| `error` | Lauf abbrechen — es fehlt noch eine Entscheidung | — |
+| `pseudonymize` | Replace value with a type-appropriate pseudonym | yes |
+| `passthrough` | Keep original value unchanged | — |
+| `scanText` | Scan content against text rules and replace matches | yes |
+| `redact` | Replace with `***` | **no** |
+| `drop` | Remove field entirely from output | **no** |
+| `error` | Abort execution — decision is still pending | — |
 
-`matchType` ist `exact` (Vorgabe, Groß-/Kleinschreibung egal), `regex` oder
-`jsonPath` (nur JSON, etwa `$.kunden[*].iban`).
+`matchType` can be `exact` (default, case-insensitive), `regex`, or `jsonPath` (JSON only, e.g. `$.customers[*].iban`).
 
-### Generatoren
+### Generators
 
-| Name | Ergebnis |
+| Name | Result |
 |---|---|
-| `personName`, `firstName`, `lastName` | Namen aus eingebetteten deutschen Wortlisten |
-| `companyName` | Firmenname mit Rechtsform |
-| `iban` | Ländercode und Länge des Originals, **Prüfziffer nach ISO 7064 korrekt** |
-| `bic` | gültiges BIC-Format |
-| `email` | Adresse unter `example.invalid` (per RFC 2606 reserviert) |
-| `phone` | Ziffern ersetzt, Gliederung des Originals erhalten |
-| `numericId` | Stellenzahl erhalten, führende Nullen bleiben |
-| `dateShift` | alle Daten um denselben Betrag verschoben — Reihenfolge und Abstände bleiben |
-| `street`, `city`, `postalCode` | Anschriftsbestandteile aus Wortlisten |
-| `token` | generisch `TOK_A1B2C3D4` |
-| `redact` | fest `***` |
+| `personName`, `firstName`, `lastName` | Names from embedded wordlists |
+| `companyName` | Company name with legal form |
+| `iban` | Country code and length of original, **ISO 7064 check digits valid** |
+| `bic` | Valid BIC/SWIFT format |
+| `email` | Address under `example.invalid` (reserved per RFC 2606) |
+| `phone` | Digits replaced, original formatting preserved |
+| `numericId` | Digit count preserved, leading zeros retained |
+| `dateShift` | All dates shifted by the same offset — sequence and intervals preserved |
+| `street`, `city`, `postalCode` | Address components from wordlists |
+| `token` | Generic `TOK_A1B2C3D4` |
+| `redact` | Fixed `***` |
 
 ---
 
-## Wie die Umkehrbarkeit funktioniert
+## How Reversibility Works
 
-Das Pseudonym wird deterministisch abgeleitet:
+Pseudonyms are derived deterministically:
 
 ```
-seed = HMAC-SHA256(Salt des Profils, Generatorname + Klartext + Zähler)
+seed = HMAC-SHA256(Profile Salt, Generator Name + Plaintext + Counter)
 ```
 
-Daraus folgen zwei Eigenschaften, die die Testdaten erst brauchbar machen:
-derselbe Wert bekommt in allen Dateien und über alle Läufe hinweg dasselbe
-Pseudonym, und Verknüpfungen über Kundennummern bleiben deshalb intakt.
+This yields two properties that make test data genuinely usable: the same value receives the exact same pseudonym across all files and runs, preserving relational links across customer or record IDs.
 
-Beim Eintragen wird geprüft, dass ein Pseudonym weder schon vergeben ist noch
-selbst als Klartext im Bestand steht; andernfalls wird der Zähler erhöht und neu
-abgeleitet.
+During insertion, the engine verifies that a pseudonym is neither already assigned nor present in the source data as plaintext; otherwise, the counter is incremented and recomputed.
 
-**`dateShift` bekommt bewusst keinen Tabelleneintrag.** Ein verschobenes Datum
-kann mit einem echten Datum desselben Bestands zusammenfallen, ein Eintrag wäre
-dann mehrdeutig. Zurückgerechnet wird stattdessen über den konstanten Offset. Die
-Folge: **Datumsangaben lassen sich nur in CSV und JSON zurückholen**, wo die
-Spaltenregel den Bezug liefert — nicht in freiem Text.
+**`dateShift` intentionally does not receive a table entry.** A shifted date could coincide with an authentic date from the same dataset, creating ambiguity. Instead, it is recalculated using the constant offset. Consequently: **dates can only be reversed in CSV and JSON**, where the column rule provides context — not in unstructured free text.
 
-### Bekannte Eigenschaft
+### Known Property
 
-Ein formaterhaltender Generator schöpft aus demselben Wertevorrat wie die
-Echtdaten. Bei engem Vorrat — etwa fünfstelligen Kundennummern — kann ein früher
-vergebenes Pseudonym später selbst als Klartext auftauchen. Die Rückabbildung
-bleibt trotzdem eindeutig, weil der gleichlautende Klartext seinerseits durch
-sein eigenes Pseudonym ersetzt wurde. Sichtbar wird es nur daran, dass ein Wert
-im Bestand auf beiden Seiten vorkommt.
+A format-preserving generator draws from the same pool of values as real data. With narrow ranges — such as five-digit customer IDs — an earlier assigned pseudonym might later appear as genuine plaintext. Reversible mapping remains unambiguous because the matching plaintext was itself replaced by its own pseudonym. It is noticeable only because a value appears on both sides of the dataset.
 
 ---
 
-## Befehle
+## Commands
 
 ```
-obfuskation init [--profile <name>] [--from <datei>] [--force]
-obfuskation obfuscate <datei> [-o <ziel>] [--strict] [--dry-run] [--json]
-obfuskation deobfuscate [<datei>] [-o <ziel>] [--json]
-obfuskation scan <datei> [--json]
+obfuskation init [--profile <name>] [--from <file>] [--force]
+obfuskation obfuscate <file> [-o <dest>] [--strict] [--dry-run] [--json]
+obfuskation deobfuscate [<file>] [-o <dest>] [--json]
+obfuskation scan <file> [--json]
 obfuskation mapping list|path
 ```
 
-Gemeinsame Optionen: `--config <pfad>`, `--format csv|json|text`,
-`--allow-unsafe-store`.
+Common options: `--config <path>`, `--format csv|json|text`, `--allow-unsafe-store`.
 
-- `--strict` — Felder ohne eigene Regel führen zum Abbruch, unabhängig von der
-  Vorgabe im Profil.
-- `--dry-run` — schreibt weder Ausgabe noch Tabelleneinträge, liefert aber den
-  vollständigen Bericht.
-- `--json` — Bericht als JSON auf die Standardausgabe. Erfordert `-o`, sonst
-  vermengten sich Bericht und Nutzdaten. Der Bericht enthält **nur Zähler und
-  Feldnamen, niemals Werte** und darf deshalb protokolliert werden.
-- `deobfuscate` ohne Dateiangabe liest von der Standardeingabe.
+- `--strict` — Fields without an explicit rule cause execution to abort, regardless of profile defaults.
+- `--dry-run` — Writes neither output files nor table entries, but produces the full report.
+- `--json` — Output report as JSON to stdout. Requires `-o`, otherwise report and data mix. The report contains **only counts and field names, never values**, and can safely be logged.
+- `deobfuscate` without file argument reads from standard input (`stdin`).
 
-### Rückgabewerte
+### Exit Codes
 
-| Wert | Bedeutung |
+| Code | Meaning |
 |---|---|
-| 0 | Erfolg |
-| 1 | allgemeiner Fehler |
-| 2 | Konfiguration fehlt oder ist fehlerhaft |
-| 3 | Feld ohne Regel im strengen Modus |
-| 4 | `scan` hat Verdachtsfälle gefunden |
-| 5 | Ersetzungstabelle widersprüchlich oder gesperrt |
+| 0 | Success |
+| 1 | General error |
+| 2 | Configuration missing or invalid |
+| 3 | Field without rule in strict mode |
+| 4 | `scan` found suspect unreplaced values |
+| 5 | Substitution table conflicting or locked |
 
 ---
 
-## Aufbau
+## Architecture
 
 ```
-src/Obfuskation.Core/    Klassenbibliothek — die gesamte Fachlogik
-src/Obfuskation.Cli/     Kommandozeilenprogramm, eine dünne Hülle darum
-src/Obfuskation.Gui/     Oberfläche (Avalonia), ebenfalls nur eine Hülle
-tests/                   xUnit — Core und Oberfläche getrennt
-assets/                  SVG-Vorlagen des Symbols
-build/icon-erzeugen.sh   erzeugt daraus ICO und PNG
-packaging/               .desktop-Datei für Linux
+src/Obfuskation.Core/    Class library — core business logic
+src/Obfuskation.Cli/     Command-line interface, thin wrapper
+src/Obfuskation.Gui/     Desktop UI (Avalonia), thin wrapper
+tests/                   xUnit — Core and GUI tested separately
+assets/                  SVG master templates of application icon
+build/icon-erzeugen.sh   Generates ICO and PNG from SVG
+packaging/               .desktop entry for Linux
 ```
 
-Die Bibliothek kennt keine Konsole und gibt nichts aus. Beide Programme binden
-sie unmittelbar ein: alle Vorgänge laufen über `ObfuscationEngine`, das Profil
-ist ein reines Datenobjekt zum Binden an Formulare, und `ProfileValidator`
-liefert Befunde mit Feldpfad, sodass sich jeder Hinweis am zugehörigen
-Eingabefeld anzeigen lässt.
+The core library is headless and produces no console output. Both CLI and GUI consume it directly: all operations run through `ObfuscationEngine`, the profile is a clean data object bound to UI forms, and `ProfileValidator` returns diagnostics with field paths for direct highlighting in input fields.
 
-Die Oberfläche kennt ihrerseits keine Fenster in den Ansichtsmodellen —
-Dateidialoge kommen als Fabrik herein, Nebenfenster werden als Ereignis
-erbeten. Deshalb ist die Bedienlogik ohne laufende Anwendung prüfbar, und
-`tests/Obfuskation.Gui.Tests` weist unter anderem nach, dass Oberfläche und
-Kommandozeile dasselbe Ergebnis liefern.
+The GUI view models maintain zero window references — file dialogs are injected via factories, secondary dialogs requested via events. This keeps UI logic testable without a display server, and `tests/Obfuskation.Gui.Tests` proves that GUI and CLI produce bit-for-bit identical results.
 
-### Das Symbol
+### The Application Icon
 
-Motiv: ein Blatt, dessen obere Zeilen im Klartext stehen und dessen untere
-ersetzt sind. Zwei Vorlagen — die volle ab 32 px, eine vereinfachte für 16 und
-24 px, weil ein herunterskalierter Haarstrich dort zu grauem Brei würde.
+Motif: A page where the top lines are clear text and the bottom lines are replaced. Two SVG templates — full detail from 32 px, simplified for 16 and 24 px to prevent thin lines from turning into blurry gray pixels.
 
 ```fish
-./build/icon-erzeugen.sh              # erzeugt ICO und PNG
-./build/icon-erzeugen.sh --behalten   # einzelne Größen zum Nachsehen
+./build/icon-erzeugen.sh              # generates ICO and PNG
+./build/icon-erzeugen.sh --behalten   # keep individual sizes for inspection
 ```
 
-Das Ergebnis liegt im Repository; das Skript ist nur bei einer Motivänderung
-nötig. Es braucht `rsvg-convert` und ImageMagick.
+Generated assets are tracked in the repository; the script is only needed when modifying the icon artwork. Requires `rsvg-convert` and ImageMagick.
 
-## Bauen
+## Building
 
 ```fish
 dotnet build
 dotnet test
 
-./build-release.sh                     # win-x64 UND linux-x64, je beide Programme
-./build-release.sh --rid linux-x64     # nur diese Laufzeit
-./build-release.sh --cli-only          # ohne Oberfläche
-./build-release.sh --self-contained    # ohne installiertes .NET lauffähig
+./build-release.sh                     # builds both win-x64 AND linux-x64
+./build-release.sh --rid linux-x64     # single runtime only
+./build-release.sh --cli-only          # without GUI
+./build-release.sh --self-contained    # standalone, runs without .NET installed
 ```
 
-Das Ergebnis liegt unter `publish/<RID>/` und besteht je Laufzeit aus zwei
-Dateien: `obfuskation` und `obfuskation-gui`. Die nativen Bibliotheken der
-Oberfläche sind eingebettet.
+Build outputs are placed in `publish/<RID>/` containing two binaries per runtime: `obfuskation` and `obfuskation-gui`. Native Avalonia UI dependencies are embedded.
 
-Zielframework ist `net8.0`. Auf diesem Rechner ist keine 8.0-Laufzeit
-installiert; `RollForward=Major` in `Directory.Build.props` sorgt dafür, dass
-`dotnet run` und `dotnet test` trotzdem auf der vorhandenen Laufzeit laufen.
+Target framework is `net8.0`. With `RollForward=Major` in `Directory.Build.props`, `dotnet run` and `dotnet test` execute on whatever modern .NET runtime is installed locally.
 
 ---
 
-## Lizenz
+## License
 
-[MIT](LICENSE) — Verwendung, Änderung und Weitergabe sind frei, der
-Copyright-Hinweis muss erhalten bleiben. Ohne Gewährleistung; wer damit
-personenbezogene Daten verarbeitet, bleibt selbst dafür verantwortlich (siehe
-*Bitte zuerst lesen*).
+[MIT](LICENSE) — Free for use, modification, and distribution. Copyright notice must be retained. Provided without warranty; anyone processing personal data remains solely responsible for compliance (see *Please Read First*).
 
-Erstellt von **Gregor Stübner** und **Claude (Anthropic)**.
+Created by **Gregor Stübner** and **Claude (Anthropic)**.
