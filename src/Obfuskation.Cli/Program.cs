@@ -54,6 +54,9 @@ rootCommand.Subcommands.Add(BuildDeobfuscateCommand());
 rootCommand.Subcommands.Add(BuildScanCommand());
 rootCommand.Subcommands.Add(BuildMappingCommand());
 
+// Fassung und Ersteller stehen unter jeder Hilfe, wie in allen Programmen.
+ProgramInfo.AddHelpFooter(rootCommand);
+
 return rootCommand.Parse(args).Invoke();
 
 Command BuildInitCommand()

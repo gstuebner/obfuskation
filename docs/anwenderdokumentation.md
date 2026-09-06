@@ -2,7 +2,7 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.0.1
+version: 1.0.2
 author: Gregor Stübner & Claude (Anthropic)
 date: 06.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Anwenderdokumentation
 
-Fassung 1.0.1 · Stand 6. September 2026
+Fassung 1.0.2 · Stand 6. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem

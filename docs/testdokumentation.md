@@ -2,7 +2,7 @@
 title: Testdokumentation
 subtitle: Testkonzept, Durchführung und Befunde
 kicker: Obfuskation
-version: 1.0.1
+version: 1.0.2
 author: Gregor Stübner & Claude (Anthropic)
 date: 06.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Testdokumentation
 
-Fassung 1.0.1 · Stand 6. September 2026
+Fassung 1.0.2 · Stand 6. September 2026
 
 Diese Dokumentation beschreibt, wie Obfuskation geprüft wird, welche Fälle
 tatsächlich durchgespielt wurden und was dabei herauskam. Grundlage ist

@@ -2,7 +2,7 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.0.1
+version: 1.0.2
 author: Gregor Stübner & Claude (Anthropic)
 date: 06.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Entwicklerdokumentation
 
-Fassung 1.0.1 · Stand 6. September 2026
+Fassung 1.0.2 · Stand 6. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -368,6 +368,24 @@ Skripte werten sie aus, sie ändern sich nicht stillschweigend.
 | 3 | Feld ohne Regel im strengen Modus |
 | 4 | `scan` hat Verdachtsfälle gefunden |
 | 5 | Ersetzungstabelle widersprüchlich oder gesperrt |
+
+### Fassung und Ersteller in der Hilfe
+
+Unter jeder Hilfeausgabe des Kommandozeilenprogramms — der des Programms
+selbst wie der jedes Unterbefehls — steht eine einzelne Zeile der Form
+
+```
+obfuskation 1.0.2 · Gregor Stübner & Claude (Anthropic)
+```
+
+Sie kommt aus `src/Obfuskation.Cli/ProgramInfo.cs`. Die Fassung stammt aus
+`AssemblyInformationalVersionAttribute`, also aus `<Version>` in
+`Directory.Build.props`; der angehängte Commit wird für die Anzeige
+abgeschnitten. Da System.CommandLine keinen Platz für eigenen Text unter der
+Hilfe vorsieht, umschließt `FooterHelpAction` die vorhandene Hilfeaktion,
+statt sie zu ersetzen — so bleibt die erzeugte Hilfe unverändert und die
+Zeile kommt nur hinten dran. Die Oberfläche zeigt dieselbe Angabe im
+Fenster „Über" (`src/Obfuskation.Gui/Views/AboutWindow.axaml`).
 
 ## 11. Befunde
 
