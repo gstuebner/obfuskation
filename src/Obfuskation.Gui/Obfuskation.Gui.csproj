@@ -12,7 +12,6 @@
     <RootNamespace>Obfuskation.Gui</RootNamespace>
 
     <ApplicationIcon>Assets\obfuskation.ico</ApplicationIcon>
-    <Version>1.0.0</Version>
 
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>

@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "profileName": "kaputt",
+  "mappingStore": "~/.local/share/obfuskation/kaputt/mapping.json",
+  "input": {
+    "hasHeaderRecord": true
+  },
+  "defaults": {
+    "unknownField": "passthrough",
+    "redactionPlaceholder": "***"
+  },
+  "fields": [
+    {
+      "match": "__hinweis__",
+      "matchType": "exact",
+      "action": "passthrough",
+      "comment": "Diese Datei ist ABSICHTLICH fehlerhaft. Sie gehoert zu den Negativtests der Testdokumentation und darf nicht als Vorlage dienen."
+    },
+    {
+      "match": "Personennummer",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "numericId",
+      "comment": "Schluesselfeld. Steht in allen drei Dateien und muss ueberall gleich ersetzt werden."
+    },
+    {
+      "match": "Nachname",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "familienName"
+    },
+    {
+      "match": "Vorname",
+      "matchType": "exact",
+      "action": "pseudonymize"
+    },
+    {
+      "match": "Straße",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "street"
+    },
+    {
+      "match": "PLZ",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "postalCode"
+    },
+    {
+      "match": "^(Ort|Wohnort",
+      "matchType": "regex",
+      "action": "pseudonymize",
+      "generator": "city"
+    },
+    {
+      "match": "EMail",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "email"
+    },
+    {
+      "match": "Telefon",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "phone"
+    },
+    {
+      "match": "Geburtsdatum",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "dateShift"
+    },
+    {
+      "match": "Notiz",
+      "matchType": "exact",
+      "action": "redact",
+      "comment": "Freitext ohne festes Muster. redact statt scanText: Namen und Anschriften in Freitext findet kein Muster zuverlaessig."
+    },
+    {
+      "match": "IBAN",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "iban"
+    },
+    {
+      "match": "BIC",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "bic"
+    },
+    {
+      "match": "Belegnummer",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "belegNummer",
+      "comment": "Eigener Namensraum. Mit 'numericId' bekaeme Belegnummer 10007 dasselbe Pseudonym wie Personennummer 10007 — eine Verbindung, die es nie gab."
+    },
+    {
+      "match": "Kontostand",
+      "matchType": "exact",
+      "action": "passthrough",
+      "comment": "Betraege bleiben stehen; sie sind fuer die Auswertung noetig und fuer sich genommen nicht personenbezogen."
+    },
+    {
+      "match": "Eröffnungsdatum",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "dateShift"
+    },
+    {
+      "match": "Buchungsdatum",
+      "matchType": "exact",
+      "action": "pseudonymize",
+      "generator": "dateShift"
+    },
+    {
+      "match": "Betrag",
+      "matchType": "exact",
+      "action": "passthrough"
+    },
+    {
+      "match": "Verwendungszweck",
+      "matchType": "exact",
+      "action": "scanText",
+      "textRules": [
+        "iban",
+        "email",
+        "telefon"
+      ],
+      "comment": "Freitext mit erkennbaren Mustern. Was kein Muster trifft, bleibt stehen — deshalb nach jedem Lauf 'scan'."
+    }
+  ],
+  "textRules": [
+    {
+      "name": "iban",
+      "priority": 100,
+      "pattern": "\\b[A-Z]{2}\\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,4})?\\b",
+      "generator": "iban",
+      "captureGroup": 0,
+      "ignoreCase": false
+    },
+    {
+      "name": "email",
+      "priority": 90,
+      "pattern": "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b",
+      "generator": "email",
+      "captureGroup": 0,
+      "ignoreCase": false
+    },
+    {
+      "name": "bic",
+      "priority": 85,
+      "pattern": "\\b[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}(?:[A-Z0-9]{3})?\\b",
+      "generator": "bic",
+      "captureGroup": 0,
+      "ignoreCase": false
+    },
+    {
+      "name": "phone",
+      "priority": 80,
+      "pattern": "(?<![\\w-/])\\(?(?:\\+49|0)[",
+      "generator": "phone",
+      "captureGroup": 0,
+      "ignoreCase": false
+    }
+  ],
+  "generators": {
+    "belegNummer": {
+      "type": "numericId"
+    }
+  }
+}

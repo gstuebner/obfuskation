@@ -1,0 +1,121 @@
+Personennummer;Nachname;Vorname;Straße;PLZ;Ort;EMail;Telefon;Geburtsdatum;Notiz
+10000;Grünwald;Dieter;Innsbrucker Ring 129;70173;Stuttgart;dieter.gruenwald@beispiel-firma.de;(079) 5540670;16.12.1973;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10007;Baumgartner;Irene;Erlenkamp 23;24103;Kiel;irene.baumgartner@beispiel-firma.de;0702/817879-16;19.03.1951;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10014;Illigen;Peter;Dorfanger 99;28195;Bremen;peter.illigen@beispiel-firma.de;(033) 8248381;06.09.1982;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10021;Illigen;Monika;Innsbrucker Ring 34;22765;Hamburg;monika.illigen@beispiel-firma.de;(050) 8781818;11.01.1982;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10028;Zangerle;Norbert;Osterbrooksweg 92;39104;Magdeburg;norbert.zangerle@beispiel-firma.de;(055) 3054326;10.03.1954;Konto wird zum Jahresende geschlossen
+10035;Grünwald;Anja;Wiesengrund 131;24103;Kiel;anja.gruenwald@beispiel-firma.de;+49 86 76464505;27.03.1961;SEPA-Mandat liegt vor
+10042;Vollmering;Bernd;Parkstraße 144;50667;Köln;bernd.vollmering@beispiel-firma.de;(059) 3776611;14.01.1955;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10049;Vollmering;Anja;Hafenstraße 30;40213;Düsseldorf;anja.vollmering@beispiel-firma.de;0604/480379-11;12.03.1965;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10056;Achterberg;Peter;Parkstraße 55;50667;Köln;peter.achterberg@beispiel-firma.de;(069) 4393053;20.12.1970;Stammkunde seit 1999
+10063;Achterberg;Renate;Lindenhof 146;30159;Hannover;renate.achterberg@beispiel-firma.de;(054) 3316722;27.04.1951;Rückfragen bitte an die Zentrale
+10070;Baumgartner;Martin;Ahornweg 32;70173;Stuttgart;martin.baumgartner@beispiel-firma.de;0791/239987-63;18.12.1981;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10077;Thelen;Renate;Feldmühlenweg 108;70173;Stuttgart;renate.thelen@beispiel-firma.de;(033) 7834537;10.03.1974;Stammkunde seit 1999
+10084;Wachsmuth;Christoph;Erlenkamp 120;70173;Stuttgart;christoph.wachsmuth@beispiel-firma.de;0565/186186-16;22.06.1994;Konto wird zum Jahresende geschlossen
+10091;Thelen;Birgit;Feldmühlenweg 24;50667;Köln;birgit.thelen@beispiel-firma.de;0741/131783-19;04.07.1980;Rückfragen bitte an die Zentrale
+10098;Hasselbach;Gerd;Vogelsang 84;50667;Köln;gerd.hasselbach@beispiel-firma.de;+49 74 99994161;26.09.1996;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10105;Kettenbach;Lena;Mühlenkamp 101;24103;Kiel;lena.kettenbach@beispiel-firma.de;+49 43 50888355;27.12.1986;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10112;Quandtner;Peter;Vogelsang 68;70173;Stuttgart;peter.quandtner@beispiel-firma.de;(057) 9540253;07.07.1986;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10119;Fassbender;Monika;Gartenstraße 9;28195;Bremen;monika.fassbender@beispiel-firma.de;+49 68 41073735;13.03.1967;Rückfragen bitte an die Zentrale
+10126;Hasselbach;Norbert;Feldmühlenweg 82;22765;Hamburg;norbert.hasselbach@beispiel-firma.de;0779/709203-29;02.04.1955;
+10133;Vollmering;Gisela;Hafenstraße 58;04109;Leipzig;gisela.vollmering@beispiel-firma.de;0546/905965-34;01.10.1973;Stammkunde seit 1999
+10140;Fassbender;Dieter;Jahnplatz 91;39104;Magdeburg;dieter.fassbender@beispiel-firma.de;(086) 6425186;23.06.1963;SEPA-Mandat liegt vor
+10147;Achterberg;Renate;Schulstraße 108;30159;Hannover;renate.achterberg@beispiel-firma.de;+49 48 7967322;01.09.1961;Stammkunde seit 1999
+10154;Reinsberg;Andreas;Nordring 68;30159;Hannover;andreas.reinsberg@beispiel-firma.de;0768/847736-82;09.02.1956;
+10161;Mühlbauer;Claudia;Cranachstraße 53;50667;Köln;claudia.muehlbauer@beispiel-firma.de;(065) 2231322;09.03.1969;Rückfragen bitte an die Zentrale
+10168;Thelen;Ingo;Vogelsang 72;04109;Leipzig;ingo.thelen@beispiel-firma.de;(045) 5403060;16.09.1965;Rückfragen bitte an die Zentrale
+10175;Fassbender;Franziska;Jahnplatz 121;01067;Dresden;franziska.fassbender@beispiel-firma.de;+49 80 61735194;11.04.1970;SEPA-Mandat liegt vor
+10182;Zangerle;Peter;Feldmühlenweg 55;04109;Leipzig;peter.zangerle@beispiel-firma.de;+49 77 28056881;17.11.1984;SEPA-Mandat liegt vor
+10189;Mühlbauer;Monika;Mühlenkamp 139;24103;Kiel;monika.muehlbauer@beispiel-firma.de;+49 84 74738546;06.03.1960;Konto wird zum Jahresende geschlossen
+10196;Reinsberg;Gerd;Jahnplatz 4;40213;Düsseldorf;gerd.reinsberg@beispiel-firma.de;+49 68 77363452;27.01.1993;
+10203;Niederegger;Irene;Uferpromenade 32;24103;Kiel;irene.niederegger@beispiel-firma.de;+49 49 45176517;11.02.1992;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10210;Illigen;Andreas;Rosenweg 71;80331;München;andreas.illigen@beispiel-firma.de;+49 71 99059829;23.01.1966;Konto wird zum Jahresende geschlossen
+10217;Kettenbach;Irene;Gartenstraße 19;24103;Kiel;irene.kettenbach@beispiel-firma.de;(050) 2661451;09.03.1969;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10224;Cordes;Peter;Gartenstraße 12;70173;Stuttgart;peter.cordes@beispiel-firma.de;(032) 5786432;19.03.1982;Konto wird zum Jahresende geschlossen
+10231;Achterberg;Franziska;Uferpromenade 123;04109;Leipzig;franziska.achterberg@beispiel-firma.de;0564/279200-99;21.01.1957;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10238;Baumgartner;Holger;Uferpromenade 10;50667;Köln;holger.baumgartner@beispiel-firma.de;+49 47 44226885;16.03.1986;Stammkunde seit 1999
+10245;Niederegger;Gisela;Feldmühlenweg 146;60311;Frankfurt am Main;gisela.niederegger@beispiel-firma.de;(032) 2426138;04.01.2000;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10252;Fassbender;Peter;Innsbrucker Ring 95;60311;Frankfurt am Main;peter.fassbender@beispiel-firma.de;(083) 7555633;16.05.1979;
+10259;Obermeier;Lena;Birkenallee 131;80331;München;lena.obermeier@beispiel-firma.de;(068) 4447597;23.03.1984;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10266;Thelen;Christoph;Hafenstraße 37;50667;Köln;christoph.thelen@beispiel-firma.de;0448/718108-47;13.06.1950;Stammkunde seit 1999
+10273;Steinkamp;Jutta;Talblick 1;22765;Hamburg;jutta.steinkamp@beispiel-firma.de;0248/593368-61;19.09.1973;SEPA-Mandat liegt vor
+10280;Pflüger;Peter;Osterbrooksweg 2;40213;Düsseldorf;peter.pflueger@beispiel-firma.de;0541/897555-87;19.02.1957;erreichbar unter 030/1234-5678
+10287;Steinkamp;Gisela;Kirchsteig 145;70173;Stuttgart;gisela.steinkamp@beispiel-firma.de;0808/783452-58;12.01.1988;SEPA-Mandat liegt vor
+10294;Cordes;Gerd;Ahornweg 55;70173;Stuttgart;gerd.cordes@beispiel-firma.de;(035) 4515181;12.02.1962;Konto wird zum Jahresende geschlossen
+10301;Pflüger;Claudia;Uferpromenade 134;70173;Stuttgart;claudia.pflueger@beispiel-firma.de;+49 56 40674489;16.02.1959;Konto wird zum Jahresende geschlossen
+10308;Zangerle;Olaf;Osterbrooksweg 49;24103;Kiel;olaf.zangerle@beispiel-firma.de;(063) 6070129;13.12.1950;SEPA-Mandat liegt vor
+10315;Kettenbach;Heike;Dorfanger 100;28195;Bremen;heike.kettenbach@beispiel-firma.de;0374/947680-49;17.03.2001;SEPA-Mandat liegt vor
+10322;Hasselbach;Norbert;Kirchsteig 52;22765;Hamburg;norbert.hasselbach@beispiel-firma.de;+49 36 39894836;07.10.2001;erreichbar unter 030/1234-5678
+10329;Uhlenbrock;Nadine;Erlenkamp 72;80331;München;nadine.uhlenbrock@beispiel-firma.de;0235/340848-76;05.04.1982;SEPA-Mandat liegt vor
+10336;Zangerle;Ingo;Hafenstraße 125;80331;München;ingo.zangerle@beispiel-firma.de;+49 42 5058873;15.10.1995;
+10343;Pflüger;Gisela;Osterbrooksweg 127;50667;Köln;gisela.pflueger@beispiel-firma.de;(037) 3085170;22.08.1961;
+10350;Vollmering;Holger;Vogelsang 41;04109;Leipzig;holger.vollmering@beispiel-firma.de;+49 71 52489613;18.02.1996;erreichbar unter 030/1234-5678
+10357;Grünwald;Nadine;Erlenkamp 75;22765;Hamburg;nadine.gruenwald@beispiel-firma.de;+49 71 10593165;16.11.1988;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10364;Thelen;Norbert;Nordring 14;60311;Frankfurt am Main;norbert.thelen@beispiel-firma.de;+49 37 95474822;14.10.2001;Stammkunde seit 1999
+10371;Steinkamp;Birgit;Mühlenkamp 21;70173;Stuttgart;birgit.steinkamp@beispiel-firma.de;+49 50 87076939;22.04.1967;Konto wird zum Jahresende geschlossen
+10378;Vollmering;Frank;Jahnplatz 105;04109;Leipzig;frank.vollmering@beispiel-firma.de;(061) 3743664;22.02.1980;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10385;Illigen;Claudia;Gartenstraße 112;60311;Frankfurt am Main;claudia.illigen@beispiel-firma.de;0439/539874-29;18.05.1994;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10392;Hasselbach;Gerd;Talblick 59;30159;Hannover;gerd.hasselbach@beispiel-firma.de;0346/678545-26;18.04.1965;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10399;Hasselbach;Elke;Feldmühlenweg 64;50667;Köln;elke.hasselbach@beispiel-firma.de;0232/307194-20;14.09.1973;Konto wird zum Jahresende geschlossen
+10406;Thelen;Klaus;Uferpromenade 137;04109;Leipzig;klaus.thelen@beispiel-firma.de;+49 83 16172945;23.08.1963;
+10413;Thelen;Nadine;Talblick 147;24103;Kiel;nadine.thelen@beispiel-firma.de;+49 62 11153667;08.02.1958;Konto wird zum Jahresende geschlossen
+10420;Thelen;Gerd;Dorfanger 68;22765;Hamburg;gerd.thelen@beispiel-firma.de;+49 44 36678287;16.03.1969;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10427;Niederegger;Heike;Osterbrooksweg 112;80331;München;heike.niederegger@beispiel-firma.de;0695/827991-18;04.04.1965;
+10434;Dettmer;Peter;Dorfanger 15;04109;Leipzig;peter.dettmer@beispiel-firma.de;(050) 1129617;08.12.1952;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10441;Niederegger;Elke;Gartenstraße 19;39104;Magdeburg;elke.niederegger@beispiel-firma.de;0399/663469-55;09.08.1958;Rückfragen bitte an die Zentrale
+10448;Grünwald;Andreas;Nordring 90;30159;Hannover;andreas.gruenwald@beispiel-firma.de;0584/578629-43;27.04.1959;Konto wird zum Jahresende geschlossen
+10455;Zangerle;Renate;Cranachstraße 118;24103;Kiel;renate.zangerle@beispiel-firma.de;(082) 3617326;07.05.1967;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10462;Baumgartner;Olaf;Schulstraße 73;50667;Köln;olaf.baumgartner@beispiel-firma.de;(044) 9889868;17.10.1962;Rückfragen bitte an die Zentrale
+10469;Steinkamp;Birgit;Hafenstraße 26;30159;Hannover;birgit.steinkamp@beispiel-firma.de;+49 57 70945276;02.08.1974;Rückfragen bitte an die Zentrale
+10476;Zangerle;Norbert;Mühlenkamp 73;50667;Köln;norbert.zangerle@beispiel-firma.de;+49 36 29804010;20.11.1970;Konto wird zum Jahresende geschlossen
+10483;Lindhorst;Petra;Cranachstraße 128;28195;Bremen;petra.lindhorst@beispiel-firma.de;(082) 7679918;10.05.1986;SEPA-Mandat liegt vor
+10490;Grünwald;Norbert;Innsbrucker Ring 87;80331;München;norbert.gruenwald@beispiel-firma.de;0730/510987-53;22.11.1993;Konto wird zum Jahresende geschlossen
+10497;Lindhorst;Elke;Schulstraße 14;80331;München;elke.lindhorst@beispiel-firma.de;+49 60 82966050;15.12.1968;
+10504;Mühlbauer;Olaf;Talblick 13;24103;Kiel;olaf.muehlbauer@beispiel-firma.de;+49 56 54937953;17.04.1997;Konto wird zum Jahresende geschlossen
+10511;Zangerle;Franziska;Jahnplatz 129;30159;Hannover;franziska.zangerle@beispiel-firma.de;(050) 7362061;24.05.1994;Konto wird zum Jahresende geschlossen
+10518;Cordes;Olaf;Mühlenkamp 34;04109;Leipzig;olaf.cordes@beispiel-firma.de;0665/704340-35;14.01.1997;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10525;Baumgartner;Anja;Nordring 131;24103;Kiel;anja.baumgartner@beispiel-firma.de;0459/639653-35;12.02.1977;Stammkunde seit 1999
+10532;Baumgartner;Peter;Dorfanger 89;04109;Leipzig;peter.baumgartner@beispiel-firma.de;+49 54 89223948;27.04.1973;Stammkunde seit 1999
+10539;Achterberg;Elke;Parkstraße 86;60311;Frankfurt am Main;elke.achterberg@beispiel-firma.de;0511/563418-82;28.04.1998;
+10546;Obermeier;Frank;Innsbrucker Ring 85;40213;Düsseldorf;frank.obermeier@beispiel-firma.de;(048) 1788053;12.12.2000;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10553;Thelen;Gisela;Talblick 71;22765;Hamburg;gisela.thelen@beispiel-firma.de;(067) 6745895;22.04.1990;SEPA-Mandat liegt vor
+10560;Jahnke;Olaf;Vogelsang 39;50667;Köln;olaf.jahnke@beispiel-firma.de;0200/206437-60;06.12.1964;Stammkunde seit 1999
+10567;Zangerle;Irene;Talblick 121;28195;Bremen;irene.zangerle@beispiel-firma.de;(049) 3616680;09.04.1952;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10574;Quandtner;Elias;Ahornweg 13;60311;Frankfurt am Main;elias.quandtner@beispiel-firma.de;+49 73 81194342;15.08.1957;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10581;Quandtner;Jutta;Innsbrucker Ring 46;50667;Köln;jutta.quandtner@beispiel-firma.de;0551/809732-94;23.10.1960;erreichbar unter 030/1234-5678
+10588;Quandtner;Bernd;Schulstraße 98;50667;Köln;bernd.quandtner@beispiel-firma.de;(049) 4066870;18.12.2000;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10595;Uhlenbrock;Franziska;Uferpromenade 131;80331;München;franziska.uhlenbrock@beispiel-firma.de;(045) 2905539;24.06.1952;SEPA-Mandat liegt vor
+10602;Reinsberg;Frank;Uferpromenade 34;30159;Hannover;frank.reinsberg@beispiel-firma.de;0598/817230-47;19.02.2000;Rückfragen bitte an die Zentrale
+10609;Vollmering;Elke;Schulstraße 25;24103;Kiel;elke.vollmering@beispiel-firma.de;+49 42 84067603;13.08.1992;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10616;Pflüger;Ingo;Jahnplatz 146;01067;Dresden;ingo.pflueger@beispiel-firma.de;0647/689141-39;15.10.1957;Konto wird zum Jahresende geschlossen
+10623;Wachsmuth;Nadine;Talblick 45;80331;München;nadine.wachsmuth@beispiel-firma.de;0411/133128-78;23.05.1974;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10630;Niederegger;Ingo;Hafenstraße 108;50667;Köln;ingo.niederegger@beispiel-firma.de;+49 33 22762164;28.11.1953;erreichbar unter 030/1234-5678
+10637;Hasselbach;Irene;Ahornweg 71;24103;Kiel;irene.hasselbach@beispiel-firma.de;+49 61 24413755;25.12.1954;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10644;Kettenbach;Olaf;Osterbrooksweg 91;39104;Magdeburg;olaf.kettenbach@beispiel-firma.de;+49 87 87833295;03.02.1984;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10651;Jahnke;Claudia;Ahornweg 102;01067;Dresden;claudia.jahnke@beispiel-firma.de;+49 35 80365538;03.05.1985;SEPA-Mandat liegt vor
+10658;Mühlbauer;Dieter;Erlenkamp 17;39104;Magdeburg;dieter.muehlbauer@beispiel-firma.de;+49 54 21773045;12.08.1977;erreichbar unter 030/1234-5678
+10665;Baumgartner;Jutta;Jahnplatz 31;28195;Bremen;jutta.baumgartner@beispiel-firma.de;(034) 9570634;26.06.1963;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10672;Niederegger;Frank;Mühlenkamp 36;39104;Magdeburg;frank.niederegger@beispiel-firma.de;+49 63 43283493;18.10.1999;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10679;Steinkamp;Anja;Cranachstraße 140;01067;Dresden;anja.steinkamp@beispiel-firma.de;0791/809370-64;22.12.1975;SEPA-Mandat liegt vor
+10686;Reinsberg;Bernd;Lindenhof 103;04109;Leipzig;bernd.reinsberg@beispiel-firma.de;+49 32 75316739;25.02.1962;SEPA-Mandat liegt vor
+10693;Kettenbach;Doris;Osterbrooksweg 21;60311;Frankfurt am Main;doris.kettenbach@beispiel-firma.de;(047) 7545151;25.11.1965;erreichbar unter 030/1234-5678
+10700;Baumgartner;Holger;Vogelsang 141;22765;Hamburg;holger.baumgartner@beispiel-firma.de;+49 68 37789569;07.07.1978;Rückfragen bitte an die Zentrale
+10707;Baumgartner;Birgit;Dorfanger 30;22765;Hamburg;birgit.baumgartner@beispiel-firma.de;0645/412609-63;20.12.1990;Stammkunde seit 1999
+10714;Fassbender;Dieter;Ahornweg 64;40213;Düsseldorf;dieter.fassbender@beispiel-firma.de;(065) 6768387;12.10.1987;SEPA-Mandat liegt vor
+10721;Obermeier;Jutta;Dorfanger 57;50667;Köln;jutta.obermeier@beispiel-firma.de;+49 40 57147163;03.04.2001;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10728;Illigen;Frank;Birkenallee 128;01067;Dresden;frank.illigen@beispiel-firma.de;+49 89 75287936;26.06.1973;Konto wird zum Jahresende geschlossen
+10735;Mühlbauer;Doris;Dorfanger 91;39104;Magdeburg;doris.muehlbauer@beispiel-firma.de;(054) 1742109;05.08.1975;
+10742;Jahnke;Frank;Innsbrucker Ring 139;22765;Hamburg;frank.jahnke@beispiel-firma.de;+49 86 96553228;14.01.1979;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10749;Dettmer;Anja;Schulstraße 147;22765;Hamburg;anja.dettmer@beispiel-firma.de;(035) 3758599;06.06.1970;Rückfragen bitte an die Zentrale
+10756;Niederegger;Andreas;Schulstraße 121;80331;München;andreas.niederegger@beispiel-firma.de;0417/282553-17;11.03.1983;erreichbar unter 030/1234-5678
+10763;Wachsmuth;Doris;Lindenhof 64;70173;Stuttgart;doris.wachsmuth@beispiel-firma.de;+49 35 78788331;16.08.1990;SEPA-Mandat liegt vor
+10770;Reinsberg;Gerd;Erlenkamp 21;80331;München;gerd.reinsberg@beispiel-firma.de;+49 45 67080005;23.05.1992;erreichbar unter 030/1234-5678
+10777;Uhlenbrock;Petra;Birkenallee 104;60311;Frankfurt am Main;petra.uhlenbrock@beispiel-firma.de;0828/827840-31;28.09.1996;
+10784;Zangerle;Lars;Hafenstraße 112;24103;Kiel;lars.zangerle@beispiel-firma.de;0727/477993-39;14.03.1977;SEPA-Mandat liegt vor
+10791;Reinsberg;Anja;Innsbrucker Ring 32;24103;Kiel;anja.reinsberg@beispiel-firma.de;(061) 1357527;13.02.1950;Zweitanschrift bekannt, siehe Vorgang 2024-0815
+10798;Wachsmuth;Gerd;Kirchsteig 108;80331;München;gerd.wachsmuth@beispiel-firma.de;+49 72 40983425;02.10.1997;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10805;Kettenbach;Heike;Wiesengrund 108;70173;Stuttgart;heike.kettenbach@beispiel-firma.de;(050) 3975423;23.11.1950;Stammkunde seit 1999
+10812;Quandtner;Lars;Rosenweg 89;80331;München;lars.quandtner@beispiel-firma.de;0668/474264-40;28.11.1993;Mailverkehr läuft über k.lindhorst@beispiel-firma.de
+10819;Thelen;Gisela;Feldmühlenweg 57;01067;Dresden;gisela.thelen@beispiel-firma.de;0590/741097-22;15.07.1972;SEPA-Mandat liegt vor
+10826;Pflüger;Bernd;Innsbrucker Ring 98;39104;Magdeburg;bernd.pflueger@beispiel-firma.de;+49 71 23283668;23.12.1973;Stammkunde seit 1999
+10833;Grünwald;Anja;Cranachstraße 146;24103;Kiel;anja.gruenwald@beispiel-firma.de;+49 46 79567361;03.06.1977;Rückfragen bitte an die Zentrale

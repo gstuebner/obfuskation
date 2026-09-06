@@ -349,6 +349,90 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Ein_Feld_mit_eigenem_Namensraum_zeigt_seinen_Generator_an()
+    {
+        // Befund D-4 der Testdurchfuehrung vom 4. September 2026: fuer ein Feld,
+        // dessen Regel einen im Profil angelegten Generator nutzt, blieb das
+        // Auswahlfeld leer. Ursache war, dass die Suche nur die eingebauten
+        // Generatoren kannte und ersatzweise einen Eintrag mit abweichender
+        // Erklaerung baute — als Datensatz mit Wertvergleich also nicht
+        // derselbe wie der in der Auswahlliste.
+        //
+        // Die Gefahr lag nicht im Lauf, der arbeitete richtig, sondern in der
+        // Anzeige: wer das leere Feld fuer einen Fehler haelt und einen
+        // Generator aus der Liste waehlt, hebt die Trennung der Namensraeume
+        // auf, und Belegnummer und Personennummer bekommen wieder dasselbe
+        // Pseudonym.
+        var profil = SchreibeProfil(p =>
+        {
+            p.Generators["belegNummer"] = new GeneratorSettings { Type = "numericId" };
+            p.Fields.Add(new FieldRule
+            {
+                Match = "Kundennummer",
+                Action = FieldAction.Pseudonymize,
+                Generator = "belegNummer",
+            });
+        });
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        modell.SelectedField = modell.Fields.Single(f => f.FieldName == "Kundennummer");
+        var gewaehlt = modell.SelectedField!.SelectedGenerator;
+
+        Assert.NotNull(gewaehlt);
+        Assert.Equal("belegNummer", gewaehlt!.Name);
+
+        // Entscheidend: der Eintrag muss derselbe sein wie der in der
+        // Auswahlliste, sonst findet das Auswahlfeld ihn nicht.
+        Assert.Contains(gewaehlt, modell.Generators);
+    }
+
+    [Fact]
+    public async Task Auch_eine_Textregel_zeigt_einen_eigenen_Namensraum_an()
+    {
+        // Dieselbe Ursache traf das Fenster der Textregeln.
+        var profil = SchreibeProfil(p =>
+        {
+            p.Generators["belegNummer"] = new GeneratorSettings { Type = "numericId" };
+            p.TextRules.Add(new TextRule
+            {
+                Name = "beleg",
+                Pattern = @"\bBEL-\d{6}\b",
+                Generator = "belegNummer",
+            });
+        });
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var textregeln = modell.CreateTextRulesViewModel();
+        Assert.NotNull(textregeln);
+
+        var regel = textregeln!.Rules.Single(r => r.Name == "beleg");
+
+        Assert.NotNull(regel.Generator);
+        Assert.Equal("belegNummer", regel.Generator!.Name);
+        Assert.Contains(regel.Generator, textregeln.Generators);
+    }
+
+    [Fact]
+    public void Der_Testlauf_fasst_die_Einstellungen_des_Anwenders_nicht_an()
+    {
+        // Befund D-8 der Testdurchfuehrung vom 4. September 2026: die
+        // Ansichtsmodelle rufen an mehreren Stellen GuiSettings.Save(), und der
+        // Pfad loeste ohne gesetztes XDG_CONFIG_HOME auf das echte
+        // Benutzerverzeichnis auf. Ein Testlauf ueberschrieb damit die
+        // Einstellungen des angemeldeten Benutzers.
+        var pfad = GuiSettings.FilePath;
+
+        Assert.StartsWith(TestUmgebung.Verzeichnis, pfad, StringComparison.Ordinal);
+
+        var heimat = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        Assert.DoesNotContain(Path.Combine(heimat, ".config"), pfad, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Der_Name_der_Ausgabedatei_wird_erkennbar_vorbelegt()
     {
         Assert.Equal("kunden.pseudo.csv", DialogService.SuggestOutputName("/pfad/kunden.csv"));

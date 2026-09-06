@@ -135,7 +135,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// <summary>Der gewaehlte Generator als Listeneintrag mit Erklaerung.</summary>
     public GeneratorOption? SelectedGenerator
     {
-        get => GeneratorOption.Find(_generator);
+        get => GeneratorOption.Find(_profile, _generator);
         set => Generator = value?.Name;
     }
 
@@ -267,8 +267,18 @@ public sealed record GeneratorOption(string Name, string Description)
         return BuiltIn.Concat(eigene).ToList();
     }
 
-    public static GeneratorOption? Find(string? name)
-        => name is null ? null : BuiltIn.FirstOrDefault(option =>
+    /// <summary>
+    /// Der Listeneintrag zu einem Generatornamen.
+    ///
+    /// Gesucht wird in <see cref="For"/>, nicht bloss in <see cref="BuiltIn"/>:
+    /// ein Eintrag fuer einen eigenen Namensraum traegt dort die Erklaerung
+    /// "eigener Namensraum, wie numericId". Wuerde hier ersatzweise ein neuer
+    /// Eintrag mit einer anderen Erklaerung gebaut, waere er — Datensatz mit
+    /// Wertvergleich — nicht derselbe wie der in der Auswahlliste, und das
+    /// Auswahlfeld bliebe leer, obwohl die Regel einen Generator traegt.
+    /// </summary>
+    public static GeneratorOption? Find(Profile profile, string? name)
+        => name is null ? null : For(profile).FirstOrDefault(option =>
             string.Equals(option.Name, name, StringComparison.OrdinalIgnoreCase))
             ?? new GeneratorOption(name, "eigener Namensraum");
 

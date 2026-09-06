@@ -32,7 +32,7 @@ public sealed class TextRulesViewModel : ObservableObject
         _onChanged = onChanged;
 
         foreach (var rule in profile.TextRules)
-            Rules.Add(new TextRuleViewModel(rule, OnRuleChanged));
+            Rules.Add(new TextRuleViewModel(profile, rule, OnRuleChanged));
 
         AddCommand = new RelayCommand(Add);
         RemoveCommand = new RelayCommand(Remove, () => _selected is not null);
@@ -97,7 +97,7 @@ public sealed class TextRulesViewModel : ObservableObject
 
         _profile.TextRules.Add(rule);
 
-        var viewModel = new TextRuleViewModel(rule, OnRuleChanged);
+        var viewModel = new TextRuleViewModel(_profile, rule, OnRuleChanged);
         Rules.Add(viewModel);
         Selected = viewModel;
 
@@ -187,9 +187,11 @@ public sealed class TextRulesViewModel : ObservableObject
 public sealed class TextRuleViewModel : ObservableObject
 {
     private readonly Action _onChanged;
+    private readonly Profile _profile;
 
-    public TextRuleViewModel(TextRule rule, Action onChanged)
+    public TextRuleViewModel(Profile profile, TextRule rule, Action onChanged)
     {
+        _profile = profile;
         Rule = rule;
         _onChanged = onChanged;
     }
@@ -224,7 +226,7 @@ public sealed class TextRuleViewModel : ObservableObject
 
     public GeneratorOption? Generator
     {
-        get => GeneratorOption.Find(Rule.Generator);
+        get => GeneratorOption.Find(_profile, Rule.Generator);
         set
         {
             if (value is null || Rule.Generator == value.Name)

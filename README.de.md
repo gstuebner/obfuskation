@@ -16,6 +16,15 @@ Es gibt zwei Wege zum selben Werkzeug: das Kommandozeilenprogramm
 tägliche Arbeit. Beide nutzen dieselbe Bibliothek und dieselbe
 Ersetzungstabelle — was der eine ersetzt, holt der andere zurück.
 
+## Dokumentation
+
+- [Anwenderdokumentation](docs/anwenderdokumentation.md) — für alle, die mit
+  der Oberfläche Beispieldaten für eine KI aufbereiten wollen.
+- [Entwicklerdokumentation](docs/entwicklerdokumentation.md) — für alle, die
+  das Werkzeug bauen, erweitern oder abnehmen.
+- [Testdokumentation](docs/testdokumentation.md) — Testkonzept, Testfälle
+  und Befunde der Testdurchführung.
+
 ## Herunterladen
 
 Fertige Programme für Windows und Linux liegen unter

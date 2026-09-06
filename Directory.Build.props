@@ -6,6 +6,13 @@
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>false</InvariantGlobalization>
 
+    <!-- Eine Fassung fuer alle Projekte. Vorher stand sie nur in der
+         Oberflaeche, das Kommandozeilenprogramm lief auf der Vorgabe 1.0.0
+         mit — zwei Programme desselben Pakets duerfen nicht auseinanderlaufen.
+         1.0.1: Behebung der Befunde D-4 und D-8 der Testdurchfuehrung vom
+         4. September 2026, siehe docs/testdokumentation.md. -->
+    <Version>1.0.1</Version>
+
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,
          waehrend das Zielframework net8.0 bleibt. -->

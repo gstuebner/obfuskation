@@ -8,6 +8,15 @@ The primary value lies in the return path: the AI's response — generated code,
 
 There are two interfaces to the same core: the command-line tool `obfuskation` for scripts and automation, and the graphical interface `obfuskation-gui` for everyday work. Both share the same underlying library and substitution table — whatever one replaces, the other can restore.
 
+## Documentation
+
+- [User documentation](docs/anwenderdokumentation.md) (German) — for everyone
+  preparing sample data for an AI with the graphical interface.
+- [Developer documentation](docs/entwicklerdokumentation.md) (German) — for
+  everyone building, extending or reviewing the tool.
+- [Test documentation](docs/testdokumentation.md) (German) — test plan, test
+  cases and the findings of the manual test run.
+
 ## Download
 
 Pre-built binaries for Windows and Linux are available under [Releases](../../releases). Two portable files per platform, no installation required:

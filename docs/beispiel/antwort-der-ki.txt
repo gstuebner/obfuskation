@@ -1,0 +1,23 @@
+Auswertung der übergebenen Beispieldaten
+=======================================
+
+Die Datei enthält 120 Datensätze. Auffällig sind zwei Konten:
+
+- Monika Eschenbach (Personennummer 04745),
+  erreichbar unter anna.schuster398@example.invalid und (030) 1976441,
+  Konto DE08659117027800930329 bei EROMDECDPFS, Stand 6836,65.
+- Tim Thiel (Personennummer 38903),
+  Konto DE15143437567521874410, Stand 10742,82.
+
+Vorschlag für die Auswertung:
+
+```python
+import pandas as pd
+
+df = pd.read_csv("stammdaten.csv", sep=";", encoding="utf-8")
+auffaellig = df[df["Personennummer"].isin([04745, 38903])]
+print(auffaellig[["Personennummer", "Nachname", "EMail"]])
+```
+
+Die Anschrift „Am Anger 141, 95661 Eisenach" kommt in beiden
+Beständen vor und sollte vereinheitlicht werden.
