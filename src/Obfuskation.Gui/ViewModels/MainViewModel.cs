@@ -22,6 +22,8 @@ public sealed class MainViewModel : ObservableObject
     private byte[]? _dataContent;
     private AnalysisResult? _analysis;
     private FieldRuleViewModel? _selectedField;
+    private readonly List<FieldRuleViewModel> _selectedFields = new();
+    private bool _bulkUpdate;
     private RunResultViewModel? _lastResult;
     private string _statusText = "Bereit.";
     private bool _isBusy;
@@ -184,25 +186,161 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Das fuehrende Feld der Auswahl. Nach ihm richten sich Vorschau und
+    /// Ueberschrift; bei Mehrfachauswahl ist es das erste gewaehlte.
+    /// </summary>
     public FieldRuleViewModel? SelectedField
     {
         get => _selectedField;
         set
         {
-            if (SetProperty(ref _selectedField, value))
+            if (!SetProperty(ref _selectedField, value))
+                return;
+
+            // Wird das fuehrende Feld gesetzt, ohne dass die Liste eine
+            // Mehrfachauswahl gemeldet hat, gilt genau dieses Feld als
+            // gewaehlt. Ohne das liefe die Massenzuweisung unten auf einen
+            // veralteten Stand.
+            if (value is null || !_selectedFields.Contains(value))
             {
-                RefreshPreview();
-                OnPropertyChanged(nameof(HasSelectedField));
-                OnPropertyChanged(nameof(SelectedFieldTitle));
+                _selectedFields.Clear();
+                if (value is not null)
+                    _selectedFields.Add(value);
+
+                RaiseSelectionProperties();
             }
+
+            RefreshPreview();
+            OnPropertyChanged(nameof(HasSelectedField));
+            OnPropertyChanged(nameof(SelectedFieldTitle));
+            OnPropertyChanged(nameof(SelectedAction));
+            OnPropertyChanged(nameof(SelectedGenerator));
+            OnPropertyChanged(nameof(NeedsGenerator));
         }
+    }
+
+    /// <summary>
+    /// Alle gewaehlten Felder. Grosse Tabellen haben oft ganze Gruppen
+    /// gleichartiger Spalten; die Behandlung wird darum auf einmal fuer die
+    /// ganze Auswahl gesetzt, nicht Feld fuer Feld.
+    /// </summary>
+    public IReadOnlyList<FieldRuleViewModel> SelectedFields => _selectedFields;
+
+    /// <summary>
+    /// Meldet die Auswahl der Feldliste. Ruft die Ansicht bei jeder Aenderung;
+    /// das Ansichtsmodell kennt die Liste selbst nicht.
+    /// </summary>
+    public void UpdateSelection(IEnumerable<FieldRuleViewModel> fields)
+    {
+        var gewaehlt = fields.ToList();
+
+        _selectedFields.Clear();
+        _selectedFields.AddRange(gewaehlt);
+
+        // Das fuehrende Feld bleibt, solange es Teil der Auswahl ist — sonst
+        // spraenge die Regelkarte bei jedem Erweitern der Auswahl um.
+        if (_selectedField is null || !_selectedFields.Contains(_selectedField))
+            SelectedField = _selectedFields.FirstOrDefault();
+
+        RaiseSelectionProperties();
+    }
+
+    private void RaiseSelectionProperties()
+    {
+        OnPropertyChanged(nameof(SelectedFields));
+        OnPropertyChanged(nameof(SelectedFieldTitle));
+        OnPropertyChanged(nameof(IsMultiSelection));
+        OnPropertyChanged(nameof(IsSingleSelection));
+        OnPropertyChanged(nameof(MultiSelectionHint));
     }
 
     public bool HasSelectedField => _selectedField is not null;
 
+    /// <summary>Ob mehr als ein Feld gewaehlt ist.</summary>
+    public bool IsMultiSelection => _selectedFields.Count > 1;
+
+    /// <summary>
+    /// Ob genau ein Feld gewaehlt ist. Nur dann zeigt die Karte eine Vorschau:
+    /// ein Beispielwert aus einem von zwoelf Feldern waere irrefuehrend.
+    /// </summary>
+    public bool IsSingleSelection => _selectedFields.Count <= 1;
+
+    /// <summary>Sagt bei Mehrfachauswahl, worauf die Einstellung wirkt.</summary>
+    public string MultiSelectionHint
+        => $"Die Einstellung gilt für alle {_selectedFields.Count} gewählten Felder.";
+
+    /// <summary>
+    /// Die Behandlung der Auswahl. Gelesen wird sie am fuehrenden Feld,
+    /// geschrieben auf alle gewaehlten.
+    /// </summary>
+    public ActionOption? SelectedAction
+    {
+        get => _selectedField?.SelectedAction;
+        set
+        {
+            if (value is null)
+                return;
+
+            ApplyToSelection(feld => feld.SelectedAction = value);
+            OnPropertyChanged(nameof(SelectedAction));
+            OnPropertyChanged(nameof(SelectedGenerator));
+            OnPropertyChanged(nameof(NeedsGenerator));
+        }
+    }
+
+    /// <summary>Der Generator der Auswahl; wie <see cref="SelectedAction"/>.</summary>
+    public GeneratorOption? SelectedGenerator
+    {
+        get => _selectedField?.SelectedGenerator;
+        set
+        {
+            if (value is null)
+                return;
+
+            // Nur Felder, die ersetzt werden, tragen einen Generator. Ihn auf
+            // ein durchgelassenes Feld zu schreiben, hiesse dessen Regel
+            // stillschweigend zu veraendern.
+            ApplyToSelection(feld =>
+            {
+                if (feld.NeedsGenerator)
+                    feld.SelectedGenerator = value;
+            });
+
+            OnPropertyChanged(nameof(SelectedGenerator));
+        }
+    }
+
+    /// <summary>Ob die Auswahl einen Generator braucht.</summary>
+    public bool NeedsGenerator => _selectedField?.NeedsGenerator ?? false;
+
+    /// <summary>
+    /// Setzt eine Einstellung auf die ganze Auswahl. Die Nacharbeit
+    /// (Profilpruefung, Vorschau, Zaehler) laeuft einmal am Ende statt nach
+    /// jedem einzelnen Feld — bei einer Tabelle mit hundert Spalten waere das
+    /// sonst hundertmal dieselbe Pruefung.
+    /// </summary>
+    private void ApplyToSelection(Action<FieldRuleViewModel> aenderung)
+    {
+        _bulkUpdate = true;
+        try
+        {
+            foreach (var feld in _selectedFields.ToList())
+                aenderung(feld);
+        }
+        finally
+        {
+            _bulkUpdate = false;
+        }
+
+        OnFieldRuleChanged();
+    }
+
     /// <summary>Ueberschrift der Regelkarte.</summary>
     public string SelectedFieldTitle
-        => _selectedField is null ? "Regel" : $"Regel: {_selectedField.FieldName}";
+        => _selectedFields.Count > 1
+            ? $"Regel: {_selectedFields.Count} Felder"
+            : _selectedField is null ? "Regel" : $"Regel: {_selectedField.FieldName}";
 
     /// <summary>Wegweiser, solange noch nichts geoeffnet ist.</summary>
     public string EmptyHint => _session is null
@@ -681,6 +819,14 @@ public sealed class MainViewModel : ObservableObject
 
     private void OnFieldRuleChanged()
     {
+        // Waehrend einer Massenzuweisung meldet jedes Feld seine Aenderung;
+        // die Nacharbeit macht ApplyToSelection einmal am Ende.
+        if (_bulkUpdate)
+        {
+            _session?.MarkChanged();
+            return;
+        }
+
         _session?.MarkChanged();
 
         RefreshIssues();

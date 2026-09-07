@@ -20,8 +20,14 @@
          auch mit blossem Profilnamen statt Dateipfad. Dazu eine Kurzhilfe im
          Menue "Mehr" und neue Beschriftungen der beiden Schaltflaechen unten:
          "Pseudodatei erzeugen..." und "Klartextdatei erzeugen...". Nebenversion
-         statt Korrekturstand, weil Funktionen dazugekommen sind. -->
-    <Version>1.1.0</Version>
+         statt Korrekturstand, weil Funktionen dazugekommen sind.
+         1.2.0: Mehrfachauswahl in der Feldliste — Aktion und Generator gelten
+         fuer alle gewaehlten Felder auf einmal. Dazu behoben: als Einzeldatei
+         veroeffentlicht brach die Oberflaeche bei jedem Schreiben einer
+         Konfiguration stumm ab, weil die mitgepackte System.IO.Pipelines 8.0.0
+         die der Laufzeit verdeckte; siehe Kommentar in
+         src/Obfuskation.Gui/Obfuskation.Gui.csproj. -->
+    <Version>1.2.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

@@ -25,6 +25,18 @@
          Linux nicht gibt. Ohne eigene Schrift saehe die Oberflaeche auf beiden
          Systemen verschieden aus. -->
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.2" />
+    <!-- Avalonia zieht System.IO.Pipelines als Paket herein. Fuer net8.0
+         waehlt NuGet daraus die Fassung 8.0.0, waehrend die Anwendung ueber
+         RollForward auf einer neueren Laufzeit laeuft, deren System.Text.Json
+         die Fassung 9.0.0.0 verlangt. Als Einzeldatei veroeffentlicht liegt
+         nur noch die mitgepackte 8.0.0 im Bundle und verdeckt die der
+         Laufzeit: jedes Schreiben einer Konfiguration scheiterte dann an
+         "Could not load file or assembly 'System.IO.Pipelines, Version=9.0.0.0'".
+         Die Bibliothek gehoert seit .NET 3 zum Framework — ExcludeAssets
+         haelt die Paketfassung aus der Ausgabe heraus, sodass die der Laufzeit
+         greift. Ohne Einzeldatei fiel es nicht auf, weil der Host dort die
+         hoehere Fassung des Frameworks vorzieht. -->
+    <PackageReference Include="System.IO.Pipelines" Version="8.0.0" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

@@ -119,6 +119,11 @@ einer davon offen ist, bricht jeder Lauf ab. Rechts die Behandlung des
 gewählten Feldes samt einer Vorschau am echten Wert aus der Datei
 (»Max Mustermann → Paul Gerber«). Unten die drei Vorgänge.
 
+Bei breiten Tabellen lassen sich mehrere Felder zusammen wählen — Strg-Klick
+einzeln, Umschalt-Klick von… bis, Strg+A alle. Aktion und Generator gelten
+dann für die ganze Auswahl; ein Generator nur für die Felder darin, die
+tatsächlich ersetzt werden. Die Vorschau bleibt der Einzelauswahl vorbehalten.
+
 Über **Mehr** erreichbar:
 
 - **Textregeln** — mit einem Erprobungsfeld. Muster an echtem Text ausprobieren,

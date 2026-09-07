@@ -2,7 +2,7 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.1.0
+version: 1.2.0
 author: Gregor Stübner & Claude (Anthropic)
 date: 07.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Anwenderdokumentation
 
-Fassung 1.1.0 · Stand 7. September 2026
+Fassung 1.2.0 · Stand 7. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -190,9 +190,20 @@ einem Punkt davor: gefüllt und türkis heißt *entschieden*, ein roter,
 hohler Kreis heißt *offen*. Solange auch nur ein Feld offen ist, bricht
 jeder Lauf ab (Abschnitt 3, Schritt 2).
 
-**Regelbereich mit Vorschau.** Rechts die Behandlung des links gewählten
-Feldes: die Auswahl der Aktion, bei „ersetzen“ zusätzlich der Generator, und
-darunter die Vorschau an einem echten Wert aus der geöffneten Datei. Ohne
+**Mehrfachauswahl.** Breite Tabellen haben oft ganze Gruppen gleichartiger
+Spalten. Sie lassen sich zusammen wählen — Strg-Klick für einzelne Felder,
+Umschalt-Klick für einen Bereich von… bis, Strg+A für alle. Die Überschrift
+des Regelbereichs nennt dann die Zahl der gewählten Felder, und eine Zeile
+darunter sagt ausdrücklich, dass die Einstellung für alle davon gilt.
+
+**Regelbereich mit Vorschau.** Rechts die Behandlung der links gewählten
+Felder: die Auswahl der Aktion, bei „ersetzen“ zusätzlich der Generator, und
+darunter die Vorschau an einem echten Wert aus der geöffneten Datei. Aktion
+und Generator wirken auf die ganze Auswahl; der Generator dabei nur auf die
+Felder, die tatsächlich ersetzt werden — ein durchgelassenes Feld in der
+Auswahl bleibt unberührt. Die Vorschau erscheint nur bei einem einzeln
+gewählten Feld: ein Beispielwert aus einem von zwölf Feldern ließe offen,
+wozu er gehört. Ohne
 bestehende Ersetzungstabelle ist die Vorschau nur beispielhaft — ein
 eigener Hinweis sagt das ausdrücklich, weil derselbe Klartext dann bei
 jedem Blick ein anderes Pseudonym zeigen kann.

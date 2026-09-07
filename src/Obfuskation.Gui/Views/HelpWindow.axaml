@@ -84,7 +84,7 @@
 
               <TextBlock Grid.Row="2" Grid.Column="0" Text="3." Classes="accent"/>
               <TextBlock Grid.Row="2" Grid.Column="1" TextWrapping="Wrap"
-                         Text="Jedes Feld entscheiden. Solange auch nur eines offen ist, wird bewusst nichts geschrieben — versehentlich durchgereichte Echtdaten wären der teure Fehler."/>
+                         Text="Jedes Feld entscheiden. Solange auch nur eines offen ist, wird bewusst nichts geschrieben — versehentlich durchgereichte Echtdaten wären der teure Fehler. Bei breiten Tabellen mehrere Felder zusammen wählen: Strg-Klick einzeln, Umschalt-Klick von… bis, Strg+A alle. Die Einstellung rechts gilt dann für die ganze Auswahl."/>
 
               <TextBlock Grid.Row="3" Grid.Column="0" Text="4." Classes="accent"/>
               <TextBlock Grid.Row="3" Grid.Column="1" TextWrapping="Wrap"
@@ -106,7 +106,7 @@
             <TextBlock Text="Zwei Wörter, die leicht zu verwechseln sind"
                        Classes="card-title" Margin="0"/>
             <TextBlock TextWrapping="Wrap" Classes="small"
-                       Text="„ersetzen“ im Regelbereich rechts betrifft immer nur das eine gewählte Feld: dieser Wert bekommt ein Pseudonym. Die Schaltflächen unten betreffen dagegen die ganze Datei."/>
+                       Text="„ersetzen“ im Regelbereich rechts betrifft nur die links gewählten Felder: deren Werte bekommen ein Pseudonym. Die Schaltflächen unten betreffen dagegen die ganze Datei."/>
           </StackPanel>
         </Border>
 

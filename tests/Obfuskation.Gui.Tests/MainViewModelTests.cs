@@ -568,4 +568,112 @@ public class MainViewModelTests : IDisposable
 
         Assert.Contains(eintrag.Files, f => string.Equals(f.Path, Path.GetFullPath(csv), StringComparison.Ordinal));
     }
+
+    // ------------------------------------------------- Mehrfachauswahl
+
+    [Fact]
+    public async Task Anlegen_aus_einer_Datei_haelt_die_Beispieldatei_offen()
+    {
+        // Der Weg "Neu aus Datei…": nach dem Anlegen muss dieselbe Datei
+        // geoeffnet sein, aus der das Regelgeruest stammt. Ein Fehler beim
+        // Schreiben brach das frueher stumm ab, und die Oberflaeche blieb bei
+        // "keine Datei geoeffnet" stehen.
+        var csv = SchreibeCsv();
+        var dialoge = new FakeDialogService
+        {
+            DataFileToOpen = csv,
+            NewProfileResult = new NewProfileResult(
+                "kunden", null, Path.Combine(_verzeichnis, "kunden.json"), OpenExisting: false),
+        };
+
+        var modell = Erzeugen(dialoge);
+        await modell.NewProfileAsync();
+
+        Assert.True(modell.HasDataFile);
+        Assert.Equal("kunden.csv", modell.DataFileName);
+        Assert.Equal(4, modell.Fields.Count);
+    }
+
+    [Fact]
+    public async Task Eine_Aktion_gilt_fuer_alle_gewaehlten_Felder()
+    {
+        var modell = Erzeugen();
+        await modell.InitializeAsync(SchreibeProfil(), SchreibeCsv());
+
+        var auswahl = modell.Fields
+            .Where(f => f.FieldName is "Kundenname" or "IBAN")
+            .ToList();
+
+        modell.UpdateSelection(auswahl);
+        modell.SelectedAction = ActionOption.For(FieldAction.Redact);
+
+        Assert.All(auswahl, feld => Assert.Equal(FieldAction.Redact, feld.Action));
+
+        // Nicht gewaehlte Felder bleiben unberuehrt.
+        Assert.Equal(FieldAction.Error, modell.Fields.Single(f => f.FieldName == "Betrag").Action);
+    }
+
+    [Fact]
+    public async Task Ein_Generator_gilt_nur_fuer_die_ersetzten_Felder_der_Auswahl()
+    {
+        var modell = Erzeugen();
+        await modell.InitializeAsync(SchreibeProfil(), SchreibeCsv());
+
+        var ersetzt = modell.Fields.Single(f => f.FieldName == "Kundenname");
+        var durchgelassen = modell.Fields.Single(f => f.FieldName == "Betrag");
+
+        ersetzt.Action = FieldAction.Pseudonymize;
+        durchgelassen.Action = FieldAction.Passthrough;
+
+        modell.UpdateSelection([ersetzt, durchgelassen]);
+        modell.SelectedGenerator = new GeneratorOption("token", "");
+
+        Assert.Equal("token", ersetzt.Generator);
+        Assert.Null(durchgelassen.Generator);
+    }
+
+    [Fact]
+    public async Task Die_Ueberschrift_nennt_die_Zahl_der_gewaehlten_Felder()
+    {
+        var modell = Erzeugen();
+        await modell.InitializeAsync(SchreibeProfil(), SchreibeCsv());
+
+        modell.UpdateSelection(modell.Fields.Take(3));
+
+        Assert.True(modell.IsMultiSelection);
+        Assert.False(modell.IsSingleSelection);
+        Assert.Equal("Regel: 3 Felder", modell.SelectedFieldTitle);
+        Assert.Contains("3 gewählten Felder", modell.MultiSelectionHint);
+    }
+
+    [Fact]
+    public async Task Ein_einzeln_gewaehltes_Feld_bleibt_die_Einzelauswahl()
+    {
+        var modell = Erzeugen();
+        await modell.InitializeAsync(SchreibeProfil(), SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "IBAN");
+        modell.SelectedField = feld;
+
+        Assert.True(modell.IsSingleSelection);
+        Assert.Equal(feld, Assert.Single(modell.SelectedFields));
+        Assert.Equal("Regel: IBAN", modell.SelectedFieldTitle);
+
+        // Auch ohne Umweg ueber die Liste wirkt die Aktion auf dieses Feld.
+        modell.SelectedAction = ActionOption.For(FieldAction.Drop);
+        Assert.Equal(FieldAction.Drop, feld.Action);
+    }
+
+    [Fact]
+    public async Task Das_fuehrende_Feld_bleibt_beim_Erweitern_der_Auswahl_stehen()
+    {
+        var modell = Erzeugen();
+        await modell.InitializeAsync(SchreibeProfil(), SchreibeCsv());
+
+        var zweites = modell.Fields[1];
+        modell.SelectedField = zweites;
+        modell.UpdateSelection([modell.Fields[0], zweites]);
+
+        Assert.Equal(zweites, modell.SelectedField);
+    }
 }

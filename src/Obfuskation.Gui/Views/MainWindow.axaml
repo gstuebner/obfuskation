@@ -110,9 +110,14 @@
                      IsVisible="{Binding ShowEmptyHint}"
                      VerticalAlignment="Center" TextWrapping="Wrap"/>
 
-          <ListBox Grid.Row="1" ItemsSource="{Binding Fields}"
+          <!-- Mehrfachauswahl mit Strg und Umschalt, Strg+A waehlt alles.
+               Grosse Tabellen haben oft ganze Gruppen gleichartiger Spalten;
+               die sollen sich in einem Zug entscheiden lassen. -->
+          <ListBox Grid.Row="1" x:Name="FieldList" ItemsSource="{Binding Fields}"
                    IsVisible="{Binding !ShowEmptyHint}"
                    SelectedItem="{Binding SelectedField}"
+                   SelectionMode="Multiple"
+                   SelectionChanged="OnFieldSelectionChanged"
                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:FieldRuleViewModel">
@@ -157,12 +162,21 @@
           <ScrollViewer Grid.Row="1" IsVisible="{Binding HasSelectedField}">
             <StackPanel Spacing="12">
 
+              <!-- Bei Mehrfachauswahl gilt jede Einstellung fuer alle
+                   gewaehlten Felder; ohne diesen Satz waere nicht zu sehen,
+                   wie weit eine Aenderung reicht. -->
+              <Border Classes="card card-raised" Padding="10"
+                      IsVisible="{Binding IsMultiSelection}">
+                <TextBlock Text="{Binding MultiSelectionHint}" Classes="accent small"
+                           TextWrapping="Wrap"/>
+              </Border>
+
               <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Aktion"
                            Classes="muted" VerticalAlignment="Center"/>
                 <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
                           ItemsSource="{Binding Actions}"
-                          SelectedItem="{Binding SelectedField.SelectedAction}">
+                          SelectedItem="{Binding SelectedAction}">
                   <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:ActionOption">
                       <TextBlock Text="{Binding Label}"/>
@@ -171,16 +185,16 @@
                 </ComboBox>
 
                 <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small"
-                           Text="{Binding SelectedField.SelectedAction.Hint}"
+                           Text="{Binding SelectedAction.Hint}"
                            TextWrapping="Wrap"/>
 
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Generator"
                            Classes="muted" VerticalAlignment="Center"
-                           IsVisible="{Binding SelectedField.NeedsGenerator}"/>
+                           IsVisible="{Binding NeedsGenerator}"/>
                 <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
                           ItemsSource="{Binding Generators}"
-                          SelectedItem="{Binding SelectedField.SelectedGenerator}"
-                          IsVisible="{Binding SelectedField.NeedsGenerator}">
+                          SelectedItem="{Binding SelectedGenerator}"
+                          IsVisible="{Binding NeedsGenerator}">
                   <ComboBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:GeneratorOption">
                       <!-- Der Name steht so in der Konfigurationsdatei; die
@@ -194,7 +208,10 @@
                 </ComboBox>
               </Grid>
 
-              <!-- Vorschau am echten Wert aus der Datei -->
+              <!-- Vorschau am echten Wert aus der Datei. Nur bei einem
+                   einzelnen gewaehlten Feld: ein Beispielwert aus einem von
+                   zwoelf Feldern liesse offen, wozu er gehoert. -->
+              <StackPanel IsVisible="{Binding IsSingleSelection}">
               <Border Classes="card card-raised" Padding="10"
                       IsVisible="{Binding SelectedField.HasPreview}">
                 <StackPanel Spacing="6">
@@ -215,6 +232,7 @@
                              Text="Nur ein Beispiel — es gibt noch keine Ersetzungstabelle. Der erste echte Lauf legt sie an und bestimmt die endgültigen Werte."/>
                 </StackPanel>
               </Border>
+              </StackPanel>
 
               <!-- Befunde der Profilpruefung -->
               <StackPanel Spacing="4" IsVisible="{Binding HasIssues}">

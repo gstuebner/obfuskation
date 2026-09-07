@@ -2,7 +2,7 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.1.0
+version: 1.2.0
 author: Gregor Stübner & Claude (Anthropic)
 date: 07.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Entwicklerdokumentation
 
-Fassung 1.1.0 · Stand 7. September 2026
+Fassung 1.2.0 · Stand 7. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -328,6 +328,21 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
   Schließen über die Titelleiste) liefert `ShowDialog<string?>` `null`, was
   der Aufrufer als die vorsichtige Richtung wertet — „Abbrechen“, nie
   „Verwerfen“.
+- **Mehrfachauswahl der Feldliste** (neu in 1.2.0): `SelectedItems` einer
+  `ListBox` ist keine bindbare Eigenschaft wie `SelectedItem` — die Ansicht
+  meldet die Auswahl deshalb selbst, über `MainWindow.OnFieldSelectionChanged`
+  an `MainViewModel.UpdateSelection(...)`. Das Ansichtsmodell bleibt damit
+  fensterfrei und prüfbar: die Tests rufen `UpdateSelection` unmittelbar auf.
+  `SelectedField` bleibt daneben bestehen und bezeichnet das *führende* Feld
+  der Auswahl — nach ihm richten sich Überschrift und Vorschau; es wechselt
+  nur, wenn es aus der Auswahl herausfällt, sonst spränge die Regelkarte bei
+  jedem Erweitern um. Die Regelkarte bindet Aktion und Generator seit 1.2.0
+  nicht mehr an `SelectedField.…`, sondern an `MainViewModel.SelectedAction`
+  und `.SelectedGenerator`: gelesen wird am führenden Feld, geschrieben über
+  `ApplyToSelection` auf alle gewählten. Während einer solchen Zuweisung
+  unterdrückt ein Merker die Nacharbeit der einzelnen Felder
+  (Profilprüfung, Vorschau, Zähler) und lässt sie einmal am Ende laufen —
+  bei hundert Spalten wäre es sonst hundertmal dieselbe Prüfung.
 - **Warum es die Kurzhilfe gibt:** `docs/anwenderdokumentation.md` erklärt
   das Programm vollständig, aber eine Anleitung, die neben dem Programm
   liegt, wird erfahrungsgemäß nicht gelesen — wer die Oberfläche zum ersten
@@ -411,6 +426,39 @@ landen. Ohne `--self-contained` erwartet das Ergebnis eine installierte
 .NET-8-Runtime; mit `--self-contained` bringt es sie mit, auf Kosten der
 Dateigröße. Das Ergebnis liegt unter `publish/<RID>/` und besteht je
 Laufzeit aus zwei Dateien: `obfuskation` und `obfuskation-gui`.
+
+### Eine Falle der Einzeldatei: Paketfassungen aus dem Framework
+
+Avalonia zieht `System.IO.Pipelines` als NuGet-Paket herein. Für `net8.0`
+wählt NuGet daraus die Fassung 8.0.0, während die Anwendung über
+`RollForward=Major` auf einer neueren Laufzeit läuft, deren
+`System.Text.Json` die Fassung 9.0.0.0 verlangt. Ohne Einzeldatei fällt das
+nicht auf: der Host zieht dann die höhere Fassung des Frameworks vor. Als
+Einzeldatei veröffentlicht liegt jedoch nur noch die mitgepackte 8.0.0 im
+Bundle und verdeckt die der Laufzeit — jedes Schreiben einer Konfiguration
+scheiterte damit an
+
+```
+Could not load file or assembly 'System.IO.Pipelines, Version=9.0.0.0'
+```
+
+Da `MainViewModel.GuardedAsync` die entstehende `FileNotFoundException` als
+`IOException` abfängt, wurde daraus eine stille Statuszeile statt eines
+Absturzes: „Neu aus Datei…“ legte kein Profil an und öffnete keine Datei.
+Behoben in Fassung 1.2.0 durch
+
+```xml
+<PackageReference Include="System.IO.Pipelines" Version="8.0.0" ExcludeAssets="runtime" />
+```
+
+in `src/Obfuskation.Gui/Obfuskation.Gui.csproj`: die Bibliothek gehört seit
+.NET 3 zum Framework, die Paketfassung gehört deshalb nicht in die Ausgabe.
+Merkposten für weitere Pakete: was auch im Framework steckt, sollte in einer
+Einzeldatei nicht in einer älteren Fassung mitreisen. Und: die Oberfläche
+lässt sich für solche Fälle unter `Xvfb` fernsteuern (`xdotool`), womit sich
+ein Auslieferungsfehler dieser Art ohne echten Bildschirm nachstellen lässt
+— den Unit-Tests entgeht er, weil er nur im veröffentlichten Ergebnis
+auftritt.
 
 ## 9. Konfigurationsschema
 

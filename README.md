@@ -84,6 +84,8 @@ When started without arguments, it looks for an `obfuskation.json` in the curren
 
 **Layout:** At the top, the opened file with detected format, character encoding, and delimiter. On the left, the fields, each with a status indicator — solid turquoise means *decided*, a red circle means *pending*, and as long as even one is pending, processing will abort. On the right, the handling of the selected field alongside a live preview using an actual value from the file (»Max Mustermann → Paul Gerber«). At the bottom, the three actions.
 
+Wide tables can be handled in bulk: select several fields at once — Ctrl-click for individual ones, Shift-click for a range, Ctrl+A for all. Action and generator then apply to the whole selection; a generator only to those fields in it that are actually being replaced. The preview stays reserved for a single selected field.
+
 Accessible via **More**:
 
 - **Text Rules** — with an interactive test input. Test patterns against real sample text before running them on actual data; overbroad patterns become apparent immediately.
