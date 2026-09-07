@@ -14,6 +14,7 @@ rem und auf Windows, und beide Fassungen sollen aus einem Aufruf entstehen.
 set "RIDS="
 set "SELF_CONTAINED=false"
 set "SINGLE_FILE=true"
+set "CLEAN=true"
 set "OUTPUT_ROOT="
 set "BUILD_CLI=true"
 set "BUILD_GUI=true"
@@ -29,6 +30,7 @@ if /i "%~1"=="--rid" (
 )
 if /i "%~1"=="--self-contained" (set "SELF_CONTAINED=true" & shift & goto parse)
 if /i "%~1"=="--no-single-file" (set "SINGLE_FILE=false" & shift & goto parse)
+if /i "%~1"=="--no-clean" (set "CLEAN=false" & shift & goto parse)
 if /i "%~1"=="--cli-only" (set "BUILD_GUI=false" & shift & goto parse)
 if /i "%~1"=="--gui-only" (set "BUILD_CLI=false" & shift & goto parse)
 if /i "%~1"=="--output" (
@@ -45,7 +47,9 @@ exit /b 1
 :usage
 echo Verwendung: %~nx0 [Optionen]
 echo.
-echo Baut die Release-Fassung und legt sie unter publish\^<RID^>\ ab.
+echo Baut die Release-Fassung und legt sie unter publish\^<RID^>\ ab. Das
+echo Zielverzeichnis wird zuvor geleert; ohne das blieben Reste frueherer
+echo Laeufe liegen und gingen mit ins Auslieferungspaket.
 echo Ohne --rid werden win-x64 und linux-x64 gebaut, je mit Kommandozeilen-
 echo programm und Oberflaeche.
 echo.
@@ -55,6 +59,8 @@ echo                        z. B. win-x64, win-arm64, linux-x64, linux-arm64
 echo   --self-contained     Runtime mitliefern; laeuft ohne installiertes .NET,
 echo                        das Ergebnis wird dadurch deutlich groesser
 echo   --no-single-file     Nicht zu einer einzelnen Programmdatei zusammenfassen
+echo   --no-clean           Das Zielverzeichnis vorher nicht leeren; Reste
+echo                        frueherer Laeufe bleiben dann liegen
 echo   --cli-only           Nur das Kommandozeilenprogramm
 echo   --gui-only           Nur die Oberflaeche
 echo   --output ^<pfad^>      Abweichendes Wurzelverzeichnis; darunter entsteht ^<RID^>\
@@ -65,6 +71,8 @@ echo   %~nx0
 echo   %~nx0 --rid win-x64
 echo   %~nx0 --rid win-x64 --self-contained
 echo   %~nx0 --cli-only --rid win-x64
+echo   %~nx0 --gui-only --no-clean   (nur die Oberflaeche erneuern, das
+echo                                  Kommandozeilenprogramm daneben stehen lassen)
 exit /b 0
 
 :parsed
@@ -113,6 +121,24 @@ for %%R in (%RIDS%) do (
     echo === %%R ===============================================
     echo Self-contained: %SELF_CONTAINED%   Einzeldatei: %SINGLE_FILE%
     echo Ausgabe       : !ZIEL!
+
+    rem Das Zielverzeichnis leeren, bevor etwas Neues hineinlaeuft. "dotnet
+    rem publish" ueberschreibt nur, was es selbst erzeugt, und laesst alles
+    rem andere stehen: nach einem Lauf mit --no-single-file blieben etwa die
+    rem Symboldateien der nativen Bibliotheken (libSkiaSharp.pdb, rund 80 MB)
+    rem liegen und waeren beim naechsten Packen mit ausgeliefert worden.
+    rem
+    rem Der Name wird vorher geprueft: geleert wird ausschliesslich ein
+    rem Verzeichnis, das genau die Kennung der Ziellaufzeit traegt. Ein
+    rem verunglueckter --output-Wert soll nichts anderes mitnehmen.
+    if "%CLEAN%"=="true" if exist "!ZIEL!\" (
+        for %%N in ("!ZIEL!") do set "ZIELNAME=%%~nxN"
+        if /i not "!ZIELNAME!"=="%%R" (
+            echo Fehler: !ZIEL! heisst nicht wie die Ziellaufzeit; nicht geleert.
+            exit /b 1
+        )
+        rd /s /q "!ZIEL!"
+    )
 
     rem Ohne IncludeNativeLibrariesForSelfExtract blieben die nativen
     rem Bibliotheken der Oberflaeche (Skia, HarfBuzz) als eigene Dateien

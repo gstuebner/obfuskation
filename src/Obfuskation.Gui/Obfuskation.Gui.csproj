@@ -43,6 +43,20 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
+  <!-- SkiaSharp und HarfBuzzSharp liefern zu ihren nativen Bibliotheken
+       Symboldateien mit (libSkiaSharp.pdb allein rund 80 MB). Die landen
+       unabhaengig von DebugType im Veroeffentlichungsverzeichnis und waeren
+       damit ins Auslieferungspaket gewandert — dreimal so gross fuer etwas,
+       das beim Ausliefern niemand braucht. -->
+  <Target Name="SymboldateienNichtVeroeffentlichen"
+          AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish
+          Remove="@(ResolvedFileToPublish)"
+          Condition="'%(Extension)' == '.pdb'" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <ProjectReference Include="..\Obfuskation.Core\Obfuskation.Core.csproj" />
   </ItemGroup>

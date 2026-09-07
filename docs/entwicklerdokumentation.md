@@ -416,6 +416,14 @@ gleiche Optionen):
 ./build-release.sh --output <pfad>     # abweichendes Wurzelverzeichnis
 ```
 
+Das Skript leert vor jedem Lauf das Zielverzeichnis `publish/<RID>/`.
+`dotnet publish` überschreibt nur, was es selbst erzeugt, und lässt alles
+andere stehen — Reste eines früheren Laufs mit anderen Optionen wären sonst
+mit ins Auslieferungspaket gewandert. Geleert wird ausschließlich ein
+Verzeichnis, das genau die Kennung der Ziellaufzeit trägt; `--no-clean`
+schaltet es ab, etwa um mit `--gui-only` nur die Oberfläche zu erneuern und
+das Kommandozeilenprogramm daneben stehen zu lassen.
+
 Das Skript veröffentlicht `Obfuskation.Cli` und `Obfuskation.Gui` einzeln
 statt über die Solution, damit Bibliothek und Testprojekt nicht mitgezogen
 werden. Es setzt `-p:DebugType=none` (keine `.pdb`-Dateien im Auslieferungs-
@@ -426,6 +434,15 @@ landen. Ohne `--self-contained` erwartet das Ergebnis eine installierte
 .NET-8-Runtime; mit `--self-contained` bringt es sie mit, auf Kosten der
 Dateigröße. Das Ergebnis liegt unter `publish/<RID>/` und besteht je
 Laufzeit aus zwei Dateien: `obfuskation` und `obfuskation-gui`.
+
+`-p:DebugType=none` betrifft allerdings nur die eigenen, verwalteten
+Symboldateien. SkiaSharp und HarfBuzzSharp liefern zu ihren **nativen**
+Bibliotheken eigene mit — `libSkiaSharp.pdb` allein rund 80 MB —, und die
+landeten unabhängig davon im Veröffentlichungsverzeichnis. Das Zielprojekt
+nimmt sie deshalb über das Ziel `SymboldateienNichtVeroeffentlichen` in
+`src/Obfuskation.Gui/Obfuskation.Gui.csproj` wieder aus
+`ResolvedFileToPublish` heraus. Ohne das wäre das Windows-Paket dreimal so
+groß gewesen wie nötig.
 
 ### Eine Falle der Einzeldatei: Paketfassungen aus dem Framework
 

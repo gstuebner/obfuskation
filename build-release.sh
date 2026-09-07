@@ -15,6 +15,7 @@ DEFAULT_RIDS=("win-x64" "linux-x64")
 RIDS=()
 SELF_CONTAINED="false"
 SINGLE_FILE="true"
+CLEAN="true"
 OUTPUT_ROOT=""
 BUILD_CLI="true"
 BUILD_GUI="true"
@@ -26,7 +27,9 @@ usage() {
   cat <<'EOF'
 Verwendung: ./build-release.sh [Optionen]
 
-Baut die Release-Fassung und legt sie unter publish/<RID>/ ab.
+Baut die Release-Fassung und legt sie unter publish/<RID>/ ab. Das
+Zielverzeichnis wird zuvor geleert; ohne das blieben Reste frueherer
+Laeufe liegen und gingen mit ins Auslieferungspaket.
 Ohne --rid werden win-x64 und linux-x64 gebaut, je mit Kommandozeilen-
 programm und Oberflaeche.
 
@@ -36,6 +39,8 @@ Optionen:
   --self-contained     Runtime mitliefern; laeuft ohne installiertes .NET,
                        das Ergebnis wird dadurch deutlich groesser
   --no-single-file     Nicht zu einer einzelnen Programmdatei zusammenfassen
+  --no-clean           Das Zielverzeichnis vorher nicht leeren; Reste
+                       frueherer Laeufe bleiben dann liegen
   --cli-only           Nur das Kommandozeilenprogramm
   --gui-only           Nur die Oberflaeche
   --output <pfad>      Abweichendes Wurzelverzeichnis; darunter entsteht <RID>/
@@ -46,6 +51,9 @@ Beispiele:
   ./build-release.sh --rid linux-x64
   ./build-release.sh --rid win-x64 --self-contained
   ./build-release.sh --cli-only --rid linux-x64
+  ./build-release.sh --gui-only --no-clean   # nur die Oberflaeche erneuern,
+                                             # das Kommandozeilenprogramm
+                                             # daneben stehen lassen
 EOF
 }
 
@@ -54,6 +62,7 @@ while [[ $# -gt 0 ]]; do
     --rid)            RIDS+=("${2:?--rid braucht einen Wert}"); shift 2 ;;
     --self-contained) SELF_CONTAINED="true"; shift ;;
     --no-single-file) SINGLE_FILE="false"; shift ;;
+    --no-clean)       CLEAN="false"; shift ;;
     --cli-only)       BUILD_GUI="false"; shift ;;
     --gui-only)       BUILD_CLI="false"; shift ;;
     --output)         OUTPUT_ROOT="${2:?--output braucht einen Wert}"; shift 2 ;;
@@ -127,6 +136,23 @@ for rid in "${RIDS[@]}"; do
   echo "=== ${rid} ==============================================="
   echo "Self-contained: ${SELF_CONTAINED}   Einzeldatei: ${SINGLE_FILE}"
   echo "Ausgabe       : ${ziel}"
+
+  # Das Zielverzeichnis leeren, bevor etwas Neues hineinlaeuft. "dotnet
+  # publish" ueberschreibt nur, was es selbst erzeugt, und laesst alles
+  # andere stehen: nach einem Lauf mit --no-single-file blieben etwa die
+  # Symboldateien der nativen Bibliotheken (libSkiaSharp.pdb, rund 80 MB)
+  # liegen und waeren beim naechsten Packen mit ausgeliefert worden.
+  #
+  # Der Name wird vorher geprueft: geleert wird ausschliesslich ein
+  # Verzeichnis, das genau die Kennung der Ziellaufzeit traegt. Ein
+  # verunglueckter --output-Wert soll nichts anderes mitnehmen.
+  if [[ "${CLEAN}" == "true" && -d "${ziel}" ]]; then
+    if [[ "$(basename "${ziel}")" != "${rid}" ]]; then
+      echo "Fehler: ${ziel} heisst nicht wie die Ziellaufzeit; nicht geleert." >&2
+      exit 1
+    fi
+    rm -rf "${ziel:?}"
+  fi
 
   for projekt in "${PROJECTS[@]}"; do
     veroeffentlichen "${projekt}" "${rid}" "${ziel}"
