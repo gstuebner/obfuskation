@@ -168,6 +168,40 @@ public class GeneratorTests
     }
 
     [Fact]
+    public void Ein_konfiguriertes_Praefix_steht_vor_dem_Token()
+    {
+        var generator = new TokenGenerator();
+        generator.Configure(new GeneratorSettings { Prefix = "Artikel~" });
+
+        var erzeugt = generator.Generate(Seed("Kategorie A"), "Kategorie A");
+
+        Assert.StartsWith("Artikel~TOK_", erzeugt);
+    }
+
+    [Fact]
+    public void Ohne_Praefix_bleibt_es_beim_bekannten_Format()
+    {
+        // Abwaertskompatibilitaet: ein Profil ohne "prefix" im Generator-Eintrag
+        // darf sich nicht anders verhalten als vor dieser Funktion.
+        var generator = new TokenGenerator();
+        generator.Configure(new GeneratorSettings());
+
+        var erzeugt = generator.Generate(Seed("Kategorie A"), "Kategorie A");
+
+        Assert.StartsWith("TOK_", erzeugt);
+    }
+
+    [Fact]
+    public void Derselbe_Klartext_liefert_zweimal_denselben_praefigierten_Wert()
+    {
+        var generator = new TokenGenerator();
+        generator.Configure(new GeneratorSettings { Prefix = "Artikel~" });
+
+        var seed = Seed("Kategorie A");
+        Assert.Equal(generator.Generate(seed, "Kategorie A"), generator.Generate(seed, "Kategorie A"));
+    }
+
+    [Fact]
     public void Alle_eingebauten_Generatoren_arbeiten_bestaendig()
     {
         var profile = new Profile();

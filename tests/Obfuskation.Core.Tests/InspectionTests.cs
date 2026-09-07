@@ -185,4 +185,43 @@ public class InspectionTests
 
         Assert.Equal("", setup.CreateEngine().PreviewValue("personName", ""));
     }
+
+    [Fact]
+    public void Ein_Feld_ohne_Vorschlag_bekommt_einen_Praefix_Namensraum()
+    {
+        // A5: fuer Spalten, denen kein eingebauter Generator zugeordnet werden
+        // kann, schlaegt "init" jetzt einen eigenen Token-Namensraum vor, statt
+        // die Regel ganz ohne Generator stehen zu lassen.
+        using var setup = new TestProfile();
+        var pfad = Path.Combine(setup.Directory, "sample.csv");
+        File.WriteAllText(pfad, "Artikelkategorie\nBuch\n", new UTF8Encoding(false));
+
+        var profil = ProfileScaffolder.Create("test", pfad);
+
+        var regel = profil.Fields.Single(f => f.Match == "Artikelkategorie");
+        Assert.Equal(FieldAction.Error, regel.Action);   // die Entscheidung bleibt beim Menschen
+        Assert.NotNull(regel.Generator);
+
+        var einstellungen = profil.Generators[regel.Generator!];
+        Assert.Equal("token", einstellungen.Type);
+        Assert.NotNull(einstellungen.Prefix);
+        Assert.StartsWith("Artikelkategorie", einstellungen.Prefix);
+        Assert.EndsWith("~", einstellungen.Prefix);
+
+        Assert.DoesNotContain(ProfileValidator.Validate(profil), i => i.Severity == ValidationSeverity.Error);
+    }
+
+    [Fact]
+    public void Ein_Feld_mit_ableitbarem_Generator_bekommt_keinen_Praefix_Namensraum()
+    {
+        using var setup = new TestProfile();
+        var pfad = Path.Combine(setup.Directory, "sample.csv");
+        File.WriteAllText(pfad, "IBAN\nDE02120300000000202051\n", new UTF8Encoding(false));
+
+        var profil = ProfileScaffolder.Create("test", pfad);
+
+        var regel = profil.Fields.Single(f => f.Match == "IBAN");
+        Assert.Equal("iban", regel.Generator);
+        Assert.Empty(profil.Generators);
+    }
 }

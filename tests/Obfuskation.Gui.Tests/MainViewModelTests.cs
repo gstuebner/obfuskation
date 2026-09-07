@@ -94,6 +94,36 @@ public class MainViewModelTests : IDisposable
         MappingStorePath: "", MappingStoreExists: false, ModifiedUtc: DateTimeOffset.UtcNow,
         LastUsedUtc: null, DataFiles: Array.Empty<DataFileUsage>(), Error: null);
 
+    /// <summary>
+    /// Fuehrt einen <see cref="AsyncRelayCommand"/> aus und wartet dessen Ende
+    /// ab. <c>Execute</c> ist <c>async void</c> -- ohne diesen Umweg liefe der
+    /// Test weiter, bevor das Laden der Datei (echtes Datei-IO) fertig ist.
+    /// Statt eines Sleep-Polls wird das Ende ueber <c>CanExecuteChanged</c>
+    /// abgewartet: <see cref="AsyncRelayCommand"/> loest es beim Start und beim
+    /// Ende aus, <c>IsRunning</c> unterscheidet die beiden Faelle.
+    /// </summary>
+    private static async Task AusfuehrenUndWartenAsync(AsyncRelayCommand befehl)
+    {
+        var fertig = new TaskCompletionSource();
+
+        void Beobachten(object? sender, EventArgs args)
+        {
+            if (!befehl.IsRunning)
+                fertig.TrySetResult();
+        }
+
+        befehl.CanExecuteChanged += Beobachten;
+        try
+        {
+            befehl.Execute(null);
+            await fertig.Task;
+        }
+        finally
+        {
+            befehl.CanExecuteChanged -= Beobachten;
+        }
+    }
+
     [Fact]
     public async Task Beim_Start_wird_das_angegebene_Profil_geladen()
     {
@@ -246,6 +276,37 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Nach_dem_Oeffnen_traegt_ein_Feld_seine_Beispielwerte()
+    {
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        // Zwei Datenzeilen in der Beispieldatei -- beide muessen ankommen,
+        // nicht bloss die erste.
+        var feld = modell.Fields.Single(f => f.FieldName == "Kundenname");
+        Assert.True(feld.HasSampleValues);
+        Assert.Equal(new[] { "Max Mustermann", "Erika Musterfrau" }, feld.SampleValues);
+    }
+
+    [Fact]
+    public async Task Ein_offenes_Feld_zeigt_seinen_Inhalt_auch_ohne_Vorschau()
+    {
+        // Genau der Fall, den der Befund verlangt: ein Feld, das noch auf
+        // "error" steht, hat keine Vorschau -- aber gerade dort ist die
+        // Entscheidung offen, und der Inhalt muss trotzdem sichtbar sein.
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "Kundenname");
+
+        Assert.Equal(FieldAction.Error, feld.Action);
+        Assert.True(feld.HasSampleValues);
+        Assert.False(feld.HasPreview);
+    }
+
+    [Fact]
     public async Task Eine_fehlerhafte_Regel_erscheint_als_Hinweis()
     {
         var profil = SchreibeProfil(p => p.Fields.Add(new FieldRule
@@ -260,6 +321,38 @@ public class MainViewModelTests : IDisposable
 
         Assert.True(modell.HasIssues);
         Assert.Contains(modell.Issues, i => i.Severity == ValidationSeverity.Error);
+    }
+
+    [Fact]
+    public async Task Eine_fehlerhafte_Konfiguration_zeigt_die_Hinweise_auch_ohne_gewaehltes_Feld()
+    {
+        // D-3 aus A6: der bestehende Hinweisbereich haengt an HasSelectedField,
+        // aber ohne Engine bleibt die Feldliste leer -- es gibt also nie ein
+        // gewaehltes Feld. HasBlockingIssues traegt den eigenen Bereich
+        // oberhalb der Feldliste, der davon unabhaengig ist.
+        var profil = SchreibeProfil(p => p.Fields.Add(new FieldRule
+        {
+            Match = "Kundenname",
+            Action = FieldAction.Pseudonymize,
+            Generator = "gibtsNicht",
+        }));
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        Assert.True(modell.HasBlockingIssues);
+        Assert.NotEmpty(modell.Issues);
+    }
+
+    [Fact]
+    public async Task Ein_gueltiges_Profil_zeigt_keine_blockierenden_Hinweise()
+    {
+        var profil = SchreibeProfil();
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        Assert.False(modell.HasBlockingIssues);
     }
 
     [Fact]
@@ -408,6 +501,74 @@ public class MainViewModelTests : IDisposable
         // Entscheidend: der Eintrag muss derselbe sein wie der in der
         // Auswahlliste, sonst findet das Auswahlfeld ihn nicht.
         Assert.Contains(gewaehlt, modell.Generators);
+    }
+
+    [Fact]
+    public async Task Ein_Praefix_am_eingebauten_token_legt_einen_eigenen_Namensraum_an()
+    {
+        // A5: "Betrag" hat keinen ableitbaren Generator, SuggestGenerator
+        // faellt deshalb auf das eingebaute "token" zurueck. Ein Praefix
+        // darauf zu setzen traefe jedes andere Feld mit, das ebenfalls
+        // schlicht "token" verwendet -- deshalb muss stattdessen ein neuer,
+        // eigener Namensraum entstehen.
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "Betrag");
+        modell.SelectedField = feld;
+        feld.Action = FieldAction.Pseudonymize;
+        Assert.Equal("token", feld.Generator);
+
+        feld.Prefix = "Betrag~";
+
+        Assert.NotNull(feld.Generator);
+        Assert.NotEqual("token", feld.Generator);
+
+        var einstellungen = modell.Session!.Profile.Generators[feld.Generator!];
+        Assert.Equal("token", einstellungen.Type);
+        Assert.Equal("Betrag~", einstellungen.Prefix);
+
+        var feldRegel = modell.Session.Profile.Fields.Single(r => r.Match == "Betrag");
+        Assert.Equal(feld.Generator, feldRegel.Generator);
+    }
+
+    [Fact]
+    public async Task Der_ueber_das_Praefix_Feld_angelegte_Namensraum_bleibt_in_der_Auswahlliste()
+    {
+        // Schutz gegen einen Rueckfall in D-4, diesmal ausgeloest durch das
+        // Praefix-Feld statt durch einen von Hand editierten Namensraum: der
+        // frisch angelegte Eintrag muss wertgleich in Generators stehen,
+        // sonst faende ihn die ComboBox nicht und setzte SelectedItem auf
+        // null -- der Generator der Regel waere damit geloescht.
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "Betrag");
+        modell.SelectedField = feld;
+        feld.Action = FieldAction.Pseudonymize;
+        feld.Prefix = "Betrag~";
+
+        var gewaehlt = feld.SelectedGenerator;
+        Assert.NotNull(gewaehlt);
+        Assert.Contains(gewaehlt, modell.Generators);
+    }
+
+    [Fact]
+    public async Task Ein_ungueltiges_Praefix_erzeugt_einen_Befund()
+    {
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "Betrag");
+        modell.SelectedField = feld;
+        feld.Action = FieldAction.Pseudonymize;
+        feld.Prefix = "Artikel;";
+
+        Assert.Contains(modell.Issues, i =>
+            i.Severity == ValidationSeverity.Error && i.Path.EndsWith(".prefix", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -567,6 +728,90 @@ public class MainViewModelTests : IDisposable
             string.Equals(p.Path, Path.GetFullPath(profil), StringComparison.Ordinal));
 
         Assert.Contains(eintrag.Files, f => string.Equals(f.Path, Path.GetFullPath(csv), StringComparison.Ordinal));
+    }
+
+    // ---------------------------------------------------- Schnellwahl (A3)
+
+    [Fact]
+    public async Task Eine_geoeffnete_Datei_erscheint_sofort_in_der_Schnellwahl()
+    {
+        var profil = SchreibeProfil();
+        var csv = SchreibeCsv();
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, csv);
+
+        Assert.True(modell.HasRecentDataFiles);
+        var eintrag = Assert.Single(modell.RecentDataFiles);
+
+        Assert.Equal(Path.GetFullPath(csv), eintrag.FullPath);
+        Assert.Equal("kunden.csv", eintrag.DisplayName);
+        Assert.True(eintrag.Exists);
+        Assert.True(eintrag.IsCurrent);
+
+        // Die gerade geladene Datei laesst sich nicht nochmal "oeffnen".
+        Assert.False(eintrag.OpenCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Die_Schnellwahl_wechselt_ohne_Dialog_zwischen_bekannten_Dateien()
+    {
+        var profil = SchreibeProfil();
+        var csv1 = SchreibeCsv("kunden.csv");
+        var csv2 = SchreibeCsv("kunden2.csv");
+
+        var dialoge = new FakeDialogService { DataFileToOpen = csv2 };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv1);
+
+        // Zweite Datei ueber den gewoehnlichen Weg oeffnen -- danach kennt der
+        // Index beide, und die Schnellwahl zeigt beide an.
+        await AusfuehrenUndWartenAsync(modell.OpenDataFileCommand);
+
+        Assert.Equal("kunden2.csv", modell.DataFileName);
+        Assert.Equal(2, modell.RecentDataFiles.Count);
+
+        var ersteDatei = modell.RecentDataFiles.Single(f => f.DisplayName == "kunden.csv");
+        Assert.False(ersteDatei.IsCurrent);
+        Assert.True(ersteDatei.OpenCommand.CanExecute(null));
+
+        // Zurueck zur ersten Datei -- ausschliesslich ueber die Schnellwahl,
+        // ohne dass der (in diesem Test scharfe) Oeffnen-Dialog dafuer noetig
+        // waere. Keine Rueckfrage: Eingabedateien werden nie geschrieben.
+        await AusfuehrenUndWartenAsync(ersteDatei.OpenCommand);
+
+        Assert.Equal("kunden.csv", modell.DataFileName);
+        Assert.Equal(4, modell.Fields.Count);
+        Assert.True(modell.RecentDataFiles.Single(f => f.DisplayName == "kunden.csv").IsCurrent);
+    }
+
+    [Fact]
+    public async Task Ein_geloeschter_Eintrag_der_Schnellwahl_ist_ausgegraut_und_ungefaehrlich()
+    {
+        var profil = SchreibeProfil();
+        var csv1 = SchreibeCsv("kunden.csv");
+        var csv2 = SchreibeCsv("kunden2.csv");
+
+        var dialoge = new FakeDialogService { DataFileToOpen = csv2 };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv1);
+
+        // Die erste Datei verschwindet, bevor die Schnellwahl das naechste
+        // Mal aufgebaut wird (beim Oeffnen der zweiten Datei).
+        File.Delete(csv1);
+        await AusfuehrenUndWartenAsync(modell.OpenDataFileCommand);
+
+        var geloeschterEintrag = modell.RecentDataFiles.Single(f => f.DisplayName == "kunden.csv");
+        Assert.False(geloeschterEintrag.Exists);
+        Assert.False(geloeschterEintrag.OpenCommand.CanExecute(null));
+
+        // Ein trotzdem erzwungener Aufruf (etwa ein veraltetes Tastaturkuerzel)
+        // darf die Oberflaeche nicht werfen. AsyncRelayCommand.Execute prueft
+        // CanExecute selbst und tut in diesem Fall nichts -- der Status bleibt
+        // unveraendert, statt dass eine FileNotFoundException hochkaeme.
+        var statusVorher = modell.StatusText;
+        geloeschterEintrag.OpenCommand.Execute(null);
+        Assert.Equal(statusVorher, modell.StatusText);
     }
 
     // ------------------------------------------------- Mehrfachauswahl

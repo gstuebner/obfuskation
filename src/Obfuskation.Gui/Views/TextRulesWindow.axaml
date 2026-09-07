@@ -47,7 +47,7 @@
           <StackPanel Spacing="8" IsVisible="{Binding HasSelected}">
             <TextBlock Text="Regel" Classes="card-title" Margin="0"/>
 
-            <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto"
+            <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="8" ColumnSpacing="8">
               <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
                          Classes="muted" VerticalAlignment="Center"/>
@@ -83,9 +83,16 @@
                 <CheckBox Content="Groß-/Kleinschreibung egal"
                           IsChecked="{Binding Selected.IgnoreCase}"
                           VerticalAlignment="Center"/>
-                <TextBlock Classes="muted small" VerticalAlignment="Center"
-                           Text="höhere Priorität gewinnt bei Überlappung"/>
               </StackPanel>
+
+              <!-- Eigene Zeile statt neben der Checkbox in der waagerechten
+                   StackPanel: dort bekaeme der TextBlock unbegrenzte Breite
+                   zugemessen und wuerde nie umbrechen. Ausserdem gehoert der
+                   Hinweis ohnehin zur ganzen Prioritaets-Reihe, nicht speziell
+                   neben die Checkbox. -->
+              <TextBlock Grid.Row="4" Grid.Column="1" Classes="muted small"
+                         TextWrapping="Wrap"
+                         Text="höhere Priorität gewinnt bei Überlappung"/>
             </Grid>
           </StackPanel>
         </Border>

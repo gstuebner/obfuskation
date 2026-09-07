@@ -67,6 +67,70 @@ public class MultiFileTests
     }
 
     [Fact]
+    public void Ein_praefigierter_Namensraum_verknuepft_ueber_verschiedene_Spaltennamen()
+    {
+        // Muster von Auch_bei_verschiedenen_Spaltennamen_bleibt_die_Verknuepfung,
+        // diesmal mit einem konfigurierten Praefix: das Praefix haengt am
+        // Generator-Eintrag, nicht am Feldnamen, also traegt es den Namensraum
+        // unabhaengig davon, wie die Spalte in der jeweiligen Datei heisst.
+        using var setup = new TestProfile(profile =>
+        {
+            profile.Generators["artikelKategorie"] =
+                new GeneratorSettings { Type = "token", Prefix = "Artikel~" };
+        });
+
+        setup.WithField("Artikelkategorie", FieldAction.Pseudonymize, "artikelKategorie")
+             .WithField("Warengruppe", FieldAction.Pseudonymize, "artikelKategorie")
+             .WithField("Menge", FieldAction.Passthrough);
+
+        var engine = setup.CreateEngine();
+
+        var eine = engine.Obfuscate(TestProfile.Utf8("Artikelkategorie;Menge\nSchrauben;12\n"),
+            "a.csv", new RunOptions { Strict = true });
+        var andere = engine.Obfuscate(TestProfile.Utf8("Warengruppe;Menge\nSchrauben;5\n"),
+            "b.csv", new RunOptions { Strict = true });
+
+        var wertA = Spalte(eine.Content, 0)[0];
+        var wertB = Spalte(andere.Content, 0)[0];
+
+        Assert.Equal(wertA, wertB);
+        Assert.StartsWith("Artikel~TOK_", wertA);
+
+        // Der Klartext war aus der ersten Datei bereits bekannt — die zweite
+        // Datei braucht keinen neuen Mapping-Eintrag.
+        Assert.Equal(0, andere.Report.NewMappings);
+    }
+
+    [Fact]
+    public void Zwei_Praefix_Namensraeume_trennen_gleichlautende_Werte()
+    {
+        // Gegenprobe zu obigem Test, im Muster von
+        // Ein_eigener_Namensraum_trennt_gleichlautende_Nummern: derselbe
+        // Klartext unter zwei verschiedenen Praefix-Namensraeumen darf nicht
+        // dasselbe Pseudonym ergeben.
+        using var setup = new TestProfile(profile =>
+        {
+            profile.Generators["artikelKategorie"] =
+                new GeneratorSettings { Type = "token", Prefix = "Artikel~" };
+            profile.Generators["lieferantenKategorie"] =
+                new GeneratorSettings { Type = "token", Prefix = "Lieferant~" };
+        });
+
+        setup.WithField("Artikelkategorie", FieldAction.Pseudonymize, "artikelKategorie")
+             .WithField("Lieferantenkategorie", FieldAction.Pseudonymize, "lieferantenKategorie");
+
+        var ergebnis = setup.CreateEngine().Obfuscate(
+            TestProfile.Utf8("Artikelkategorie;Lieferantenkategorie\nSchrauben;Schrauben\n"),
+            "a.csv", new RunOptions { Strict = true });
+
+        var werte = TestProfile.FromUtf8(ergebnis.Content).Split('\n')[1].TrimEnd('\r').Split(';');
+
+        Assert.NotEqual(werte[0], werte[1]);
+        Assert.StartsWith("Artikel~", werte[0]);
+        Assert.StartsWith("Lieferant~", werte[1]);
+    }
+
+    [Fact]
     public void Ein_eigener_Namensraum_trennt_gleichlautende_Nummern()
     {
         // Personennummer 4711 und Belegnummer 4711 sind verschiedene Dinge.

@@ -101,6 +101,20 @@ public sealed class CommandContextTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Run_faengt_ConfigurationException_ab_und_liefert_ConfigurationError()
+    {
+        // ConsoleOutput schreibt direkt auf Console.Error, laesst sich also
+        // ohne Umbau der Klasse nicht abfangen (siehe D-1 in A6). Geprueft wird
+        // deshalb nur der Rueckgabewert; dass die Befundliste in der Ausgabe
+        // genau einmal erscheint, ist von Hand nachzuvollziehen.
+        var issues = new[] { new ValidationIssue("fields.name.generator", ValidationSeverity.Error, "unbekannt") };
+
+        var ergebnis = CommandContext.Run(() => throw new ConfigurationException("Die Konfiguration ist fehlerhaft", issues));
+
+        Assert.Equal(ExitCodes.ConfigurationError, ergebnis);
+    }
+
     public void Dispose()
     {
         try

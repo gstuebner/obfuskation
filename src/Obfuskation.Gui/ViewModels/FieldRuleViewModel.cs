@@ -19,19 +19,19 @@ public sealed class FieldRuleViewModel : ObservableObject
     private FieldRule? _rule;
     private FieldAction _action;
     private string? _generator;
-    private string? _sampleValue;
+    private IReadOnlyList<string> _sampleValues;
     private string? _preview;
     private bool _previewIsExample;
 
     public FieldRuleViewModel(
-        Profile profile, FieldAnalysis analysis, string? sampleValue, Action onChanged)
+        Profile profile, FieldAnalysis analysis, IReadOnlyList<string>? sampleValues, Action onChanged)
     {
         _profile = profile;
         _onChanged = onChanged;
 
         FieldName = analysis.FieldName;
         _action = analysis.Action;
-        _sampleValue = sampleValue;
+        _sampleValues = sampleValues ?? Array.Empty<string>();
 
         // Nur eine eigene Regel wird uebernommen; greift bloss die Vorgabe,
         // bleibt das Feld regellos, bis der Anwender etwas festlegt.
@@ -49,12 +49,36 @@ public sealed class FieldRuleViewModel : ObservableObject
 
     public string FieldName { get; }
 
-    /// <summary>Ein Wert aus der Datei, an dem sich die Ersetzung zeigen laesst.</summary>
-    public string? SampleValue
+    /// <summary>
+    /// Bis zu drei Werte aus der Datei, fuer die Anzeige des Feldinhalts.
+    /// </summary>
+    public IReadOnlyList<string> SampleValues
     {
-        get => _sampleValue;
-        set => SetProperty(ref _sampleValue, value);
+        get => _sampleValues;
+        set
+        {
+            _sampleValues = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SampleValue));
+            OnPropertyChanged(nameof(HasSampleValues));
+        }
     }
+
+    /// <summary>
+    /// Der erste Beispielwert, an dem sich die Ersetzung zeigen laesst.
+    ///
+    /// Die Vorschau zeigt bewusst nur diesen einen Wert: mit drei Pseudonymen
+    /// neben drei Klartexten waere die Karte kaum noch lesbar.
+    /// </summary>
+    public string? SampleValue => _sampleValues.Count > 0 ? _sampleValues[0] : null;
+
+    /// <summary>
+    /// Ob ueberhaupt ein Beispielwert vorliegt — unabhaengig davon, ob daraus
+    /// auch eine Vorschau entsteht. Ein Feld, das noch auf "error" steht oder
+    /// dessen Generator keine Vorschau liefert, braucht die Anzeige des
+    /// Inhalts am dringendsten: genau dort ist die Entscheidung ja noch offen.
+    /// </summary>
+    public bool HasSampleValues => _sampleValues.Count > 0;
 
     public FieldAction Action
     {
@@ -81,6 +105,8 @@ public sealed class FieldRuleViewModel : ObservableObject
             OnPropertyChanged(nameof(Summary));
             OnPropertyChanged(nameof(NeedsGenerator));
             OnPropertyChanged(nameof(SelectedGenerator));
+            OnPropertyChanged(nameof(ShowPrefix));
+            OnPropertyChanged(nameof(Prefix));
             _onChanged();
         }
     }
@@ -98,6 +124,9 @@ public sealed class FieldRuleViewModel : ObservableObject
 
             OnPropertyChanged(nameof(Summary));
             OnPropertyChanged(nameof(SelectedGenerator));
+            OnPropertyChanged(nameof(ShowPrefix));
+            OnPropertyChanged(nameof(Prefix));
+            OnPropertyChanged(nameof(PrefixIsShared));
             _onChanged();
         }
     }
@@ -106,6 +135,114 @@ public sealed class FieldRuleViewModel : ObservableObject
     public bool IsDecided => _action != FieldAction.Error;
 
     public bool NeedsGenerator => _action == FieldAction.Pseudonymize;
+
+    /// <summary>
+    /// Ob die Kennzeichnung (das Praefix) angezeigt werden soll: nur bei
+    /// "pseudonymize" mit einem Generator, der auf <c>token</c> beruht —
+    /// eingebaut oder ein eigener Namensraum mit <c>Type == "token"</c>. Jeder
+    /// andere Generator liefert das Format seines Wertes (IBAN, Datum, ...),
+    /// ein Praefix wuerde das zerstoeren; das prueft schon der
+    /// <see cref="ProfileValidator"/>, hier geht es nur um die Sichtbarkeit.
+    /// </summary>
+    public bool ShowPrefix => _action == FieldAction.Pseudonymize && IsTokenBasedGenerator();
+
+    /// <summary>
+    /// Die Kennzeichnung, die dem erzeugten Pseudonym vorangestellt wird.
+    /// Leer bzw. <c>null</c> heisst: kein Praefix. Gelesen und geschrieben
+    /// wird direkt am <see cref="GeneratorSettings"/>-Eintrag des aktuellen
+    /// Generators, nicht an der Feldregel — das Praefix haengt am
+    /// Namensraum (siehe A4), nicht am Feld.
+    /// </summary>
+    public string? Prefix
+    {
+        get => _generator is not null && _profile.Generators.TryGetValue(_generator, out var settings)
+            ? settings.Prefix
+            : null;
+        set => SetPrefix(string.IsNullOrWhiteSpace(value) ? null : value);
+    }
+
+    /// <summary>
+    /// Ob der aktuelle Namensraum noch von einer anderen Feld- oder Textregel
+    /// verwendet wird. Eine Aenderung der Kennzeichnung trifft dann auch
+    /// jene Regeln mit — das muss sichtbar sein, bevor jemand versehentlich
+    /// ein fremdes Pseudonymformat aendert.
+    /// </summary>
+    public bool PrefixIsShared
+    {
+        get
+        {
+            if (_generator is null || string.Equals(_generator, "token", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            var vonAnderenFeldern = _profile.Fields.Any(regel =>
+                !ReferenceEquals(regel, _rule)
+                && string.Equals(regel.Generator, _generator, StringComparison.OrdinalIgnoreCase));
+
+            var vonTextregeln = _profile.TextRules.Any(regel =>
+                string.Equals(regel.Generator, _generator, StringComparison.OrdinalIgnoreCase));
+
+            return vonAnderenFeldern || vonTextregeln;
+        }
+    }
+
+    /// <summary>
+    /// Setzt oder loescht die Kennzeichnung. Steht die Regel noch auf dem
+    /// eingebauten <c>token</c>, entsteht dabei ein neuer, eigener
+    /// Namensraum — das Praefix am eingebauten Generator zu setzen traefe
+    /// jedes andere Feld mit, das ebenfalls schlicht <c>token</c> verwendet.
+    /// Zeigt die Regel schon auf einen eigenen Namensraum, wird dessen
+    /// Praefix aktualisiert; ein leerer Wert entfernt nur das Praefix, nicht
+    /// den Namensraum selbst, damit andere Regeln, die ihn referenzieren,
+    /// nicht ins Leere laufen.
+    /// </summary>
+    private void SetPrefix(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(_generator) || !IsTokenBasedGenerator())
+            return;
+
+        if (string.Equals(_generator, "token", StringComparison.OrdinalIgnoreCase))
+        {
+            // Ohne Wert gibt es nichts einzurichten -- "token" ohne Praefix
+            // ist bereits der Ausgangszustand, ein leerer Namensraum waere
+            // nur unnoetiger Ballast im Profil.
+            if (value is null)
+                return;
+
+            var key = ProfileScaffolder.ToGeneratorKey(FieldName);
+            _profile.Generators[key] = new GeneratorSettings { Type = "token", Prefix = value };
+
+            // Setzt zugleich die Regel um und loest ueber den Generator-Setter
+            // bereits _onChanged() sowie die Benachrichtigungen fuer Prefix
+            // und PrefixIsShared aus.
+            Generator = key;
+            return;
+        }
+
+        _profile.Generators[_generator].Prefix = value;
+
+        OnPropertyChanged(nameof(Prefix));
+        OnPropertyChanged(nameof(PrefixIsShared));
+        _onChanged();
+    }
+
+    /// <summary>
+    /// Ob der aktuelle Generator (eingebaut oder eigener Namensraum) auf dem
+    /// Basistyp <c>token</c> beruht.
+    /// </summary>
+    private bool IsTokenBasedGenerator()
+    {
+        if (string.IsNullOrWhiteSpace(_generator))
+            return false;
+
+        if (string.Equals(_generator, "token", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (!_profile.Generators.TryGetValue(_generator, out var settings))
+            return false;
+
+        var baseName = string.IsNullOrWhiteSpace(settings.Type) ? _generator : settings.Type;
+        return string.Equals(baseName, "token", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Statuspunkt der Feldliste.</summary>
     public string StatusSymbol => IsDecided ? "●" : "○";
@@ -159,20 +296,28 @@ public sealed class FieldRuleViewModel : ObservableObject
 
     public bool HasPreview => !string.IsNullOrEmpty(_preview);
 
+    /// <summary>
+    /// Kartentitel je nach Zustand: ohne Vorschau nur der Inhalt, mit Vorschau
+    /// beides. Sagt dem Anwender vorab, ob er gleich ein Pseudonym sieht oder
+    /// nur den Rohwert.
+    /// </summary>
+    public string SampleCardTitle => HasPreview ? "Feldinhalt und Vorschau" : "Feldinhalt";
+
     /// <summary>Erneuert die Vorschau. Fehler bleiben stumm — es ist nur eine Vorschau.</summary>
     public void RefreshPreview(ObfuscationEngine? engine)
     {
         if (engine is null || _action != FieldAction.Pseudonymize
-            || string.IsNullOrWhiteSpace(_generator) || string.IsNullOrEmpty(_sampleValue))
+            || string.IsNullOrWhiteSpace(_generator) || string.IsNullOrEmpty(SampleValue))
         {
             Preview = null;
             OnPropertyChanged(nameof(HasPreview));
+            OnPropertyChanged(nameof(SampleCardTitle));
             return;
         }
 
         try
         {
-            Preview = engine.PreviewValue(_generator, _sampleValue);
+            Preview = engine.PreviewValue(_generator, SampleValue);
             PreviewIsExample = !engine.MappingStoreExists;
         }
         catch (Exception ex) when (ex is Core.Generation.GenerationException
@@ -188,6 +333,7 @@ public sealed class FieldRuleViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasPreview));
+        OnPropertyChanged(nameof(SampleCardTitle));
     }
 
     /// <summary>Legt bei Bedarf eine Regel an und haengt sie ins Profil.</summary>

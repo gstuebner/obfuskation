@@ -6,12 +6,20 @@ namespace Obfuskation.Core.Generation;
 /// <summary>Generischer Ersatzwert fuer alles ohne spezielleren Typ.</summary>
 public sealed class TokenGenerator : IPseudonymGenerator
 {
+    private string _prefix = "";
+
     public string Name => "token";
     public bool IsReversible => true;
     public bool IsWordLike => true;
 
+    public void Configure(GeneratorSettings settings)
+    {
+        if (!string.IsNullOrEmpty(settings.Prefix))
+            _prefix = settings.Prefix;
+    }
+
     public string Generate(ReadOnlySpan<byte> seed, string original)
-        => "TOK_" + Convert.ToHexString(seed[..4]);
+        => _prefix + "TOK_" + Convert.ToHexString(seed[..4]);
 }
 
 /// <summary>Fester Platzhalter. Der Wert ist danach unwiederbringlich verloren.</summary>

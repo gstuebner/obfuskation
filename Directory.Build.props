@@ -26,8 +26,23 @@
          veroeffentlicht brach die Oberflaeche bei jedem Schreiben einer
          Konfiguration stumm ab, weil die mitgepackte System.IO.Pipelines 8.0.0
          die der Laufzeit verdeckte; siehe Kommentar in
-         src/Obfuskation.Gui/Obfuskation.Gui.csproj. -->
-    <Version>1.2.0</Version>
+         src/Obfuskation.Gui/Obfuskation.Gui.csproj.
+         1.3.0: Schnellwahl "Zuletzt ▾" zwischen den Dateien eines Profils ohne
+         Oeffnen-Dialog; Feldvorschau steht jetzt ueber der Aktionswahl, zeigt
+         bis zu drei Beispielwerte und erscheint auch ohne moegliche Vorschau,
+         mit CsvHelper statt Eigenbau und richtigem Zeichensatz (auch JSON);
+         konfigurierbares Praefix je Token-Namensraum
+         (GeneratorSettings.Prefix), von 'init' vorgeschlagen und ueber die
+         Regelkarte setzbar. Dazu behoben: N-1 (Untertitel abgeschnitten),
+         D-5 (Bildlaufleiste ueber den Anzahlen), D-6 (Hinweistext
+         abgeschnitten), D-1 (doppelte Befundliste), D-3 (Hinweise bei
+         fehlerhafter Konfiguration jetzt sichtbar) und D-9 (Speichern in der
+         Einzeldatei-Veroeffentlichung); D-2 bekommt zusaetzlich eine Warnung
+         im Bericht ("datumMitFremdemProfil"); D-7 teilweise behoben: Text der
+         Hilfeoption jetzt deutsch, die Ueberschrift "Description:" bleibt aus
+         den in Abschnitt 11 der Entwicklerdokumentation genannten Gruenden
+         eine bekannte Einschraenkung des Pakets System.CommandLine 2.0.11. -->
+    <Version>1.3.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

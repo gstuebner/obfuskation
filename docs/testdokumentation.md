@@ -2,7 +2,7 @@
 title: Testdokumentation
 subtitle: Testkonzept, Durchführung und Befunde
 kicker: Obfuskation
-version: 1.1.0
+version: 1.3.0
 author: Gregor Stübner & Claude (Anthropic)
 date: 07.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Testdokumentation
 
-Fassung 1.1.0 · Stand 7. September 2026
+Fassung 1.3.0 · Stand 7. September 2026
 
 Diese Dokumentation beschreibt, wie Obfuskation geprüft wird, welche Fälle
 tatsächlich durchgespielt wurden und was dabei herauskam. Grundlage ist
@@ -1567,11 +1567,24 @@ geändert hat.
 | Automatisierter Test | `MainViewModelTests.Der_Testlauf_fasst_die_Einstellungen_des_Anwenders_nicht_an` |
 | Ergebnis unverändert | Kein Eingriff in ausgelieferten Code — die Änderung liegt vollständig im Testprojekt |
 
-Die Testzahl stieg dadurch von 122 auf 125. **D-9 bleibt offen**: er liegt
-nicht im Quelltext, sondern in der Art der Auslieferung, und die Entscheidung
-darüber (feste .NET-8-Laufzeit, `--self-contained` oder ein höheres
-Zielframework) gehört zur Auslieferung, nicht zu diesem Testlauf. Die
-Vorschläge stehen in `entwicklerdokumentation.md`, Abschnitt 11.
+Die Testzahl stieg dadurch von 122 auf 125.
+
+### Nachweis der Behebung in Fassung 1.2.0
+
+**D-9 — „Speichern“ schlägt in der veröffentlichten Oberfläche fehl.**
+
+| | |
+|---|---|
+| Ursache | Avalonia zieht `System.IO.Pipelines` als NuGet-Paket herein; für `net8.0` wählt NuGet die Fassung 8.0.0, während die Anwendung über `RollForward=Major` auf einer neueren Laufzeit läuft, deren `System.Text.Json` die Fassung 9.0.0.0 verlangt. Als Einzeldatei veröffentlicht liegt nur noch die mitgepackte 8.0.0 im Bundle und verdeckt die der Laufzeit |
+| Änderung | `src/Obfuskation.Gui/Obfuskation.Gui.csproj:39`: `<PackageReference Include="System.IO.Pipelines" Version="8.0.0" ExcludeAssets="runtime" />` — die Bibliothek gehört seit .NET 3 zum Framework, die Paketfassung gehört deshalb nicht in die Ausgabe |
+| Beobachtung | Der nicht gebündelte Build und das Kommandozeilenprogramm speicherten schon vorher fehlerfrei; der Fehler trat ausschließlich in der als Einzeldatei veröffentlichten Oberfläche auf (N-13) |
+| Automatisierter Test | Keiner — der Fehler tritt nur im veröffentlichten Ergebnis auf, nicht in Unit-Tests; Nachweis über eine unter `Xvfb` ferngesteuerte veröffentlichte Oberfläche (siehe `entwicklerdokumentation.md`, Abschnitt 8) |
+| Ergebnis unverändert | Kein Eingriff in `ProfileStore`; `ScanAndConfigTests.Profile_ueberstehen_das_Schreiben_und_Lesen_unveraendert` besteht weiterhin |
+
+**Entscheidung zur Auslieferung:** framework-abhängig, mit der .NET-8-Laufzeit
+als Voraussetzung; `--self-contained` bleibt eine Option der Bauskripte, wird
+aber nicht zur Vorgabe. **Offen bleibt:** die Nachprüfung mit dem
+Einzeldatei-Build unter Windows steht noch aus.
 
 ## 7. Bekannte Eigenschaften, die keine Fehler sind
 

@@ -82,9 +82,9 @@ obfuskation-gui --config profile.json customers.csv
 
 When started without arguments, it looks for an `obfuskation.json` in the current working directory, falling back to the most recently used profile.
 
-**Layout:** At the top, the opened file with detected format, character encoding, and delimiter. On the left, the fields, each with a status indicator — solid turquoise means *decided*, a red circle means *pending*, and as long as even one is pending, processing will abort. On the right, the handling of the selected field alongside a live preview using an actual value from the file (»Max Mustermann → Paul Gerber«). At the bottom, the three actions.
+**Layout:** At the top, the opened file with detected format, character encoding, and delimiter, next to it a "Recent ▾" button, shown once the profile already knows other files, to switch between them without the Open dialog. On the left, the fields, each with a status indicator — solid turquoise means *decided*, a red circle means *pending*, and as long as even one is pending, processing will abort. On the right, for a single selected field, up to three sample values from the file first — visible even while the handling is still pending — then the handling of the field, plus a live preview using an actual value (»Max Mustermann → Paul Gerber«) once it's being replaced. At the bottom, the three actions.
 
-Wide tables can be handled in bulk: select several fields at once — Ctrl-click for individual ones, Shift-click for a range, Ctrl+A for all. Action and generator then apply to the whole selection; a generator only to those fields in it that are actually being replaced. The preview stays reserved for a single selected field.
+Wide tables can be handled in bulk: select several fields at once — Ctrl-click for individual ones, Shift-click for a range, Ctrl+A for all. Action and generator then apply to the whole selection; a generator only to those fields in it that are actually being replaced. Field content and preview stay reserved for a single selected field.
 
 Accessible via **More**:
 
@@ -220,8 +220,32 @@ Both produce numeric IDs of the same format, but draw from separate pools. In th
 | `numericId` | Digit count preserved, leading zeros retained |
 | `dateShift` | All dates shifted by the same offset — sequence and intervals preserved |
 | `street`, `city`, `postalCode` | Address components from wordlists |
-| `token` | Generic `TOK_A1B2C3D4` |
+| `token` | Generic `TOK_A1B2C3D4`, optionally with a prefix in front |
 | `redact` | Fixed `***` |
+
+### Readable tokens: prefix
+
+A `generators` entry of type `token` can carry a `prefix` that is prepended
+to every generated pseudonym — useful for a column that doesn't match any
+built-in generator but should still stay readable:
+
+```jsonc
+"generators": {
+  "articleCategory": { "type": "token", "prefix": "ArticleCategory~" }
+},
+"fields": [
+  { "match": "ArticleCategory", "action": "pseudonymize", "generator": "articleCategory" }
+]
+```
+
+`TOK_A1B2C3D4` becomes `ArticleCategory~TOK_A1B2C3D4`. Allowed characters are
+letters, digits, `_` and `-`, ending in `~` or `_`, at most 32 characters.
+**Applies only to `token`** — every other generator produces the format of
+its own value (a valid IBAN, a shifted date), and a prefix would destroy
+that. `init` automatically proposes such a namespace for columns without a
+matching generator, and the GUI lets you set the prefix on a rule's
+"Kennzeichnung" field. Details and pitfalls (German):
+[user documentation](docs/anwenderdokumentation.md).
 
 ---
 

@@ -80,6 +80,81 @@ public class ScanAndConfigTests
     }
 
     [Fact]
+    public void Die_Pruefung_meldet_bei_praefigierten_Tokens_keinen_Fehlalarm()
+    {
+        // ScanTransformer prueft per Substring, ob Klartexte noch irgendwo
+        // stehen — das Praefix ist Teil des gespeicherten Pseudonyms und darf
+        // daran nichts aendern.
+        using var setup = new TestProfile(profile =>
+        {
+            profile.Generators["artikelKategorie"] =
+                new GeneratorSettings { Type = "token", Prefix = "Artikel~" };
+        }).WithField("Artikelkategorie", FieldAction.Pseudonymize, "artikelKategorie");
+
+        var engine = setup.CreateEngine();
+
+        var eingabe = TestProfile.Utf8("Artikelkategorie\nSchrauben\n");
+        var pseudonymisiert = engine.Obfuscate(eingabe, "a.csv", new RunOptions { Strict = true });
+        var pruefung = engine.Scan(pseudonymisiert.Content, "a.csv", new RunOptions());
+
+        Assert.Empty(pruefung.Report.Findings);
+    }
+
+    [Fact]
+    public void Ein_Praefix_an_einem_anderen_Basistyp_als_token_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kundenId"] = new GeneratorSettings { Type = "numericId", Prefix = "Kunde~" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.kundenId.prefix");
+    }
+
+    [Theory]
+    [InlineData("Artikel;")]
+    [InlineData("Artikel\"")]
+    [InlineData("Artikel")]
+    public void Ein_Praefix_mit_unzulaessigen_Zeichen_oder_ohne_Abschluss_wird_bemaengelt(string prefix)
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["artikelKategorie"] = new GeneratorSettings { Type = "token", Prefix = prefix };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.artikelKategorie.prefix");
+    }
+
+    [Fact]
+    public void Ein_zu_langes_Praefix_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["artikelKategorie"] = new GeneratorSettings
+        {
+            Type = "token",
+            Prefix = new string('A', 39) + "~", // 40 Zeichen, Zeichenvorrat gueltig
+        };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.artikelKategorie.prefix");
+    }
+
+    [Fact]
+    public void Ein_gueltiges_Praefix_erzeugt_keinen_Befund()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["artikelKategorie"] = new GeneratorSettings { Type = "token", Prefix = "Artikel~" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.DoesNotContain(befunde, b => b.Path == "generators.artikelKategorie.prefix");
+    }
+
+    [Fact]
     public void Ein_unbekannter_Generator_wird_beim_Laden_bemaengelt()
     {
         var profile = new Profile

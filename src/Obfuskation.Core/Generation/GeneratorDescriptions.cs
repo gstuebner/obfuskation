@@ -25,7 +25,7 @@ public static class GeneratorDescriptions
         ["bic"] = "BIC",
         ["numericId"] = "Zahlenkennung, Stellenzahl bleibt",
         ["dateShift"] = "Datum, um festen Betrag verschoben",
-        ["token"] = "allgemeine Kennung (TOK_…)",
+        ["token"] = "allgemeine Kennung (TOK_…), mit Kennzeichnung davor",
         ["redact"] = "durch *** ersetzen — nicht umkehrbar",
     };
 

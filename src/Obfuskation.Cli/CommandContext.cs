@@ -132,9 +132,12 @@ public static class CommandContext
         }
         catch (ConfigurationException ex)
         {
+            // ex.Message enthaelt die Befundliste bereits (ObfuscationEngine
+            // baut sie in den Meldungstext ein) -- hier nicht noch einmal
+            // ausgeben, sonst erscheint sie doppelt. Die Oberfläche zeigt
+            // dieselbe Ausnahme ueber ex.Message an, deshalb muss die Liste
+            // dort verbleiben statt im Kern gekuerzt zu werden.
             ConsoleOutput.WriteError(ex.Message);
-            foreach (var issue in ex.Issues.Where(i => i.Severity == ValidationSeverity.Error))
-                ConsoleOutput.WriteInfo($"  {issue.Path}: {issue.Message}");
             return ExitCodes.ConfigurationError;
         }
         catch (MappingLockedException ex)

@@ -120,4 +120,16 @@ public sealed class GeneratorSettings
 
     /// <summary>Domain fuer erzeugte E-Mail-Adressen.</summary>
     public string? Domain { get; set; }
+
+    /// <summary>
+    /// Vorangestellte Kennzeichnung des Pseudonyms (nur <c>token</c>). Gehoert
+    /// an den Generator und nicht an das Feld: derselbe <c>generators</c>-Eintrag
+    /// gilt fuer jedes Feld, das ihn referenziert, unabhaengig vom Spaltennamen.
+    /// Wuerde das Praefix stattdessen aus dem Feldnamen abgeleitet, bekaeme
+    /// derselbe Klartext in zwei Dateien mit abweichenden Spaltennamen zwei
+    /// verschiedene Pseudonyme, und die dateiuebergreifende Verknuepfung
+    /// braeche genau dort, wo sie heute garantiert ist (siehe
+    /// <c>MultiFileTests.Auch_bei_verschiedenen_Spaltennamen_bleibt_die_Verknuepfung</c>).
+    /// </summary>
+    public string? Prefix { get; set; }
 }

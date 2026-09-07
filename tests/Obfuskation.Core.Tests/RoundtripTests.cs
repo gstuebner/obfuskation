@@ -104,6 +104,90 @@ public class RoundtripTests
     }
 
     [Fact]
+    public void Ein_praefigierter_Token_Namensraum_kommt_unveraendert_zurueck()
+    {
+        // Das Praefix ist reine Kosmetik am Generatorausgang: der Vollstring
+        // (samt Praefix) steht im Mapping und wird beim Zurueckuebersetzen
+        // exakt so nachgeschlagen.
+        using var setup = new TestProfile(profile =>
+        {
+            profile.Generators["artikelKategorie"] =
+                new GeneratorSettings { Type = "token", Prefix = "Artikelkategorie~" };
+        }).WithField("Artikelkategorie", FieldAction.Pseudonymize, "artikelKategorie")
+          .WithField("Menge", FieldAction.Passthrough);
+
+        var engine = setup.CreateEngine();
+
+        var original = "Artikelkategorie;Menge\nSchrauben;12\nMuttern;7\n";
+
+        var obfuscated = engine.Obfuscate(TestProfile.Utf8(original), "artikel.csv",
+            new RunOptions { Strict = true });
+        var pseudonymisiert = TestProfile.FromUtf8(obfuscated.Content);
+
+        Assert.Contains("Artikelkategorie~TOK_", pseudonymisiert);
+
+        var restored = engine.Deobfuscate(obfuscated.Content, "artikel.csv", new RunOptions());
+        Assert.Equal(original, TestProfile.FromUtf8(restored.Content));
+    }
+
+    [Fact]
+    public void Ein_nachtraeglich_gesetztes_Praefix_laesst_alte_Eintraege_unveraendert()
+    {
+        // Anwenderdokumentation, Abschnitt "Lesbare Tokens: Praefix",
+        // erster Fallstrick: wird das Praefix erst gesetzt, nachdem schon
+        // Eintraege ohne Praefix im Mapping stehen, bleiben die alten
+        // unpraefigiert und nur neue Werte bekommen eines -- der Bestand
+        // liest sich gemischt, aber beide Arten von Eintraegen muessen sich
+        // weiterhin zurueckuebersetzen lassen, weil DeobfuscateTransformer
+        // den kompletten gespeicherten String nachschlaegt, nicht ein
+        // erwartetes Format. Genau das behauptet die Dokumentation, also
+        // muss es hier belegt sein. A4 hat das nur am Code geprueft
+        // (Kommentar in GeneratorSettings.Prefix), nicht mit einem Test.
+        using var setup = new TestProfile(profile =>
+                profile.Generators["artikelKategorie"] = new GeneratorSettings { Type = "token" })
+            .WithField("Artikelkategorie", FieldAction.Pseudonymize, "artikelKategorie")
+            .WithField("Menge", FieldAction.Passthrough);
+
+        var engine = setup.CreateEngine();
+
+        var ersterLauf = "Artikelkategorie;Menge\nSchrauben;12\nMuttern;7\n";
+        var ersteAusgabe = engine.Obfuscate(TestProfile.Utf8(ersterLauf), "artikel1.csv",
+            new RunOptions { Strict = true });
+        var ersteZeilen = TestProfile.FromUtf8(ersteAusgabe.Content)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.DoesNotContain(ersteZeilen, zeile => zeile.Contains('~'));
+
+        // Praefix erst jetzt setzen -- auf demselben Mapping-Bestand, den der
+        // erste Lauf gerade angelegt hat.
+        setup.Profile.Generators["artikelKategorie"].Prefix = "Artikelkategorie~";
+
+        var zweiterLauf = "Artikelkategorie;Menge\nSchrauben;12\nNaegel;500\n";
+        var zweiteAusgabe = engine.Obfuscate(TestProfile.Utf8(zweiterLauf), "artikel2.csv",
+            new RunOptions { Strict = true });
+        var zweiteZeilen = TestProfile.FromUtf8(zweiteAusgabe.Content)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        // "Schrauben" stand schon vor dem Setzen des Praefixes im Bestand --
+        // sein Pseudonym bleibt exakt dasselbe wie im ersten Lauf, also ohne
+        // Praefix.
+        Assert.Equal(ersteZeilen[1], zweiteZeilen[1]);
+        Assert.DoesNotContain('~', zweiteZeilen[1]);
+
+        // "Naegel" ist neu -- sein Pseudonym entsteht erst nach dem Setzen
+        // des Praefixes und traegt es deshalb.
+        Assert.StartsWith("Artikelkategorie~TOK_", zweiteZeilen[2]);
+
+        // Beide Ausgaben lassen sich trotz des gemischten Bestands vollstaendig
+        // zurueckuebersetzen.
+        var ersteRueckuebersetzung = engine.Deobfuscate(ersteAusgabe.Content, "artikel1.csv", new RunOptions());
+        Assert.Equal(ersterLauf, TestProfile.FromUtf8(ersteRueckuebersetzung.Content));
+
+        var zweiteRueckuebersetzung = engine.Deobfuscate(zweiteAusgabe.Content, "artikel2.csv", new RunOptions());
+        Assert.Equal(zweiterLauf, TestProfile.FromUtf8(zweiteRueckuebersetzung.Content));
+    }
+
+    [Fact]
     public void Json_kommt_mit_erhaltener_Struktur_zurueck()
     {
         using var setup = new TestProfile()
@@ -162,6 +246,38 @@ public class RoundtripTests
 
         var restored = engine.Deobfuscate(obfuscated.Content, "antwort.txt", new RunOptions());
         Assert.Equal(antwort, TestProfile.FromUtf8(restored.Content));
+    }
+
+    [Fact]
+    public void Praefigierte_Tokens_werden_im_Fliesstext_zurueckuebersetzt()
+    {
+        // Der Alltagsfall aus der Aufgabenstellung: eine KI-Antwort zitiert das
+        // lesbare Pseudonym samt Praefix, und die Rueckuebersetzung muss den
+        // Klartext trotzdem finden. ReverseTextMapper baut sein Suchmuster aus
+        // den tatsaechlich gespeicherten Pseudonymen und schuetzt jeden Eintrag
+        // mit Regex.Escape — auch das '~' im Praefix ist damit sicher.
+        using var setup = new TestProfile(profile =>
+        {
+            profile.Generators["artikelKategorie"] =
+                new GeneratorSettings { Type = "token", Prefix = "Artikel~" };
+        }).WithField("Artikelkategorie", FieldAction.Pseudonymize, "artikelKategorie");
+
+        var engine = setup.CreateEngine();
+
+        var csv = "Artikelkategorie\nSchrauben\n";
+        var obfuscated = engine.Obfuscate(TestProfile.Utf8(csv), "artikel.csv",
+            new RunOptions { Strict = true });
+
+        var pseudonym = TestProfile.FromUtf8(obfuscated.Content)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)[1].TrimEnd('\r');
+        Assert.StartsWith("Artikel~TOK_", pseudonym);
+
+        var antwort = $"Die Kategorie {pseudonym} enthaelt sieben Positionen.";
+
+        var restored = engine.Deobfuscate(TestProfile.Utf8(antwort), "antwort.txt", new RunOptions());
+
+        Assert.Equal("Die Kategorie Schrauben enthaelt sieben Positionen.",
+            TestProfile.FromUtf8(restored.Content));
     }
 
     /// <summary>Serialisiert JSON ohne Leerraum neu, damit nur der Inhalt zaehlt.</summary>

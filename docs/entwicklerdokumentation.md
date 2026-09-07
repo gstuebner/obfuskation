@@ -2,7 +2,7 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.2.0
+version: 1.3.0
 author: Gregor Stübner & Claude (Anthropic)
 date: 07.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Entwicklerdokumentation
 
-Fassung 1.2.0 · Stand 7. September 2026
+Fassung 1.3.0 · Stand 7. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -207,6 +207,24 @@ Feldregel selbst den Bezug zum Generator liefert. Das Rohprotokoll bestätigt
 das indirekt: bei der Rückübersetzung der KI-Antwort (P-12) traten keine
 Datumswerte im Freitext auf, die Zurückrechnung betraf dort ausschließlich
 Namen, Kontonummern, IBAN, BIC, E-Mail, Telefonnummer und Anschrift.
+
+**Das Präfix eines `token`-Generators ist reine Kosmetik am Ergebnis**
+(`TokenGenerator.Configure`, `src/Obfuskation.Core/Generation/SimpleGenerators.cs`):
+es wird dem fertigen Wert vorangestellt, nachdem `Generate` ihn berechnet
+hat, und fließt nicht in `seed` ein. Deshalb bleibt die Rückübersetzung
+unangetastet — `DeobfuscateTransformer` schlägt den kompletten String
+inklusive Präfix im Mapping nach, `ReverseTextMapper` baut sein Suchmuster
+aus den tatsächlich gespeicherten (also bereits präfigierten) Pseudonymen
+und schützt jeden Eintrag mit `Regex.Escape`.
+
+Das Präfix hängt bewusst am `generators`-Eintrag (also am Namensraum) und
+nicht am Feldnamen: würde es zur Laufzeit aus dem Spaltennamen abgeleitet,
+bekäme derselbe Klartext in zwei Dateien mit abweichenden Spaltennamen zwei
+verschiedene Pseudonyme, und genau die dateiübergreifende Verknüpfung
+bräche, die Abschnitt 7 der Anwenderdokumentation als Kernnutzen beschreibt.
+Der Validator erzwingt das indirekt mit, indem `prefix` nur am Basistyp
+`token` erlaubt ist (`ProfileValidator.ValidateGenerators`) — alle anderen
+Generatoren tragen das Format ihres Wertes, ein Präfix zerstörte das.
 
 ## 5. Schutzmechanismen
 
@@ -541,6 +559,7 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 | `formats` | `List<string>?` | `null` | Zusätzlich erkannte Datumsformate (nur `dateShift`), vor den eingebauten Formaten geprüft |
 | `country` | `string?` | `null` | Ländercode für `iban`/`bic`, falls sich keiner aus dem Originalwert ableiten lässt |
 | `domain` | `string?` | `null` | Domain für `email`; bei `redact` wird dieses Feld zweckentfremdet als Platzhaltertext verwendet |
+| `prefix` | `string?` | `null` | Kennzeichnung, die jedem erzeugten Pseudonym vorangestellt wird (nur `token`); Muster `^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$`, höchstens 32 Zeichen — geprüft von `ProfileValidator` |
 
 ## 10. Rückgabewerte der CLI
 
@@ -612,28 +631,36 @@ Fenster „Über" (`src/Obfuskation.Gui/Views/AboutWindow.axaml`).
 
 ## 11. Befunde
 
-Die folgenden neun Befunde stammen aus der Testdurchführung vom 4. und
-5. September 2026 (`docs/bilder/protokoll-roh.md`). Keiner betrifft die
-Richtigkeit der Ersetzung, die Umkehrbarkeit oder den Schutz der
-Ersetzungstabelle.
+Die Befunde D-1 bis D-9 stammen aus der Testdurchführung vom 4. und
+5. September 2026 (`docs/bilder/protokoll-roh.md`). N-1 und N-2 kamen am
+7. September 2026 aus einer eigenen Nutzungsprüfung hinzu (`befunde/prompt.md`
+und der beiliegende Screenshot). Keiner der elf betrifft die Richtigkeit der
+Ersetzung, die Umkehrbarkeit oder den Schutz der Ersetzungstabelle.
 
-**Zwei davon sind in Fassung 1.0.1 behoben** — D-4 und D-8. Sie stehen hier
-weiterhin, weil eine Befundliste, aus der Behobenes verschwindet, ihren Wert
-als Nachweis verliert: sie zeigt dann nicht mehr, was geprüft wurde. Was
-geändert wurde, steht bei den beiden Einträgen und ausführlich in
-`docs/testdokumentation.md`, Abschnitt „Behebung".
+**Neun der elf Befunde sind inzwischen behoben, einer teilweise, einer
+bekommt statt einer Codeänderung eine ergänzende Warnung.** D-4 und D-8
+bereits in Fassung 1.0.1, D-9 in 1.2.0; D-1, D-3, D-5, D-6, N-1 und N-2 in
+1.3.0. D-2 bleibt als Eigenschaft bestehen (Abschnitt 4 begründet, warum das
+so sein muss), bekommt aber seit 1.3.0 eine Warnung im Bericht. D-7 ist seit
+1.3.0 nur teilweise behoben, aus Gründen, die beim Eintrag stehen. Behobene
+Befunde bleiben hier stehen, weil eine Befundliste, aus der Behobenes verschwindet,
+ihren Wert als Nachweis verliert: sie zeigt dann nicht mehr, was geprüft
+wurde. Was geändert wurde, steht bei den jeweiligen Einträgen und — für D-4
+und D-8 — ausführlich in `docs/testdokumentation.md`, Abschnitt „Behebung".
 
 | Nr. | Art | Stand |
 |---|---|---|
-| D-1 | Fehler, kosmetisch | offen |
-| D-2 | Eigenschaft | offen, dokumentiert |
-| D-3 | Bedienbarkeit | offen |
+| D-1 | Fehler, kosmetisch | **behoben in 1.3.0** |
+| D-2 | Eigenschaft | **Warnung ergänzt in 1.3.0**, Eigenschaft bleibt |
+| D-3 | Bedienbarkeit | **behoben in 1.3.0** |
 | D-4 | Fehler, zerstörend | **behoben in 1.0.1** |
-| D-5 | Darstellung | offen |
-| D-6 | Darstellung | offen |
-| D-7 | Sprache | offen |
+| D-5 | Darstellung | **behoben in 1.3.0** |
+| D-6 | Darstellung | **behoben in 1.3.0** |
+| D-7 | Sprache | **teilweise behoben in 1.3.0** |
 | D-8 | Testhygiene | **behoben in 1.0.1** |
-| D-9 | Fehler, Auslieferung | offen |
+| D-9 | Fehler, Auslieferung | **behoben in 1.2.0** |
+| N-1 | Darstellung | **behoben in 1.3.0** |
+| N-2 | Bedienbarkeit | **behoben in 1.3.0** |
 
 **D-1 (Fehler, kosmetisch) — Doppelte Befundliste bei fehlerhaftem Profil.**
 Ursache: `ObfuscationEngine` setzt die Befunde bereits in den Meldungstext
@@ -644,6 +671,18 @@ oder Rückgabewert, die Ausgabe ist nur doppelt so lang wie nötig (belegt in
 N-03). Vorschlag: in `CommandContext.Run` beim Fangen von
 `ConfigurationException` nur die Kopfzeile der Meldung ausgeben, nicht den
 vollständigen `Message`-Text, der die Befunde bereits enthält.
+
+*Behebung:* die `foreach`-Schleife in `CommandContext.Run`
+(`src/Obfuskation.Cli/CommandContext.cs`) gestrichen — `ex.Message` enthält
+die Befundliste bereits. Bewusst **nicht** umgekehrt vorgegangen (Meldung im
+Kern kürzen): die Oberfläche zeigt dieselbe Ausnahme über `ex.Message` an und
+hätte dann gar keine Befunde mehr zu sehen; ein Kommentar an der geänderten
+Stelle hält das fest, damit die Schleife nicht später „ergänzt" wird. Test:
+`CommandContextTests.Run_faengt_ConfigurationException_ab_und_liefert_ConfigurationError`
+prüft den Rückgabewert; da `ConsoleOutput` direkt auf die Konsole schreibt,
+lässt sich die Ausgabe selbst nicht ohne größeren Umbau abfangen — dass die
+Befundliste genau einmal erscheint, ist von Hand nachvollzogen
+(`obfuskation obfuscate -c <kaputtes-profil.json> <datei.csv>`).
 
 **D-2 (Eigenschaft, dokumentationspflichtig) — `deobfuscate` mit falschem
 Profil liefert bei Datumsspalten stillschweigend falsche Werte.** Ursache:
@@ -659,6 +698,19 @@ machen, dass die Befundzahl bei richtigem Profil 0 sein muss (außer bei
 `dateShift`-Treffer neben mindestens einem `unbekanntesPseudonym`-Befund
 auftreten.
 
+*Behebung:* am Prinzip selbst ändert sich nichts — das bleibt bewusst so
+(Abschnitt 4). `ObfuscationEngine.Deobfuscate`
+(`src/Obfuskation.Core/ObfuscationEngine.cs`) meldet jetzt eine Warnung
+`datumMitFremdemProfil`, sobald mindestens ein Generator mit
+`HasIntrinsicInverse == true` getroffen hat **und** mindestens ein
+`unbekanntesPseudonym`-Befund vorliegt — der Bezug läuft über
+`HasIntrinsicInverse`, nicht über den Namen `dateShift`, weil ein Profil
+diesen Typ auch unter einem eigenen Namensraum führen kann. `RunReport`
+enthält dabei wie immer keinen Klartext und kein Pseudonym. Test:
+`DeobfuscateWarningTests.Fremdes_Profil_bei_der_Rueckabbildung_warnt_vor_verschobenen_Daten`
+und die Gegenprobe
+`Beim_richtigen_Profil_bleibt_die_Warnung_aus`.
+
 **D-3 (Bedienbarkeit) — Oberfläche verweist bei fehlerhafter Konfiguration
 auf nicht sichtbare Hinweise.** Ursache: der Hinweisbereich hängt am
 ausgewählten Feld (`MainViewModel.RefreshIssues` befüllt `Issues`, aber die
@@ -670,6 +722,18 @@ fehlerhaft — siehe Hinweise“, während die Kommandozeile dieselben fünf
 Fehler mit Feldpfad nennt (N-03). Vorschlag: die `Issues`-Liste zusätzlich
 unabhängig vom gewählten Feld anzeigen, etwa in einem eigenen Bereich
 oberhalb der Feldliste, solange keine Engine aufgebaut werden kann.
+
+*Behebung:* `MainViewModel` führt jetzt `_engineIsBroken` mit und darüber
+`public bool HasBlockingIssues => _engineIsBroken && Issues.Count > 0;`,
+gesetzt in `RefreshAnalysis` an der Stelle, an der bisher ohne weitere Anzeige
+abgebrochen wurde. `MainWindow.axaml` zeigt dafür eine eigene Karte
+„Hinweise zur Konfiguration" oberhalb der Feldliste (`Grid.Row="2"`,
+`IsVisible="{Binding HasBlockingIssues}"`), mit demselben
+`ItemsControl`-Aufbau wie der bestehende, weiterhin vorhandene Hinweisbereich
+im Regelbereich — der bleibt für den Fall einer funktionierenden Engine der
+richtige Platz. Test: `MainViewModelTests`, ein Profil mit unbekanntem
+Generator ergibt `HasBlockingIssues == true`, ein gültiges Profil
+`false`.
 
 **D-4 (Fehler, zerstörend) — Generatorauswahl blieb leer bei einem eigenen
 Namensraum und löschte den Generator. Behoben in 1.0.1.** Ursache:
@@ -699,18 +763,70 @@ teilweise angeschnitten. Betroffen ist vermutlich das Layout in
 Liste müsste der Bildlaufleiste Platz reservieren (etwa über einen rechten
 Rand oder `Padding` auf dem Inhalt statt auf dem `ScrollViewer`).
 
+*Behebung:* im `DataTemplate` der Namensraum-Liste
+(`src/Obfuskation.Gui/Views/MappingWindow.axaml`) `Margin="0,3"` auf
+`Margin="0,3,14,3"` erweitert — der rechte Rand gehört an den Inhalt, nicht
+an den `ScrollViewer`: dessen Padding läge innerhalb des Sichtbereichs und
+verschöbe die Bildlaufleiste mit, das Problem bliebe bestehen. Nur XAML,
+manuell nachgeprüft.
+
 **D-6 (Darstellung) — Hinweistext im Fenster „Textregeln“ rechts
 abgeschnitten.** Der Text „höhere Priorität gewinnt bei Überlappung“ ist
 unvollständig lesbar. Betroffen ist `src/Obfuskation.Gui/Views/TextRulesWindow.axaml`;
 Abhilfe wäre Zeilenumbruch (`TextWrapping="Wrap"`) statt fester Breite für
 dieses Element.
 
-**D-7 (Sprache) — `--help` mischt Deutsch und Englisch.** `Description:`
-und „Show help and usage information“ stammen aus den Vorgaben von
-`System.CommandLine` (`src/Obfuskation.Cli/Program.cs`) und wurden nicht
-lokalisiert. Kosmetisch, keine Auswirkung auf die Bedienung. Vorschlag:
-prüfen, ob `System.CommandLine` einen Weg bietet, diese Textbausteine zu
-überschreiben; sonst als bekannte Einschränkung dokumentieren.
+*Behebung:* `TextWrapping="Wrap"` ergänzt und den TextBlock aus der
+waagerechten `StackPanel` in eine eigene Zeile des umgebenden `Grid`
+verschoben, damit die Umbrucherlaubnis auch eine begrenzte Breite bekommt —
+in der `StackPanel` wäre unendlich viel Platz zugemessen worden und der Text
+hätte nie umgebrochen. Nur XAML, manuell nachgeprüft.
+
+**D-7 (Sprache) — `--help` mischt Deutsch und Englisch. Teilweise behoben in
+1.3.0.** `Description:` und „Show help and usage information“ stammen aus
+den Vorgaben von `System.CommandLine` (Paket `System.CommandLine 2.0.11`,
+`src/Obfuskation.Cli/Obfuskation.Cli.csproj:8`) und wurden nicht lokalisiert.
+Kosmetisch, keine Auswirkung auf die Bedienung.
+
+**Messung statt Vermutung:** Per Reflection gegen die installierte Fassung
+2.0.11 geprüft (`System.CommandLine.Properties.Resources`, das interne
+`ResourceManager`-Backing hinter `LocalizationResources`): das deutsche
+Ressourcenset (Kultur `de`, ausgeliefert als
+`system.commandline/2.0.11/lib/net8.0/de/System.CommandLine.resources.dll`)
+übersetzt `HelpUsageTitle`, `HelpOptionsTitle`, `HelpArgumentsTitle` und
+`HelpCommandsTitle` durchaus (`Nutzung:`, `Optionen:`, `Argumente:`,
+`Befehle:` — sichtbar in jeder Hilfeausgabe), lässt aber ausgerechnet
+`HelpOptionDescription` („Show help and usage information“) **und**
+`HelpDescriptionTitle` („Description:“) auf dem englischen Neutralwert
+stehen. Das ist eine Lücke in den Übersetzungsressourcen des Pakets selbst,
+keine bewusste Entscheidung von System.CommandLine gegen Lokalisierung.
+
+**Behoben:** `HelpOptionDescription` lässt sich reparieren, weil der
+angezeigte Text der Hilfeoption über die ganz gewöhnliche, öffentliche
+Eigenschaft `Symbol.Description` läuft — dieselbe Eigenschaft, mit der auch
+jede selbst angelegte Option beschriftet wird. `ProgramInfo.AddHelpFooter`
+(`src/Obfuskation.Cli/ProgramInfo.cs`) setzt sie beim Einsammeln der
+`HelpOption` jetzt zusätzlich auf
+„Zeigt Hilfe und Verwendungsinformationen an.“ Das ist keine
+Ersatzkonstruktion, sondern der vorgesehene Weg, den Text einer Option zu
+ändern. Test: `ProgramInfoTests` prüft am Objektmodell, dass die
+`HelpOption` der Wurzel diesen Text trägt.
+
+**Nicht behebbar ohne Ersatzkonstruktion:** die Überschrift `Description:`
+kommt aus dem internen `HelpBuilder` von System.CommandLine, der die
+Kopfzeilen über eine `abstract`e, nicht instanziierbare Klasse
+`LocalizationResources` bezieht. Beide Typen sind `internal`; von außerhalb
+der Paket-Assembly lässt sich weder eine Instanz erzeugen noch eine
+abgeleitete Klasse deklarieren (geprüft: der Versuch, `HelpBuilder`
+namentlich zu referenzieren, scheitert am Compiler mit „Der Zugriff … ist
+aufgrund des Schutzgrads nicht möglich“). Es gibt keine öffentliche
+Einstiegsstelle, über die sich nur diese eine Kopfzeile ersetzen ließe — das
+ginge nur durch eine vollständig eigene Hilfeausgabe oder ein Nachbearbeiten
+der Konsolenausgabe, und genau das ist ausdrücklich nicht der Weg, den dieses
+Projekt für D-7 gehen soll (siehe `aufgaben/A7-dokumentation.md`). `--help`
+bleibt deshalb an dieser einen Stelle gemischtsprachig; die Fußzeile mit
+Fassung und Erstellern (Abschnitt „Fassung und Ersteller in der Hilfe“ oben)
+ist davon unberührt.
 
 **D-8 (Testhygiene) — `dotnet test` überschrieb die echte
 `~/.config/obfuskation/gui.json` des Benutzers. Behoben in 1.0.1.**
@@ -733,7 +849,7 @@ Konstruktor einer einzelnen Klasse. Festgehalten durch
 `Der_Testlauf_fasst_die_Einstellungen_des_Anwenders_nicht_an`.
 
 **D-9 (Fehler, Auslieferung) — „Speichern“ schlägt in der veröffentlichten
-Oberfläche fehl.** Der Klick auf `Speichern` bricht mit
+Oberfläche fehl. Behoben in 1.2.0.** Der Klick auf `Speichern` bricht mit
 `Could not load file or assembly 'System.IO.Pipelines, Version=9.0.0.0'` ab,
 das Profil wird nicht geschrieben. Eingegrenzt: der nicht gebündelte Build
 (`dotnet …/obfuskation-gui.dll`) speichert fehlerfrei, das
@@ -744,11 +860,85 @@ Auslieferung als Einzeldatei: das Bündel enthält `System.IO.Pipelines` 8.0.23
 (über CsvHelper hereingezogen), verdeckt damit die Fassung der Laufzeit, und
 unter `RollForward=Major` auf einer neueren Laufzeit verlangt deren
 `System.Text.Json` die Assemblyfassung 9.0.0.0. Auf einem Rechner mit der in
-der README geforderten .NET-8-Laufzeit tritt der Fehler nicht auf. Vorschlag:
-entweder die .NET-8-Laufzeit als Voraussetzung durchsetzen und beim Start
-prüfen, oder mit `--self-contained` ausliefern, oder das Zielframework auf die
-tatsächlich ausgelieferte Laufzeit heben — die Entscheidung gehört zur
-Auslieferung, nicht zum Code.
+der README geforderten .NET-8-Laufzeit tritt der Fehler nicht auf.
+
+**Entscheidung:** die Auslieferung bleibt framework-abhängig, mit der
+.NET-8-Laufzeit als Voraussetzung, wie in der README gefordert.
+`--self-contained` bleibt eine Option der Bauskripte (`build-release.sh` /
+`build-release.cmd`) für alle, die auf die Installation der Laufzeit
+verzichten wollen, wird aber nicht zur Vorgabe — kein Codeeingriff, keine
+Änderung an den Bauskripten, keine Runtime-Prüfung beim Programmstart.
+
+*Behebung:* `System.IO.Pipelines` gehört seit .NET 3 zum Framework selbst;
+`src/Obfuskation.Gui/Obfuskation.Gui.csproj:39` schließt die von CsvHelper
+hereingezogene Paketfassung deshalb mit
+`<PackageReference Include="System.IO.Pipelines" Version="8.0.0" ExcludeAssets="runtime" />`
+aus der veröffentlichten Ausgabe aus, sodass die höhere Fassung der Laufzeit
+greift (ausführlicher Kommentar davor, Zeile 28–38, und Abschnitt 8 oben).
+**Offen bleibt:** die Nachprüfung mit dem Einzeldatei-Build unter Windows
+steht noch aus — der Fix ist am Linux-Build sowie über die Beschreibung des
+Mechanismus geprüft, nicht am tatsächlich unter Windows veröffentlichten
+Programm.
+
+**N-1 (Darstellung) — Untertitel „Tabelle: …“ unten abgeschnitten. Behoben in
+1.3.0.** Beobachtet auf einer Windows-Installation
+(`befunde/Screenshot 2026-09-07 202233.png`): im Kopfbereich des
+Hauptfensters verlor die zweite Zeile unter der Überschrift „Obfuskation“
+ihre untere Hälfte — die Unterlängen von `p`, `g` und `j` wurden von der
+darunterliegenden, undurchsichtigen „Datei“-Karte übermalt. Ursache: im
+Kopfbereich sind alle Zeilen `Auto`, ohne feste Höhe oder Clipping; die
+Kombination aus `TextTrimming="CharacterEllipsis"` und `TextWrapping="NoWrap"`
+löste bei kleiner Schrift (`FontSizeSmall = 11`, eingebettete Inter-Schrift)
+zuverlässig den knappen Trimming-Pfad des Text-Layouts aus
+(`src/Obfuskation.Gui/Views/MainWindow.axaml`, damals Zeilen 75–77).
+
+*Behebung:* `TextWrapping="NoWrap"` entfernt (`CharacterEllipsis` unterbindet
+den Umbruch ohnehin) und `Margin="0,3,0,0"` durch `Padding="0,3,0,3"`
+ersetzt — Padding zählt in die Messung des Elements hinein, Margin wirkt nur
+außen, der untere Rand verschafft den Unterlängen damit verlässlich Platz.
+Ein Kommentar an der Stelle hält den Grund fest. **Herkunft und Grenze der
+Prüfung:** der Screenshot stammt von Windows, die Entwicklung läuft unter
+Linux; der Fix gilt als plausibel, nicht als am Original bestätigt, bis er
+unter Windows mit einem Profil nachgeprüft wurde, dessen Mapping-Pfad
+ähnlich lang ist wie im Screenshot. Nur XAML, keine Tests vorgesehen.
+
+**N-2 (Bedienbarkeit) — Feldinhalt gehört über die Aktionswahl. Behoben in
+1.3.0.** Originalwortlaut (`befunde/prompt.md`): „Wenn ein Feld ausgewählt
+wird, sollte oberhalb der Aktion der aktuelle Feldinhalt stehen. Erst wenn
+ich sehe, was in dem Feld steht, kann ich vernünftig entscheiden, welcher
+Generator notwendig ist.“ Der Ist-Zustand war näher am Ziel, als es wirkte,
+aber an drei Stellen zu schwach: der Vorschau-Block lag *unterhalb* der
+Aktion/Generator-Auswahl; er erschien nur, wenn zugleich eine Vorschau
+möglich war (`action: pseudonymize` mit vorschaufähigem Generator) — gerade
+ein noch unentschiedenes Feld zeigte seinen Inhalt also gar nicht; und die
+Stichprobe selbst war dünn: nur CSV, nur die erste Datenzeile, fest UTF-8,
+eine naive Zerlegung, die an Anführungszeichen und Trennzeichen im Wert
+zerbrach (vormals `MainViewModel.ReadSampleValues`).
+
+*Behebung:* der Vorschau-Block steht jetzt *vor* dem Aktion/Generator-`Grid`
+in `MainWindow.axaml`, damit die Reihenfolge der Entscheidung folgt — erst
+sehen, was drinsteht, dann die Behandlung wählen. Die Karte hängt an der
+neuen `FieldRuleViewModel.HasSampleValues` (wahr, sobald mindestens ein
+Beispielwert vorliegt) statt an `HasPreview`; Pfeil und Vorschauwert bleiben
+an `HasPreview` gebunden und fallen einfach weg, wenn es noch keine gibt —
+genau ein Feld auf `error` oder mit einem nicht vorschaufähigen Generator
+braucht die Anzeige des Inhalts am dringendsten. Die eigentliche Stichprobe
+zog in eine neue Klasse **`FieldSampler`**
+(`src/Obfuskation.Core/Configuration/FieldSampler.cs`, Namensraum
+`Obfuskation.Core.Configuration`, neben `FieldInspector`): CSV läuft über
+`CsvReader` mit derselben `CsvConfiguration` wie der echte Lauf
+(`CsvProcessor`) und über `TextFormatDetector` für Zeichensatz und
+Trennzeichen statt fest UTF-8, JSON über `JsonDocument` analog
+`FieldInspector.InspectJson`, bis zu drei nichtleere Beispielwerte je Feld,
+höchstens 50 gelesene Zeilen als Obergrenze gegen eine durchgängig leere
+Spalte. Die Mehrfachauswahl bleibt bewusst unverändert ohne Vorschau — ein
+Beispielwert aus einem von zwölf gewählten Feldern ließe offen, wozu er
+gehört. Tests:
+`tests/Obfuskation.Core.Tests/FieldSamplerTests.cs` (Trennzeichen und
+Anführungszeichen im Wert, Windows-1252, fünf Datenzeilen, durchgängig leere
+Spalte, verschachteltes JSON, Textdatei) und
+`tests/Obfuskation.Gui.Tests/MainViewModelTests.cs` (Beispielwerte nach dem
+Öffnen, `HasSampleValues == true` bei `action: error`).
 
 ---
 

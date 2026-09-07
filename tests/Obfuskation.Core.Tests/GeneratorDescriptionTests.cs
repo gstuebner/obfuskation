@@ -22,7 +22,7 @@ public class GeneratorDescriptionTests
 
     [Theory]
     [InlineData("street", "Straßenname mit Hausnummer")]
-    [InlineData("token", "allgemeine Kennung (TOK_…)")]
+    [InlineData("token", "allgemeine Kennung (TOK_…), mit Kennzeichnung davor")]
     [InlineData("dateShift", "Datum, um festen Betrag verschoben")]
     public void Die_Erklaerung_trifft_die_Sache(string generator, string erwartet)
         => Assert.Equal(erwartet, GeneratorDescriptions.For(generator));

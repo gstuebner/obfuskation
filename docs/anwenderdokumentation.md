@@ -2,7 +2,7 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.2.0
+version: 1.3.0
 author: Gregor Stübner & Claude (Anthropic)
 date: 07.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Anwenderdokumentation
 
-Fassung 1.2.0 · Stand 7. September 2026
+Fassung 1.3.0 · Stand 7. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -185,6 +185,25 @@ mindestens ein Feld ohne eigene Regel dabei ist. Er soll verhindern, dass
 ein neues Feld in einer bekannten Datenart unbemerkt auf die Vorgabe
 `unknownField` zurückfällt, statt eine bewusste Regel zu bekommen.
 
+**Schnellwahl „Zuletzt ▾“.** Neben **Öffnen…** erscheint diese Schaltfläche,
+sobald das geladene Profil mindestens eine Datendatei kennt — sie listet die
+dem Profil bereits bekannten Dateien, mit einem Punkt vor der gerade
+geöffneten. Ein Klick auf einen Eintrag lädt die Datei sofort neu auf, ohne
+den Weg über den Öffnen-Dialog; ist sie inzwischen verschoben oder gelöscht
+worden, bleibt der Eintrag sichtbar, aber ausgegraut — so bleibt erkennbar,
+dass das Programm die Datei kannte, statt dass sie stillschweigend
+verschwindet. Am Ende der Liste steht immer ein Eintrag **Öffnen…** als
+Rückfallweg für neue Dateien. Eine Rückfrage gibt es beim Wechsel bewusst
+nicht: Eingabedateien werden nie geschrieben, es gibt nichts zu verlieren.
+
+**Hinweise zur Konfiguration.** Lässt sich aus dem geladenen Profil keine
+gültige Engine aufbauen — etwa weil eine Feldregel einen unbekannten
+Generator nennt —, erscheint oberhalb der Feldliste eine eigene Karte mit
+genau den Befunden, die sonst nur die Kommandozeile mit Feldpfad nennt. Sie
+steht unabhängig von einer Feldauswahl, denn ohne gültiges Profil gibt es
+keine Felder zum Auswählen und der Hinweisbereich im Regelbereich (unten)
+bliebe sonst unerreichbar.
+
 **Feldliste mit Statuspunkten.** Links jedes Feld der geöffneten Datei mit
 einem Punkt davor: gefüllt und türkis heißt *entschieden*, ein roter,
 hohler Kreis heißt *offen*. Solange auch nur ein Feld offen ist, bricht
@@ -196,17 +215,25 @@ Umschalt-Klick für einen Bereich von… bis, Strg+A für alle. Die Überschrift
 des Regelbereichs nennt dann die Zahl der gewählten Felder, und eine Zeile
 darunter sagt ausdrücklich, dass die Einstellung für alle davon gilt.
 
-**Regelbereich mit Vorschau.** Rechts die Behandlung der links gewählten
-Felder: die Auswahl der Aktion, bei „ersetzen“ zusätzlich der Generator, und
-darunter die Vorschau an einem echten Wert aus der geöffneten Datei. Aktion
-und Generator wirken auf die ganze Auswahl; der Generator dabei nur auf die
-Felder, die tatsächlich ersetzt werden — ein durchgelassenes Feld in der
-Auswahl bleibt unberührt. Die Vorschau erscheint nur bei einem einzeln
-gewählten Feld: ein Beispielwert aus einem von zwölf Feldern ließe offen,
-wozu er gehört. Ohne
-bestehende Ersetzungstabelle ist die Vorschau nur beispielhaft — ein
-eigener Hinweis sagt das ausdrücklich, weil derselbe Klartext dann bei
-jedem Blick ein anderes Pseudonym zeigen kann.
+**Regelbereich mit Feldinhalt, Vorschau und Aktion.** Rechts, bei einem
+einzeln gewählten Feld, zuerst der **Feldinhalt** — bis zu drei
+Beispielwerte aus der geöffneten Datei — und erst darunter die Auswahl der
+Aktion und, bei „ersetzen“, des Generators: erst sehen, was im Feld steht,
+dann entscheiden, welche Behandlung passt. Der Feldinhalt erscheint dabei in
+jedem Zustand des Feldes, auch solange die Aktion noch auf „offen“ steht
+oder der gewählte Generator keine Vorschau liefert — gerade dann ist er am
+wichtigsten, weil die Entscheidung noch aussteht. Sobald ersetzt wird, tritt
+neben den Beispielwerten zusätzlich ein Pfeil mit dem Pseudonym des ersten
+Wertes auf. Die Stichprobe funktioniert für CSV (mit dem erkannten
+Zeichensatz und Trennzeichen, auch bei Anführungszeichen oder dem
+Trennzeichen selbst im Wert) und für JSON; Textdateien haben keine Felder,
+dort entfällt sie. Aktion und Generator wirken auf die ganze Auswahl; der
+Generator dabei nur auf die Felder, die tatsächlich ersetzt werden — ein
+durchgelassenes Feld in der Auswahl bleibt unberührt. Der Feldinhalt bleibt
+der Einzelauswahl vorbehalten: ein Beispielwert aus einem von zwölf Feldern
+ließe offen, wozu er gehört. Ohne bestehende Ersetzungstabelle ist die
+Vorschau nur beispielhaft — ein eigener Hinweis sagt das ausdrücklich, weil
+derselbe Klartext dann bei jedem Blick ein anderes Pseudonym zeigen kann.
 
 ![Vorschau ohne bestehende Ersetzungstabelle: Grünwald → Bramkamp, mit dem Hinweis, dass der erste echte Lauf die endgültigen Werte bestimmt.](bilder/gui-vorschau-beispielhaft.png)
 *Vorschau ohne bestehende Ersetzungstabelle: Grünwald → Bramkamp, mit dem
@@ -442,6 +469,50 @@ Generatoren stehen zur Auswahl, sobald ein Feld auf „ersetzen“ steht:
 | `token` | generisch `TOK_A1B2C3D4` |
 | `redact` | fest `***` |
 
+### Lesbare Tokens: Präfix
+
+Für Felder, die keinem eingebauten Generator entsprechen, bleibt `token` als
+generische Kennung übrig — `TOK_A1B2C3D4` sagt aber nichts darüber aus,
+wofür der Wert steht. Ein Präfix schafft das:
+
+```jsonc
+"generators": {
+  "artikelKategorie": { "type": "token", "prefix": "Artikelkategorie~" }
+},
+"fields": [
+  { "match": "Artikelkategorie", "action": "pseudonymize", "generator": "artikelKategorie" }
+]
+```
+
+Aus `TOK_A1B2C3D4` wird `Artikelkategorie~TOK_A1B2C3D4`. Erlaubt sind
+Buchstaben, Ziffern, `_` und `-`, abgeschlossen mit `~` oder `_`, höchstens
+32 Zeichen — jede Verletzung meldet die Profilprüfung als Befund. **Das
+Präfix gilt nur für `token`**, weil jeder andere Generator das Format seines
+Wertes trägt (eine gültige IBAN, ein verschobenes Datum); ein Präfix würde
+das zerstören.
+
+`init` schlägt für Spalten ohne passenden eingebauten Generator automatisch
+einen solchen Namensraum vor — die Regel steht trotzdem auf `error`, bis ein
+Mensch sie bestätigt. In der Oberfläche lässt sich das Präfix direkt an der
+Regelkarte im Feld „Kennzeichnung" setzen, sobald die Behandlung auf
+„ersetzen" und der Generator auf `token` (oder einen eigenen, darauf
+aufbauenden Namensraum) steht.
+
+**Drei Dinge, auf die zu achten ist:**
+
+- **Präfix nachträglich setzen, wenn schon ein Mapping existiert:** Alte
+  Einträge bleiben ohne Präfix, neue bekommen eines. Die Rückübersetzung
+  funktioniert für beide, weil gegen die gespeicherten Pseudonyme
+  nachgeschlagen wird — der Bestand liest sich dann aber gemischt.
+  **Empfehlung: das Präfix vor dem ersten Lauf festlegen.**
+- **Präfix als Datenwert:** `scan` prüft per Substring, ob Klartexte noch
+  irgendwo stehen. Ist das Präfix selbst ein Wert des Bestands, gäbe es
+  Fehlalarme. In der Praxis ausgeschlossen, wenn das Präfix aus dem
+  Feldnamen stammt.
+- **Lesbarkeit der `mapping.json`** sinkt leicht, weil die Pseudonyme das
+  Präfix tragen. Akzeptabel: die Datei ist das sensibelste Artefakt und
+  nicht zum Lesen gedacht.
+
 ### Lehrbeispiel: Freitext gehört auf `redact`, nicht auf `scanText`
 
 Im Demo-Bestand steht `buchungen.csv` mit einer Spalte `Verwendungszweck`
@@ -540,14 +611,7 @@ der Statuszeile, meist kürzer.
 | Profilzeile in Fehlerfarbe mit der Fehlermeldung im Klartext (Übersicht) | Die Profildatei ist nicht mehr lesbar — gelöscht, kein gültiges JSON, oder von Hand fehlerhaft bearbeitet | `Öffnen` ist gesperrt; entweder die Datei außerhalb reparieren oder den Eintrag über `Aus Liste entfernen` aus der Übersicht nehmen (löscht nur den Eintrag, nie die Datei) |
 | „Es gibt bereits ein Profil an diesem Ort.“ | Beim Anlegen ist der gewählte Name im Ablageort schon vergeben | `Anlegen` bleibt gesperrt; entweder `Stattdessen öffnen` wählen oder einen anderen Namen beziehungsweise Ort setzen |
 
-Zwei Eigenheiten verdienen besondere Aufmerksamkeit:
-
-> **Bei fehlerhafter Konfiguration nennt die Oberfläche die Fehler nicht.**
-> Die Statuszeile meldet nur „Die Konfiguration ist fehlerhaft — siehe
-> Hinweise“, der Hinweisbereich bleibt aber leer, weil sich ohne gültiges
-> Profil kein Feld auswählen lässt. In diesem Fall auf der Kommandozeile
-> `obfuskation scan <datei> --config <profil>` ausführen — das nennt
-> dieselben Fehler mit Feldpfad im Wortlaut.
+Eine Eigenheit verdient besondere Aufmerksamkeit:
 
 > **Eine leere Generatorauswahl bei einem eigenen Namensraum ist kein
 > Fehler, der zu korrigieren wäre.** Ist einem Feld ein selbst angelegter

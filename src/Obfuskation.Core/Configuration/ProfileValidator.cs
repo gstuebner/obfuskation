@@ -10,6 +10,15 @@ namespace Obfuskation.Core.Configuration;
 /// </summary>
 public static class ProfileValidator
 {
+    /// <summary>
+    /// Erlaubter Zeichenvorrat eines Token-Praefixes: keine CSV-Trennzeichen,
+    /// keine Anfuehrungszeichen, keine Steuerzeichen, und ein Abschluss mit
+    /// '~' oder '_', damit das Praefix im fertigen Wert als solches erkennbar
+    /// bleibt und nicht mit dem folgenden "TOK_" verschmilzt.
+    /// </summary>
+    private static readonly Regex PrefixPattern =
+        new(@"^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     public static IReadOnlyList<ValidationIssue> Validate(Profile profile)
     {
         var issues = new List<ValidationIssue>();
@@ -64,6 +73,40 @@ public static class ProfileValidator
             {
                 issues.Add(new ValidationIssue($"generators.{key}.maxDays", ValidationSeverity.Error,
                     "maxDays darf nicht negativ sein."));
+            }
+
+            if (!string.IsNullOrEmpty(settings.Prefix))
+            {
+                if (!string.Equals(baseName, "token", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Alle anderen Generatoren liefern das Format ihres Wertes (eine
+                    // gueltige IBAN, eine Zahlenkennung mit erhaltener Stellenzahl,
+                    // ein verschobenes Datum) — ein vorangestelltes Praefix zerstoert
+                    // genau das und macht z. B. aus einer IBAN keine IBAN mehr.
+                    issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
+                        $"'prefix' gilt nur für den Generatortyp 'token'. Generator '{key}' erzeugt Werte " +
+                        $"vom Typ '{baseName}', die ihr eigenes Format tragen; ein Präfix würde dieses " +
+                        "Format zerstören."));
+                }
+                else
+                {
+                    if (!PrefixPattern.IsMatch(settings.Prefix))
+                    {
+                        issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
+                            $"Das Präfix '{settings.Prefix}' ist ungültig. Erlaubt sind Buchstaben, " +
+                            "Ziffern, '_' und '-', abgeschlossen mit '~' oder '_' " +
+                            "(Muster: ^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$)."));
+                    }
+
+                    // Unabhaengig vom Zeichenvorrat geprueft: das Praefix steht in
+                    // jedem einzelnen Wert der Spalte, laenger macht die Pseudodatei
+                    // unleserlicher, statt sie lesbar zu machen.
+                    if (settings.Prefix.Length > 32)
+                    {
+                        issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
+                            "Das Präfix darf höchstens 32 Zeichen lang sein."));
+                    }
+                }
             }
         }
     }

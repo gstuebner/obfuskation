@@ -51,7 +51,11 @@
           <ItemsControl ItemsSource="{Binding Namespaces}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:NamedCount">
-                <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                <!-- Der rechte Rand sitzt am Inhalt, nicht als Padding am
+                     ScrollViewer: dessen Padding laege innerhalb des
+                     Sichtbereichs und wuerde die Bildlaufleiste mitverschieben
+                     - die Anzahlen blieben verdeckt. -->
+                <Grid ColumnDefinitions="*,Auto" Margin="0,3,14,3">
                   <TextBlock Grid.Column="0" Text="{Binding Name}"/>
                   <TextBlock Grid.Column="1" Text="{Binding Count}" Classes="accent"/>
                 </Grid>

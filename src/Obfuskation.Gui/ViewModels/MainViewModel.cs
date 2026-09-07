@@ -29,6 +29,7 @@ public sealed class MainViewModel : ObservableObject
     private bool _isBusy;
     private bool _hasRunSinceOpen;
     private bool _dataFileIsNewToProfile;
+    private bool _engineIsBroken;
     private MappingSummary? _mappingSummary;
     private CancellationTokenSource? _cancellation;
     private string _progressText = "";
@@ -126,6 +127,7 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<ActionOption> Actions { get; }
     public ObservableCollection<GeneratorOption> Generators { get; }
     public ObservableCollection<ValidationIssue> Issues { get; } = new();
+    public ObservableCollection<RecentFileViewModel> RecentDataFiles { get; } = new();
 
     // ------------------------------------------------------------ Zustand
 
@@ -167,6 +169,9 @@ public sealed class MainViewModel : ObservableObject
 
     public string DataFileName
         => _dataFilePath is null ? "keine Datei geöffnet" : Path.GetFileName(_dataFilePath);
+
+    /// <summary>Ob die Schnellwahl etwas anzuzeigen hat -- sonst bleibt "Zuletzt ▾" verborgen.</summary>
+    public bool HasRecentDataFiles => RecentDataFiles.Count > 0;
 
     /// <summary>Format, Zeichensatz und Trennzeichen der geoeffneten Datei.</summary>
     public string DataFileDetails
@@ -615,20 +620,57 @@ public sealed class MainViewModel : ObservableObject
             index.Save();
         }
 
-        // Die Auswahlliste haengt am Profil: eigene Namensraeume stehen dort.
-        Generators.Clear();
-        foreach (var option in GeneratorOption.For(session.Profile))
-            Generators.Add(option);
-
+        RefreshGenerators();
         RefreshIssues();
         RefreshMappingSummary();
         RefreshAnalysis();
+        RefreshRecentDataFiles();
 
         OnPropertyChanged(nameof(HasProfile));
         OnPropertyChanged(nameof(HasUnsavedChanges));
         OnPropertyChanged(nameof(ProfileName));
         OnPropertyChanged(nameof(ProfileTitle));
+        OnPropertyChanged(nameof(HasBlockingIssues));
         RaiseCommandStates();
+    }
+
+    /// <summary>
+    /// Baut die Auswahlliste der Generatoren aus dem Profil neu auf: die
+    /// eingebauten und die im Profil selbst angelegten eigenen Namensraeume.
+    /// Eigene Methode statt Inline-Code, weil sie an zwei Stellen noetig ist
+    /// -- beim Laden und jedesmal, wenn sich ueber das Praefix-Feld ein neuer
+    /// Namensraum ergibt.
+    ///
+    /// Gleicht die Liste ab, statt sie mit <c>Clear()</c> zu leeren und neu zu
+    /// befuellen: <c>Clear()</c> loest ein Reset aus, und waehrend die Liste
+    /// kurzzeitig leer ist, faende eine ComboBox, deren <c>SelectedItem</c>
+    /// genau auf einen ihrer Eintraege zeigt, keinen Treffer mehr und setzte
+    /// die Auswahl auf <c>null</c> zurueck -- der Setter von SelectedGenerator
+    /// schriebe dieses <c>null</c> sofort in die Regel. Genau das war Befund
+    /// D-4, hier nur ausgeloest durch das Praefix-Feld statt durch einen von
+    /// Hand editierten Namensraum.
+    /// </summary>
+    private void RefreshGenerators()
+    {
+        var ziel = _session is null
+            ? Array.Empty<GeneratorOption>()
+            : GeneratorOption.For(_session.Profile);
+
+        for (var i = 0; i < ziel.Count; i++)
+        {
+            if (i < Generators.Count)
+            {
+                if (!Generators[i].Equals(ziel[i]))
+                    Generators[i] = ziel[i];
+            }
+            else
+            {
+                Generators.Add(ziel[i]);
+            }
+        }
+
+        while (Generators.Count > ziel.Count)
+            Generators.RemoveAt(Generators.Count - 1);
     }
 
     /// <summary>
@@ -682,11 +724,58 @@ public sealed class MainViewModel : ObservableObject
             index.Save();
         }
 
+        RefreshRecentDataFiles();
+
         OnPropertyChanged(nameof(HasDataFile));
         OnPropertyChanged(nameof(DataFileName));
         OnPropertyChanged(nameof(ScanRecommended));
         OnPropertyChanged(nameof(ShowScanHint));
         RaiseCommandStates();
+    }
+
+    /// <summary>
+    /// Baut die Schnellwahl aus dem Profilindex neu auf -- der Index wurde beim
+    /// Laden des Profils oder unmittelbar zuvor in <see cref="LoadDataFileAsync"/>
+    /// nachgefuehrt, steht also auf aktuellem Stand.
+    ///
+    /// Nicht mehr existierende Pfade werden ausgegraut (siehe
+    /// <see cref="RecentFileViewModel.Exists"/>), nicht aus der Liste entfernt:
+    /// wer eine Datei verschoben hat, soll das sehen, statt dass sie
+    /// stillschweigend verschwindet und offenbleibt, ob das Programm sie je
+    /// kannte.
+    /// </summary>
+    private void RefreshRecentDataFiles()
+    {
+        RecentDataFiles.Clear();
+
+        if (_session?.Path is not null)
+        {
+            var index = ProfileIndex.Load();
+            var eintrag = index.Profiles.FirstOrDefault(p =>
+                string.Equals(p.Path, Path.GetFullPath(_session.Path), StringComparison.Ordinal));
+
+            if (eintrag is not null)
+            {
+                var aktuellerPfad = _dataFilePath is null ? null : Path.GetFullPath(_dataFilePath);
+
+                foreach (var datei in eintrag.Files.OrderByDescending(f => f.LastUsedUtc))
+                {
+                    var istAktuell = aktuellerPfad is not null
+                        && string.Equals(datei.Path, aktuellerPfad, StringComparison.Ordinal);
+
+                    // Keine Rueckfrage beim Wechsel: Eingabedateien werden nie
+                    // geschrieben, es gibt nichts zu verlieren, und die
+                    // Feldregeln greifen per Feldnamen-Abgleich auch auf der
+                    // naechsten Datei. EnsureChangesHandledAsync gilt dem
+                    // Profil, nicht der Datendatei, und wird deshalb hier
+                    // bewusst nicht aufgerufen.
+                    RecentDataFiles.Add(new RecentFileViewModel(
+                        datei.Path, istAktuell, pfad => GuardedAsync(() => LoadDataFileAsync(pfad))));
+                }
+            }
+        }
+
+        OnPropertyChanged(nameof(HasRecentDataFiles));
     }
 
     /// <summary>
@@ -702,6 +791,10 @@ public sealed class MainViewModel : ObservableObject
 
         if (_session is null || _dataContent is null)
         {
+            // Ohne offene Datei gibt es nichts zu analysieren -- ein zuvor
+            // erkannter kaputter Zustand bezog sich auf die vorherige Datei
+            // oder das vorherige Profil und gilt hier nicht mehr fort.
+            _engineIsBroken = false;
             OnPropertyChanged(nameof(DataFileDetails));
             OnPropertyChanged(nameof(UndecidedCount));
             OnPropertyChanged(nameof(UndecidedText));
@@ -710,16 +803,20 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(EmptyHint));
             OnPropertyChanged(nameof(NewFieldsHint));
             OnPropertyChanged(nameof(HasNewFieldsHint));
+            OnPropertyChanged(nameof(HasBlockingIssues));
             return;
         }
 
         if (!_session.TryGetEngine(out var engine, out _) || engine is null)
         {
             StatusText = "Die Konfiguration ist fehlerhaft \u2014 siehe Hinweise.";
+            _engineIsBroken = true;
             RefreshIssues();
+            OnPropertyChanged(nameof(HasBlockingIssues));
             return;
         }
 
+        _engineIsBroken = false;
         _analysis = engine.Analyze(_dataContent, _dataFilePath);
 
         if (_session.Path is not null && _dataFilePath is not null)
@@ -731,7 +828,7 @@ public sealed class MainViewModel : ObservableObject
                 string.Equals(f.Path, Path.GetFullPath(_dataFilePath), StringComparison.Ordinal));
         }
 
-        var beispiele = ReadSampleValues(_analysis.File);
+        var beispiele = FieldSampler.Sample(_dataContent, _dataFilePath, _session.Profile.Input);
 
         foreach (var feld in _analysis.Fields)
         {
@@ -751,6 +848,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(EmptyHint));
         OnPropertyChanged(nameof(NewFieldsHint));
         OnPropertyChanged(nameof(HasNewFieldsHint));
+        OnPropertyChanged(nameof(HasBlockingIssues));
         RaiseCommandStates();
     }
 
@@ -777,46 +875,6 @@ public sealed class MainViewModel : ObservableObject
 
     public bool HasNewFieldsHint => NewFieldsHint is not null;
 
-    /// <summary>
-    /// Ein Beispielwert je Feld aus der ersten Datenzeile, damit die Vorschau
-    /// mit echten Werten arbeitet statt mit erfundenen.
-    /// </summary>
-    private Dictionary<string, string> ReadSampleValues(InspectedFile file)
-    {
-        var beispiele = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (_dataContent is null || file.Format != DataFormat.Csv || file.FieldNames.Count == 0)
-            return beispiele;
-
-        try
-        {
-            var text = System.Text.Encoding.UTF8.GetString(_dataContent);
-            using var reader = new StringReader(text);
-
-            _ = reader.ReadLine();                       // Kopfzeile
-            if (reader.ReadLine() is not { } zeile)
-                return beispiele;
-
-            // Bewusst einfach gehalten: fuer eine Vorschau genuegt eine grobe
-            // Zerlegung. Die richtige Verarbeitung macht ohnehin CsvHelper.
-            var trenner = file.Delimiter == "\\t" ? "\t" : file.Delimiter ?? ";";
-            var werte = zeile.Split(trenner);
-
-            for (var i = 0; i < file.FieldNames.Count && i < werte.Length; i++)
-            {
-                var wert = werte[i].Trim().Trim('"');
-                if (wert.Length > 0)
-                    beispiele[file.FieldNames[i]] = wert;
-            }
-        }
-        catch (Exception ex) when (ex is IOException or ArgumentException)
-        {
-            // Ohne Beispielwerte gibt es eben keine Vorschau.
-        }
-
-        return beispiele;
-    }
-
     private void OnFieldRuleChanged()
     {
         // Waehrend einer Massenzuweisung meldet jedes Feld seine Aenderung;
@@ -829,6 +887,10 @@ public sealed class MainViewModel : ObservableObject
 
         _session?.MarkChanged();
 
+        // Ein neuer oder geaenderter Namensraum (etwa ueber das Praefix-Feld)
+        // muss die Auswahlliste erreichen, bevor RefreshIssues laeuft --
+        // sonst zeigte die ComboBox kurzzeitig den alten Stand.
+        RefreshGenerators();
         RefreshIssues();
         RefreshPreview();
 
@@ -860,9 +922,18 @@ public sealed class MainViewModel : ObservableObject
             Issues.Add(issue);
 
         OnPropertyChanged(nameof(HasIssues));
+        OnPropertyChanged(nameof(HasBlockingIssues));
     }
 
     public bool HasIssues => Issues.Count > 0;
+
+    /// <summary>
+    /// Ob sich aus dem Profil keine Engine aufbauen laesst und deshalb ein
+    /// eigener Hinweisbereich oberhalb der Feldliste noetig ist -- ohne
+    /// Felder gibt es dort kein gewaehltes Feld, also auch keinen sichtbaren
+    /// Hinweisbereich im Regelbereich (siehe D-3 in A6).
+    /// </summary>
+    public bool HasBlockingIssues => _engineIsBroken && Issues.Count > 0;
 
     // ------------------------------------------------------------ Vorgaenge
 

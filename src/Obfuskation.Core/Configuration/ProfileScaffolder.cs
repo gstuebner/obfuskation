@@ -1,4 +1,6 @@
+using System.Text.RegularExpressions;
 using Obfuskation.Core;
+using Obfuskation.Core.Generation;
 
 namespace Obfuskation.Core.Configuration;
 
@@ -11,6 +13,14 @@ namespace Obfuskation.Core.Configuration;
 /// </summary>
 public static class ProfileScaffolder
 {
+    /// <summary>
+    /// Zeichenvorrat, den ein Token-Praefix nach <see cref="ProfileValidator"/>
+    /// tragen darf. Dieselbe Menge wie dort, hier zum Ausduennen eines
+    /// Feldnamens statt zum Pruefen.
+    /// </summary>
+    private static readonly Regex DisallowedPrefixChars =
+        new("[^A-Za-z0-9ÄÖÜäöüß_-]", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     /// <summary>Namensbestandteile, die einen Generator nahelegen.</summary>
     private static readonly (string Fragment, string Generator)[] Hints =
     [
@@ -69,12 +79,12 @@ public static class ProfileScaffolder
 
         var fieldNames = ReadFieldNames(sampleFilePath);
         foreach (var fieldName in fieldNames)
-            profile.Fields.Add(CreateRule(fieldName));
+            profile.Fields.Add(CreateRule(profile, fieldName));
 
         return profile;
     }
 
-    private static FieldRule CreateRule(string fieldName)
+    private static FieldRule CreateRule(Profile profile, string fieldName)
     {
         var suggestion = Suggest(fieldName);
 
@@ -90,6 +100,31 @@ public static class ProfileScaffolder
             };
         }
 
+        if (suggestion is null)
+        {
+            // Fuer ein Feld, dem kein eingebauter Generator zugeordnet werden
+            // kann, lohnt trotzdem ein Vorschlag: ein eigener Token-Namensraum
+            // mit einem aus dem Feldnamen abgeleiteten Praefix macht die
+            // Pseudodatei lesbar, auch wenn niemand weiss, wofuer die Spalte
+            // eigentlich steht. Die Entscheidung bleibt trotzdem beim Menschen
+            // — action steht weiter auf "error".
+            var namespaceKey = SuggestPrefixNamespace(profile, fieldName);
+            if (namespaceKey is not null)
+            {
+                return new FieldRule
+                {
+                    Match = fieldName,
+                    MatchType = FieldMatchType.Exact,
+                    Action = FieldAction.Error,
+                    Generator = namespaceKey,
+                    Comment = $"Kein eingebauter Generator passt. Vorschlag: pseudonymize mit " +
+                              $"eigenem Namensraum '{namespaceKey}' — das Praefix " +
+                              $"'{profile.Generators[namespaceKey].Prefix}' stellt sich jedem " +
+                              "Pseudonym voran und macht es lesbar. action anpassen.",
+                };
+            }
+        }
+
         return new FieldRule
         {
             Match = fieldName,
@@ -101,6 +136,49 @@ public static class ProfileScaffolder
                 : $"Vorschlag: pseudonymize mit '{suggestion}'. Zum Uebernehmen action auf pseudonymize setzen.",
         };
     }
+
+    /// <summary>
+    /// Schlaegt fuer ein Feld ohne eingebauten Generator einen eigenen
+    /// Token-Namensraum vor und traegt ihn bereits in
+    /// <see cref="Profile.Generators"/> ein. Liefert <c>null</c>, wenn sich
+    /// kein brauchbares Praefix bilden laesst oder der Schluessel kollidiert
+    /// — dann bleibt es beim bisherigen Verhalten ohne Vorschlag.
+    /// </summary>
+    private static string? SuggestPrefixNamespace(Profile profile, string fieldName)
+    {
+        var prefixBody = DisallowedPrefixChars.Replace(fieldName, "");
+        if (prefixBody.Length == 0)
+            return null;
+
+        // 31 statt 32 Zeichen: das abschliessende '~' zaehlt beim Validator mit.
+        if (prefixBody.Length > 31)
+            prefixBody = prefixBody[..31];
+
+        var key = ToGeneratorKey(fieldName);
+
+        // Ein Vorschlag, der einen eingebauten Generator ueberschreibt oder
+        // einen schon angelegten Namensraum kapert, waere eine boese
+        // Ueberraschung — dann lieber gar keinen Vorschlag machen.
+        if (GeneratorRegistry.KnownNames.Contains(key, StringComparer.OrdinalIgnoreCase)
+            || profile.Generators.ContainsKey(key))
+            return null;
+
+        profile.Generators[key] = new GeneratorSettings { Type = "token", Prefix = prefixBody + "~" };
+        return key;
+    }
+
+    /// <summary>
+    /// Wandelt einen Feldnamen in einen camelCase-Schluessel fuer
+    /// <see cref="Profile.Generators"/>: nur der erste Buchstabe wird
+    /// kleingeschrieben, der Rest bleibt stehen. Oeffentlich, damit die
+    /// Oberflaeche denselben Schluessel bildet, wenn sie ueber das
+    /// Praefix-Feld einen neuen Namensraum anlegt — zwei getrennte
+    /// Ableitungen wuerden auseinanderlaufen.
+    /// </summary>
+    public static string ToGeneratorKey(string fieldName)
+        => fieldName.Length == 0
+            ? fieldName
+            : char.ToLowerInvariant(fieldName[0]) + fieldName[1..];
 
     /// <summary>
     /// Schlaegt anhand des Feldnamens einen Generator vor, oder <c>null</c>,

@@ -232,6 +232,28 @@ public sealed class ObfuscationEngine
         var transformer = new DeobfuscateTransformer(_profile, resolver, pseudonymizer, reverseMapper, report);
         var result = RunProcessor(content, inputName, options, transformer, report, progress, cancellationToken);
 
+        // Generatoren mit eigener Umkehrung (heute nur dateShift) rechnen ohne
+        // Tabelleneintrag ueber den profilweiten Offset zurueck. Mit einem
+        // falschen Profil ist dieser Offset ein anderer Wert, das Ergebnis also
+        // ein plausibles, aber falsches Datum -- waehrend alle anderen Spalten
+        // korrekt als unbekanntesPseudonym auffallen. Der Bezug laeuft ueber
+        // HasIntrinsicInverse statt ueber den Namen "dateShift": ein Profil
+        // kann diesen Typ unter einem eigenen Namensraum fuehren, und
+        // RuleHits zaehlt unter dem Namen aus der Feldregel, nicht unter dem
+        // eingebauten Generatornamen.
+        var intrinsicInverseNames = generators.All
+            .Where(entry => entry.Value.HasIntrinsicInverse)
+            .Select(entry => entry.Key);
+        var dateShiftTraf = intrinsicInverseNames.Any(name => report.RuleHits.GetValueOrDefault(name) > 0);
+        var unbekanntePseudonyme = report.Findings.Any(f => f.Kind == "unbekanntesPseudonym");
+        if (dateShiftTraf && unbekanntePseudonyme)
+            report.Warn("datumMitFremdemProfil",
+                "Es wurden Datumswerte zurückgerechnet, während andere Werte unbekannt blieben. " +
+                "Das deutet auf ein falsches Profil hin: Datumsspalten werden ohne Tabelleneintrag " +
+                "über den profilweiten Versatz zurückgerechnet und ergeben dann plausible, aber " +
+                "falsche Daten. Bei richtigem Profil muss die Befundzahl 0 sein (außer bei redact " +
+                "und drop).");
+
         report.TotalMappings = store.TotalEntries;
         report.DurationMs = stopwatch.ElapsedMilliseconds;
 

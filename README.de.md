@@ -113,16 +113,21 @@ Ohne Angabe sucht sie eine `obfuskation.json` im aktuellen Verzeichnis und
 fällt sonst auf das zuletzt benutzte Profil zurück.
 
 **Aufbau:** oben die geöffnete Datei mit erkanntem Format, Zeichensatz und
-Trennzeichen. Links die Felder, jedes mit einem Statuspunkt — gefüllt und
-türkis heißt *entschieden*, ein roter Kreis heißt *offen*, und solange auch nur
-einer davon offen ist, bricht jeder Lauf ab. Rechts die Behandlung des
-gewählten Feldes samt einer Vorschau am echten Wert aus der Datei
-(»Max Mustermann → Paul Gerber«). Unten die drei Vorgänge.
+Trennzeichen, daneben bei Bedarf „Zuletzt ▾" zum Wechseln zwischen den dem
+Profil bereits bekannten Dateien, ohne den Öffnen-Dialog. Links die Felder,
+jedes mit einem Statuspunkt — gefüllt und türkis heißt *entschieden*, ein
+roter Kreis heißt *offen*, und solange auch nur einer davon offen ist, bricht
+jeder Lauf ab. Rechts, bei einem einzeln gewählten Feld, zuerst bis zu drei
+Beispielwerte aus der Datei — sichtbar auch, solange die Behandlung noch
+offen ist — und darunter die Behandlung des Feldes samt einer Vorschau am
+echten Wert (»Max Mustermann → Paul Gerber«), sobald ersetzt wird. Unten die
+drei Vorgänge.
 
 Bei breiten Tabellen lassen sich mehrere Felder zusammen wählen — Strg-Klick
 einzeln, Umschalt-Klick von… bis, Strg+A alle. Aktion und Generator gelten
 dann für die ganze Auswahl; ein Generator nur für die Felder darin, die
-tatsächlich ersetzt werden. Die Vorschau bleibt der Einzelauswahl vorbehalten.
+tatsächlich ersetzt werden. Feldinhalt und Vorschau bleiben der
+Einzelauswahl vorbehalten.
 
 Über **Mehr** erreichbar:
 
@@ -299,8 +304,32 @@ Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
 | `numericId` | Stellenzahl erhalten, führende Nullen bleiben |
 | `dateShift` | alle Daten um denselben Betrag verschoben — Reihenfolge und Abstände bleiben |
 | `street`, `city`, `postalCode` | Anschriftsbestandteile aus Wortlisten |
-| `token` | generisch `TOK_A1B2C3D4` |
+| `token` | generisch `TOK_A1B2C3D4`, optional mit vorangestellter Kennzeichnung |
 | `redact` | fest `***` |
+
+### Lesbare Tokens: Präfix
+
+Ein `generators`-Eintrag vom Typ `token` kann ein `prefix` tragen, das jedem
+erzeugten Pseudonym vorangestellt wird — nützlich, wenn eine Spalte keinem
+eingebauten Generator entspricht, aber trotzdem lesbar bleiben soll:
+
+```jsonc
+"generators": {
+  "artikelKategorie": { "type": "token", "prefix": "Artikelkategorie~" }
+},
+"fields": [
+  { "match": "Artikelkategorie", "action": "pseudonymize", "generator": "artikelKategorie" }
+]
+```
+
+Aus `TOK_A1B2C3D4` wird `Artikelkategorie~TOK_A1B2C3D4`. Erlaubt sind
+Buchstaben, Ziffern, `_` und `-`, abgeschlossen mit `~` oder `_`, höchstens
+32 Zeichen. **Gilt nur für `token`** — jeder andere Generator liefert das
+Format seines Wertes (eine gültige IBAN, ein verschobenes Datum), ein Präfix
+würde das zerstören. `init` schlägt für Spalten ohne passenden Generator
+automatisch einen solchen Namensraum vor, und in der Oberfläche lässt sich
+das Präfix über das Feld „Kennzeichnung" an der Regel setzen. Details und
+Fallstricke: [Anwenderdokumentation](docs/anwenderdokumentation.md).
 
 ---
 

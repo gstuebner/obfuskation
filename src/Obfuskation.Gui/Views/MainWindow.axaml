@@ -12,7 +12,7 @@
         Icon="avares://obfuskation-gui/Assets/obfuskation.png"
         Background="{DynamicResource BrushBackground}">
 
-  <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="12" >
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="12" >
     <Grid.Styles>
       <Style Selector="Border.card">
         <Setter Property="Margin" Value="0,0,0,12"/>
@@ -72,9 +72,15 @@
         </StackPanel>
       </Grid>
 
+      <!-- Padding statt Margin: Padding zaehlt in die Messung des TextBlocks
+           hinein und schafft unten verlaesslich Platz fuer Unterlaengen (p, g,
+           j) bei kleiner Schrift - Margin wirkt nur aussen und die Karte
+           darunter uebermalt sie sonst. TextWrapping bleibt weg, weil
+           CharacterEllipsis den Umbruch schon unterbindet; beides zusammen
+           war es, was den knappen Trimming-Pfad ausgeloest hat. -->
       <TextBlock Grid.Row="1" Text="{Binding ProfileSubtitle}" Classes="muted small"
-                 IsVisible="{Binding HasProfileSubtitle}" Margin="0,3,0,0"
-                 TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+                 IsVisible="{Binding HasProfileSubtitle}" Padding="0,3,0,3"
+                 TextTrimming="CharacterEllipsis"/>
     </Grid>
 
     <!-- ================================================== Datei ======== -->
@@ -93,13 +99,87 @@
                      IsVisible="{Binding HasNewFieldsHint}"/>
         </StackPanel>
 
-        <Button Grid.Column="2" Content="Öffnen…" Classes="primary"
-                Command="{Binding OpenDataFileCommand}" VerticalAlignment="Center"/>
+        <!-- Weniger Umbau als eine eigene Spalte: beide Schaltflaechen teilen
+             sich die letzte Spalte der Karte in einer waagerechten Leiste. -->
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+
+          <!-- Schnellwahl (Feature F-1): zwischen den dem Profil bekannten
+               Dateien wechseln, ohne jedes Mal ueber den Oeffnen-Dialog zu
+               gehen. Nur sichtbar, wenn der Profilindex ueberhaupt etwas zu
+               bieten hat. -->
+          <Button Content="Zuletzt ▾" IsVisible="{Binding HasRecentDataFiles}">
+            <Button.Flyout>
+              <!-- Schlichtes Flyout mit ItemsControl statt MenuFlyout mit
+                   ItemsSource: so laesst sich am Ende der dynamischen Liste
+                   noch ein fester "Öffnen…"-Eintrag anhaengen, ohne mit
+                   ItemContainerTheme und Item-Template gegeneinander zu
+                   arbeiten. -->
+              <Flyout>
+                <StackPanel Spacing="2" MinWidth="220" MaxWidth="420">
+                  <ItemsControl ItemsSource="{Binding RecentDataFiles}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:RecentFileViewModel">
+                        <Button Classes="flat" Command="{Binding OpenCommand}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                ToolTip.Tip="{Binding FullPath}">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <!-- Wie der Statuspunkt der Feldliste: die gerade
+                                 geladene Datei soll auf einen Blick auffindbar
+                                 sein. Nicht mehr vorhandene Dateien bleiben in
+                                 der Liste, werden aber ueber CanExecute
+                                 (Exists) ausgegraut statt entfernt. -->
+                            <TextBlock Text="●" FontSize="11" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource BrushAccent}"
+                                       IsVisible="{Binding IsCurrent}"/>
+                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+
+                  <Separator/>
+
+                  <!-- Rueckfallweg fuer neue Dateien, damit die Schnellwahl
+                       nicht in eine Sackgasse fuehrt. -->
+                  <Button Classes="flat" Content="Öffnen…" Command="{Binding OpenDataFileCommand}"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"/>
+                </StackPanel>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+
+          <Button Content="Öffnen…" Classes="primary" Command="{Binding OpenDataFileCommand}"/>
+        </StackPanel>
       </Grid>
     </Border>
 
+    <!-- ================================= Hinweise (D-3) ================= -->
+    <!-- Laesst sich aus dem Profil keine Engine aufbauen, bleibt die
+         Feldliste leer, und der bestehende Hinweisbereich im Regelbereich
+         (unten, an HasSelectedField gebunden) waere dann nie zu sehen, weil
+         es ohne Felder auch kein gewaehltes Feld gibt. Eigene Karte
+         oberhalb der Feldliste, unabhaengig von einer Feldauswahl. -->
+    <Border Grid.Row="2" Classes="card" IsVisible="{Binding HasBlockingIssues}">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Hinweise zur Konfiguration" Classes="card-title" Margin="0"/>
+        <ItemsControl ItemsSource="{Binding Issues}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
+                <TextBlock Grid.Column="0" Text="{Binding Path}"
+                           Classes="mono small muted" VerticalAlignment="Top"/>
+                <TextBlock Grid.Column="1" Text="{Binding Message}"
+                           Classes="small" TextWrapping="Wrap"/>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
     <!-- ====================================== Felder und Regel ========= -->
-    <Grid Grid.Row="2" ColumnDefinitions="320,12,*">
+    <Grid Grid.Row="3" ColumnDefinitions="320,12,*">
 
       <!-- Feldliste -->
       <Border Grid.Column="0" Classes="card" Margin="0">
@@ -171,6 +251,50 @@
                            TextWrapping="Wrap"/>
               </Border>
 
+              <!-- Feldinhalt vor der Aktionswahl (Befund N-2): erst sehen, was
+                   im Feld steht, dann entscheiden, welcher Generator noetig
+                   ist, nicht umgekehrt. Nur bei einem einzelnen gewaehlten
+                   Feld: ein Beispielwert aus einem von zwoelf Feldern liesse
+                   offen, wozu er gehoert.
+                   Die Karte haengt an HasSampleValues, nicht an HasPreview:
+                   ein Feld, das noch auf "error" steht oder dessen Generator
+                   keine Vorschau liefert, braucht die Anzeige des Inhalts am
+                   dringendsten, genau dort ist die Entscheidung ja noch
+                   offen. Pfeil und Pseudonym bleiben an HasPreview gebunden
+                   und bleiben einfach aus, wenn es (noch) keine Vorschau gibt. -->
+              <StackPanel IsVisible="{Binding IsSingleSelection}">
+              <Border Classes="card card-raised" Padding="10"
+                      IsVisible="{Binding SelectedField.HasSampleValues}">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="{Binding SelectedField.SampleCardTitle}" Classes="card-title" Margin="0"/>
+
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <!-- Bis zu drei Werte aus der Datei; der erste ist
+                         zugleich der, an dem sich rechts die Vorschau zeigt. -->
+                    <ItemsControl ItemsSource="{Binding SelectedField.SampleValues}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                          <TextBlock Text="{Binding}" Classes="mono muted"
+                                     TextTrimming="CharacterEllipsis"/>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="→" Classes="accent"
+                               IsVisible="{Binding SelectedField.HasPreview}"/>
+                    <TextBlock Text="{Binding SelectedField.Preview}"
+                               Classes="mono accent" TextTrimming="CharacterEllipsis"
+                               IsVisible="{Binding SelectedField.HasPreview}"/>
+                  </StackPanel>
+
+                  <!-- Ohne bestehende Tabelle entsteht das Salt fluechtig; der
+                       spaetere echte Lauf liefert dann andere Werte. -->
+                  <TextBlock Classes="muted small"
+                             IsVisible="{Binding SelectedField.PreviewIsExample}"
+                             Text="Nur ein Beispiel — es gibt noch keine Ersetzungstabelle. Der erste echte Lauf legt sie an und bestimmt die endgültigen Werte."/>
+                </StackPanel>
+              </Border>
+              </StackPanel>
+
               <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Aktion"
                            Classes="muted" VerticalAlignment="Center"/>
@@ -208,30 +332,21 @@
                 </ComboBox>
               </Grid>
 
-              <!-- Vorschau am echten Wert aus der Datei. Nur bei einem
-                   einzelnen gewaehlten Feld: ein Beispielwert aus einem von
-                   zwoelf Feldern liesse offen, wozu er gehoert. -->
+              <!-- Kennzeichnung (Feature F-3, Teil 2): nur bei Einzelauswahl
+                   und nur, wenn der gewaehlte Generator auf "token" beruht,
+                   denn jeder andere Generator liefert das Format seines
+                   Wertes; ein Praefix wuerde das zerstoeren (siehe
+                   ProfileValidator). -->
               <StackPanel IsVisible="{Binding IsSingleSelection}">
-              <Border Classes="card card-raised" Padding="10"
-                      IsVisible="{Binding SelectedField.HasPreview}">
-                <StackPanel Spacing="6">
-                  <TextBlock Text="Vorschau" Classes="card-title" Margin="0"/>
-
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{Binding SelectedField.SampleValue}"
-                               Classes="mono muted" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="→" Classes="accent"/>
-                    <TextBlock Text="{Binding SelectedField.Preview}"
-                               Classes="mono accent" TextTrimming="CharacterEllipsis"/>
-                  </StackPanel>
-
-                  <!-- Ohne bestehende Tabelle entsteht das Salt fluechtig; der
-                       spaetere echte Lauf liefert dann andere Werte. -->
-                  <TextBlock Classes="muted small"
-                             IsVisible="{Binding SelectedField.PreviewIsExample}"
-                             Text="Nur ein Beispiel — es gibt noch keine Ersetzungstabelle. Der erste echte Lauf legt sie an und bestimmt die endgültigen Werte."/>
+                <StackPanel Spacing="4" IsVisible="{Binding SelectedField.ShowPrefix}">
+                  <TextBlock Text="Kennzeichnung" Classes="muted" VerticalAlignment="Center"/>
+                  <TextBox Text="{Binding SelectedField.Prefix}" PlaceholderText="z. B. Artikelkategorie~"/>
+                  <TextBlock Classes="muted small" TextWrapping="Wrap"
+                             Text="Wird jedem erzeugten Pseudonym vorangestellt, etwa aus TOK_A1B2C3D4 wird Artikelkategorie~TOK_A1B2C3D4. Gilt für alle Felder, die denselben Namensraum verwenden."/>
+                  <TextBlock Classes="accent small" TextWrapping="Wrap"
+                             IsVisible="{Binding SelectedField.PrefixIsShared}"
+                             Text="Andere Felder verwenden denselben Namensraum — die Änderung trifft sie mit."/>
                 </StackPanel>
-              </Border>
               </StackPanel>
 
               <!-- Befunde der Profilpruefung -->
@@ -258,7 +373,7 @@
     </Grid>
 
     <!-- ================================================ Ergebnis ======= -->
-    <Border Grid.Row="3" Classes="card" Margin="0,12,0,0"
+    <Border Grid.Row="4" Classes="card" Margin="0,12,0,0"
             IsVisible="{Binding HasResult}">
       <StackPanel Spacing="8">
         <Grid ColumnDefinitions="Auto,*">
@@ -320,7 +435,7 @@
     </Border>
 
     <!-- ============================================ Aktionsleiste ====== -->
-    <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
+    <Grid Grid.Row="5" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
 
       <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
         <!-- Die Beschriftungen nennen das Ergebnis, nicht die Taetigkeit: aus
@@ -359,7 +474,7 @@
     </Grid>
 
     <!-- Statuszeile ganz unten, ueber die volle Breite -->
-    <TextBlock Grid.Row="5" Text="{Binding StatusText}" Classes="muted small"
+    <TextBlock Grid.Row="6" Text="{Binding StatusText}" Classes="muted small"
                Margin="0,10,0,0" TextWrapping="Wrap" MaxLines="3"/>
 
   </Grid>
