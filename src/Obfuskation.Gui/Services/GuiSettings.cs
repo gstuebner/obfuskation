@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Obfuskation.Core;
 
 namespace Obfuskation.Gui.Services;
 
@@ -10,6 +11,14 @@ public enum AppTheme
     System,
     Dark,
     Light,
+}
+
+/// <summary>Wonach die Profiluebersicht sortiert.</summary>
+public enum ProfileSortKey
+{
+    Name,
+    LastUsed,
+    Modified,
 }
 
 /// <summary>
@@ -44,22 +53,13 @@ public sealed class GuiSettings
 
     public double WindowHeight { get; set; } = 720;
 
-    [JsonIgnore]
-    public static string FilePath
-    {
-        get
-        {
-            var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
-            if (string.IsNullOrWhiteSpace(configHome))
-            {
-                configHome = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".config");
-            }
+    /// <summary>Sortierung der Profiluebersicht, ueber einen Neustart hinweg gemerkt.</summary>
+    public ProfileSortKey ProfileSortKey { get; set; } = ProfileSortKey.LastUsed;
 
-            return Path.Combine(configHome, "obfuskation", "gui.json");
-        }
-    }
+    public bool ProfileSortDescending { get; set; } = true;
+
+    [JsonIgnore]
+    public static string FilePath => Path.Combine(PathHelper.ConfigDirectory, "gui.json");
 
     public static GuiSettings Load()
     {

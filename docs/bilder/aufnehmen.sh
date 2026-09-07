@@ -113,8 +113,22 @@ cp "$BEISPIEL/antwort-der-ki.txt" "$ARBEIT/beispiel/antwort-der-ki.txt"
 
 # ------------------------------------------------------------ Oberflaeche
 
-thema() { printf '{\n  "theme": "%s",\n  "windowWidth": 1040,\n  "windowHeight": 720\n}\n' \
-  "$1" > "$XDG_CONFIG_HOME/obfuskation/gui.json"; }
+# LETZTES_VERZEICHNIS (optional gesetzt) landet als lastDataDirectory in
+# gui.json, damit der Dateiauswahldialog von "Neu aus Datei..." gleich im
+# Beispielordner steht, statt in einem beliebigen Vorgabeverzeichnis.
+thema() {
+  if [ -n "${LETZTES_VERZEICHNIS:-}" ]; then
+    python3 - "$XDG_CONFIG_HOME/obfuskation/gui.json" "$1" "$LETZTES_VERZEICHNIS" <<'PY'
+import json, sys
+ziel, thema, ordner = sys.argv[1], sys.argv[2], sys.argv[3]
+json.dump({"theme": thema, "windowWidth": 1040, "windowHeight": 720,
+           "lastDataDirectory": ordner}, open(ziel, "w", encoding="utf-8"))
+PY
+  else
+    printf '{\n  "theme": "%s",\n  "windowWidth": 1040,\n  "windowHeight": 720\n}\n' \
+      "$1" > "$XDG_CONFIG_HOME/obfuskation/gui.json"
+  fi
+}
 
 start() {                       # start [argumente...]
   thema "${THEMA:-light}"
@@ -168,6 +182,35 @@ speichern_dialog() {
   return 0
 }
 
+# Wartet, bis ein Fenster mit passendem Titel erscheint, und gibt seine
+# xdotool-Fenster-ID aus. Wie die Wartschleife in speichern_dialog, nur
+# fuer einen beliebigen Titel statt fest "Speichern unter".
+warte_fenster() {                # warte_fenster <name-regex>
+  local fenster
+  for _ in $(seq 1 20); do
+    fenster=$(xdotool search --onlyvisible --name "$1" | tail -1)
+    [ -n "$fenster" ] && { echo "$fenster"; return 0; }
+    sleep 0.5
+  done
+  # Kein fehler() hier: die Funktion laeuft in $(...), ein exit traefe nur die
+  # Subshell. Der Aufrufer prueft den Rueckgabewert und bricht selbst ab --
+  # sonst wird mit leerer Fenster-ID ein falsches Bild aufgenommen.
+  echo "Das Fenster '$1' erscheint nicht." >&2
+  return 1
+}
+
+# Klickt in die rechte untere Ecke eines Fensters mit SizeToContent-Hoehe
+# (Neues Profil, Profil umbenennen, Rueckfrage): dort sitzt immer die
+# betonte, rechte Schaltflaeche (Anlegen/Umbenennen/Speichern). Dieselbe
+# Idee wie bei speichern_dialog, aber allgemein ueber die tatsaechliche
+# Fenstergroesse statt fester Zahlen fuer ein bestimmtes Fenster.
+klick_ecke() {                   # klick_ecke <fenster> <dx-von-rechts> <dy-von-unten>
+  local fenster=$1 dx=$2 dy=$3
+  eval "$(xdotool getwindowgeometry --shell "$fenster")"
+  xdotool mousemove --window "$fenster" $((WIDTH - dx)) $((HEIGHT - dy)) click 1
+  sleep 1.5
+}
+
 echo "Oberflaeche:"
 B=$ARBEIT/beispiel
 
@@ -175,13 +218,13 @@ start;                                                        bild gui-leer; hal
 
 start --config "$B/profil-geruest.json" "$B/stammdaten.csv"
 bild gui-alle-offen
-klick 55 668;                                                 bild gui-abbruch-offene-felder; halt
+klick 103 668;                                                 bild gui-abbruch-offene-felder; halt
 
 start --config "$B/profil-demo.json" "$B/stammdaten.csv"
-klick 85 203;                                                 bild gui-feld-regel
-klick 730 177;                                                bildp gui-aktion-auswahl
+klick 85 192;                                                 bild gui-feld-regel
+klick 730 194;                                                bildp gui-aktion-auswahl
 xdotool key Escape; sleep 1
-klick 730 239;                                                bildp gui-generator-auswahl
+klick 730 256;                                                bildp gui-generator-auswahl
 xdotool key Escape; sleep 1
 klick 926 28;                                                 bildp gui-mehr-menue
 klick 900 90; sleep 2
@@ -189,8 +232,21 @@ M=$(xdotool search --onlyvisible --name 'Ersetzungstabelle' | tail -1)
 [ -n "$M" ] && bild gui-ersetzungstabelle "$M"
 halt
 
+# Kurzhilfe und Ueber-Fenster liegen im Menue "Mehr" untereinander. Achtung
+# bei Aenderungen am Menue: ein zusaetzlicher Eintrag verschiebt alles darunter.
+# Stand jetzt: Textregeln 62, Ersetzungstabelle 90, Trenner, Kurzhilfe 127,
+# Ueber 155.
 start --config "$B/profil-demo.json" "$B/stammdaten.csv"
 klick 926 28; klick 900 127; sleep 2
+K=$(warte_fenster '^Kurzhilfe$') || fehler "Aufnahme abgebrochen."
+# Groesser aufziehen als die Vorgabe: sonst zeigt das Bild nur die oberen
+# beiden Karten, und gerade der Abschnitt ueber die Profile faellt weg.
+xdotool windowsize "$K" 620 900; sleep 1.5
+bild gui-kurzhilfe "$K"
+halt
+
+start --config "$B/profil-demo.json" "$B/stammdaten.csv"
+klick 926 28; klick 900 155; sleep 2
 U=$(xdotool search --onlyvisible --name 'Obfuskation' | grep -v "^$WID$" | tail -1)
 [ -n "$U" ] && bild gui-ueber "$U"
 halt
@@ -209,17 +265,26 @@ halt
 
 # Ersetzen laeuft ueber den Speichern-Dialog; ohne DBus zeigt Avalonia den
 # eigenen, dessen "Save" unten rechts liegt.
+#
+# Die Zieldatei muss vorher weg: der Vorlauf oben hat sie bereits angelegt, und
+# der Dialog laeuft mit ShowOverwritePrompt. Die Rueckfrage "existiert bereits,
+# ersetzen?" erscheint als Einblendung *im* Dialogfenster, ist also von aussen
+# nicht als eigenes Fenster zu fassen -- speichern_dialog liefe ins Leere. Die
+# Aufnahme darauf einzustellen waere Koordinatenraten; die Datei zu loeschen ist
+# eindeutig. Sie entsteht in diesem Schritt ohnehin neu und wird erst danach
+# gebraucht.
+rm -f "$B/stammdaten.pseudo.csv"
 start --config "$B/profil-demo.json" "$B/stammdaten.csv"
-klick 55 668; sleep 2
+klick 103 668; sleep 2
 speichern_dialog;                                             bild gui-ergebnis-ersetzen; halt
 
 start --config "$B/profil-demo.json" "$B/stammdaten.pseudo.csv"
-klick 256 668; sleep 3;                                       bild gui-pruefen-sauber
-klick 159 668; sleep 2
+klick 426 668; sleep 3;                                       bild gui-pruefen-sauber
+klick 292 668; sleep 2
 speichern_dialog;                                             bild gui-zurueckholen; halt
 
 start --config "$B/profil-demo.json" "$B/buchungen.pseudo.csv"
-klick 256 668; sleep 4;                                       bild gui-pruefen-befund; halt
+klick 426 668; sleep 4;                                       bild gui-pruefen-befund; halt
 
 start --config "$B/profil-demo.json" "$B/konten.csv"
 klick 85 259;                                                 bild gui-fehler-generator-leer; halt
@@ -240,7 +305,7 @@ start --config "$B/profil-frisch.json" "$B/stammdaten.csv"
 klick 85 203;                                                 bild gui-vorschau-beispielhaft; halt
 
 start --config "$B/kaputt-profil.json" "$B/stammdaten.csv"
-klick 55 668; sleep 2;                                        bild gui-kaputte-konfiguration; halt
+klick 103 668; sleep 2;                                        bild gui-kaputte-konfiguration; halt
 
 # Fortschritt und Abbruch zeigen sich erst bei einer grossen Datei.
 head -1 "$B/buchungen.csv" > "$B/buchungen-gross.csv"
@@ -255,6 +320,71 @@ xdotool mousemove --window "$WID" 689 668 click 1; sleep 2;   bild gui-abbruch; 
 
 THEMA=dark start --config "$B/profil-demo.json" "$B/stammdaten.csv"
 klick 85 203;                                                 bild gui-dunkel; halt
+
+# -------------------------------------------- Profilverwaltung (Fassung 1.0.3)
+#
+# Die Koordinaten der Kopfzeilen-Schaltflaechen "Neu aus Datei..." und
+# "Profile..." sowie die Positionen innerhalb der Profiluebersicht sind
+# Schaetzwerte -- anders als der Rest dieses Skripts liessen sie sich nicht an
+# einem echten Bildschirm nachmessen. Beim ersten Lauf gegen die tatsaechlich
+# entstandenen Bilder pruefen und bei Bedarf anpassen, genau wie die uebrigen
+# Koordinaten hier einmal eingemessen wurden.
+
+# Neues Profil: "Neu aus Datei..." aus dem Leerzustand, Dateiauswahl (Titel
+# "Datei oeffnen"), dann der Anlegen-Dialog.
+#
+# Der Oeffnen-Dialog hat, anders als der Speichern-Dialog, kein Namensfeld:
+# getippter Text laeuft dort ins Leere und Return bestaetigt nichts. Die Zeile
+# muss angeklickt werden. Damit ihre Position feststeht, zeigt der Dialog auf
+# ein eigenes Verzeichnis mit genau einer Datei -- im Beispielordner haenge die
+# Zeilennummer sonst davon ab, wie viele Dateien der Vorlauf erzeugt hat.
+mkdir -p "$ARBEIT/nur-stammdaten"
+cp "$B/stammdaten.csv" "$ARBEIT/nur-stammdaten/"
+LETZTES_VERZEICHNIS=$ARBEIT/nur-stammdaten start
+klick 650 28; sleep 2
+O=$(warte_fenster 'Datei oeffnen') || fehler "Aufnahme abgebrochen."
+klickw "$O" 287 85                      # die einzige Zeile der Liste
+eval "$(xdotool getwindowgeometry --shell "$O")"
+klickw "$O" $((WIDTH - 147)) $((HEIGHT - 23)); sleep 2
+N=$(warte_fenster 'Neues Profil') || fehler "Aufnahme abgebrochen."
+bild gui-profil-neu "$N"
+# Kein Schliessklick: halt beendet die Oberflaeche ohnehin, und ein Fehlklick
+# auf "Anlegen" wuerde ungewollt ein Profil schreiben.
+halt
+unset LETZTES_VERZEICHNIS
+
+# Profiluebersicht und Umbenennen. Das offene Profil muss dabei gespeichert
+# sein: die Uebersicht verweigert das Umbenennen des gerade geladenen Profils,
+# solange dort ungesicherte Regeln liegen, weil das anschliessende Nachladen
+# sie verwerfen wuerde. Deshalb hier keine Regelaenderung vorweg.
+# Die Zeile des offenen Profils ist beim Oeffnen bereits ausgewaehlt.
+start --config "$B/profil-demo.json" "$B/stammdaten.csv"
+klick 731 28; sleep 2
+P=$(warte_fenster '^Profile$') || fehler "Aufnahme abgebrochen."
+bild gui-profiluebersicht "$P"
+klickw "$P" 155 572; sleep 2
+R=$(warte_fenster '^Profil umbenennen$') || fehler "Aufnahme abgebrochen."
+bild gui-profil-umbenennen "$R"
+halt
+
+# Die Rueckfrage bei ungespeicherten Aenderungen. Ausgeloest ueber "Neu aus
+# Datei...": der Vorgang prueft als Erstes, ob noch etwas ungesichert ist, und
+# fragt nach, bevor er ueberhaupt den Dateidialog oeffnet. Das kommt ohne ein
+# zweites Profil in der Liste aus und ist damit unabhaengig davon, was der
+# Nutzungs-Index bis hierher gesammelt hat.
+# Die Aenderung per Maus, nicht per Tastatur: ohne Fenstermanager bekommt das
+# aufgeklappte Auswahlfeld keinen Tastaturfokus, Down/Return liefen ins Leere
+# und das Profil bliebe unveraendert -- die Rueckfrage kaeme dann nie.
+start --config "$B/profil-demo.json" "$B/stammdaten.csv"
+klick 85 192; klick 730 194; sleep 1
+klick 496 256; sleep 1                  # "durchlassen" in der offenen Liste
+klick 650 28; sleep 2
+# Bewusst ohne den Umlaut im Muster: xdotool findet das Fenster mit
+# '^Ungespeicherte Änderungen$' nicht, obwohl es offen ist -- der Vergleich
+# stolpert ueber das mehrbyteige "Ä". Der ASCII-Anfang genuegt zur Unterscheidung.
+C=$(warte_fenster '^Ungespeicherte') || fehler "Aufnahme abgebrochen."
+bild gui-ungespeichert "$C"
+halt
 
 # ------------------------------------------------------------- Kommandozeile
 

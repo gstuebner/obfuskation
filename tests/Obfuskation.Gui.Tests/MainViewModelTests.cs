@@ -46,6 +46,9 @@ public class MainViewModelTests : IDisposable
     private MainViewModel Erzeugen() => new(_settings,
         () => throw new InvalidOperationException("In diesem Test darf kein Dialog aufgehen."));
 
+    /// <summary>Fuer Tests, die eine Rueckfrage erwarten -- das Doppel liefert vorgegebene Antworten.</summary>
+    private MainViewModel Erzeugen(FakeDialogService dialoge) => new(_settings, () => dialoge);
+
     private string SchreibeCsv(string name = "kunden.csv")
     {
         var pfad = Path.Combine(_verzeichnis, name);
@@ -71,6 +74,25 @@ public class MainViewModelTests : IDisposable
         ProfileStore.Save(profil, pfad);
         return pfad;
     }
+
+    /// <summary>Ein zweites Profil unter einem eigenen Dateinamen, fuer Profilwechsel-Tests.</summary>
+    private string SchreibeZweitesProfil(string dateiname, string profilName)
+    {
+        var profil = new Profile
+        {
+            ProfileName = profilName,
+            MappingStore = Path.Combine(_verzeichnis, dateiname + ".mapping.json"),
+        };
+
+        var pfad = Path.Combine(_verzeichnis, dateiname);
+        ProfileStore.Save(profil, pfad);
+        return pfad;
+    }
+
+    private static ProfileSummary NeueZusammenfassung(string pfad, string name) => new(
+        pfad, name, Description: null, FieldCount: 0, TextRuleCount: 0,
+        MappingStorePath: "", MappingStoreExists: false, ModifiedUtc: DateTimeOffset.UtcNow,
+        LastUsedUtc: null, DataFiles: Array.Empty<DataFileUsage>(), Error: null);
 
     [Fact]
     public async Task Beim_Start_wird_das_angegebene_Profil_geladen()
@@ -441,5 +463,109 @@ public class MainViewModelTests : IDisposable
 
         // Ein schon vorhandener Zusatz wird nicht verdoppelt.
         Assert.Equal("kunden.pseudo.csv", DialogService.SuggestOutputName("/pfad/kunden.pseudo.csv"));
+    }
+
+    // --------------------------------------------------- Profilverwaltung
+
+    [Fact]
+    public async Task Profilwechsel_bei_ungespeicherten_Aenderungen_fragt_nach_und_bricht_bei_Abbrechen_ab()
+    {
+        var profil1 = SchreibeProfil();
+        var profil2 = SchreibeZweitesProfil("zweites.json", "zweites");
+
+        var dialoge = new FakeDialogService { SaveChangesChoice = SaveChoice.Cancel };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil1, SchreibeCsv());
+
+        modell.Fields.Single(f => f.FieldName == "Betrag").Action = FieldAction.Passthrough;
+        Assert.True(modell.HasUnsavedChanges);
+
+        dialoge.ProfilesResult = NeueZusammenfassung(profil2, "zweites");
+        await modell.ShowProfilesAsync();
+
+        Assert.Equal(1, dialoge.AskSaveChangesCalls);
+
+        // Abbrechen: das alte Profil bleibt geladen, mit seinen Aenderungen.
+        Assert.Equal("test", modell.ProfileName);
+        Assert.True(modell.HasUnsavedChanges);
+    }
+
+    [Fact]
+    public async Task Profilwechsel_bei_ungespeicherten_Aenderungen_laedt_bei_Verwerfen_das_neue_Profil()
+    {
+        var profil1 = SchreibeProfil();
+        var profil2 = SchreibeZweitesProfil("zweites.json", "zweites");
+
+        var dialoge = new FakeDialogService { SaveChangesChoice = SaveChoice.Discard };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil1, SchreibeCsv());
+
+        modell.Fields.Single(f => f.FieldName == "Betrag").Action = FieldAction.Passthrough;
+        Assert.True(modell.HasUnsavedChanges);
+
+        dialoge.ProfilesResult = NeueZusammenfassung(profil2, "zweites");
+        await modell.ShowProfilesAsync();
+
+        Assert.Equal("zweites", modell.ProfileName);
+        Assert.False(modell.HasUnsavedChanges);
+    }
+
+    [Fact]
+    public async Task Anlegen_speichert_das_Profil_am_gewaehlten_Pfad_mit_Namen_und_Beschreibung()
+    {
+        var csv = SchreibeCsv();
+        var ziel = Path.Combine(_verzeichnis, "eigenerName.json");
+
+        var dialoge = new FakeDialogService
+        {
+            DataFileToOpen = csv,
+            NewProfileResult = new NewProfileResult("eigenerName", "Testbeschreibung", ziel, OpenExisting: false),
+        };
+
+        var modell = Erzeugen(dialoge);
+        await modell.NewProfileAsync();
+
+        Assert.True(modell.HasProfile);
+        Assert.Equal("eigenerName", modell.ProfileName);
+        Assert.True(File.Exists(ziel));
+
+        var geschrieben = ProfileStore.Load(ziel);
+        Assert.Equal("eigenerName", geschrieben.ProfileName);
+        Assert.Equal("Testbeschreibung", geschrieben.Description);
+    }
+
+    [Fact]
+    public async Task NewFieldsHint_zaehlt_die_Felder_ohne_eigene_Regel()
+    {
+        var profil = SchreibeProfil(p => p.Fields.Add(new FieldRule
+        {
+            Match = "Kundenname",
+            Action = FieldAction.Pseudonymize,
+            Generator = "personName",
+        }));
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        // Vier Felder in der Beispieldatei, eines traegt eine eigene Regel --
+        // die restlichen drei sind neu fuer dieses Profil.
+        Assert.True(modell.HasNewFieldsHint);
+        Assert.Contains("3 neue Felder", modell.NewFieldsHint);
+    }
+
+    [Fact]
+    public async Task Eine_geoeffnete_Datei_landet_im_Index_des_Profils()
+    {
+        var profil = SchreibeProfil();
+        var csv = SchreibeCsv();
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, csv);
+
+        var index = ProfileIndex.Load();
+        var eintrag = index.Profiles.Single(p =>
+            string.Equals(p.Path, Path.GetFullPath(profil), StringComparison.Ordinal));
+
+        Assert.Contains(eintrag.Files, f => string.Equals(f.Path, Path.GetFullPath(csv), StringComparison.Ordinal));
     }
 }

@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="420"
+        x:Class="Obfuskation.Gui.Views.NewProfileWindow"
+        x:DataType="vm:NewProfileViewModel"
+        Title="Neues Profil"
+        Width="560" MinWidth="480" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,Auto" Margin="16">
+
+    <Border Grid.Row="0" Classes="card">
+      <StackPanel Spacing="12">
+
+        <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto" RowSpacing="10" ColumnSpacing="10">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" Classes="muted" VerticalAlignment="Center"/>
+          <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name}"/>
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Beschreibung" Classes="muted" VerticalAlignment="Top" Margin="0,6,0,0"/>
+          <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Description}"
+                    AcceptsReturn="False" PlaceholderText="Wofuer dieses Profil da ist (frei, optional)"/>
+        </Grid>
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Ablageort" Classes="muted"/>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBlock Grid.Column="0" Text="{Binding TargetPath}" Classes="mono small"
+                       TextWrapping="Wrap" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="Anderer Ort…" Click="OnBrowse"/>
+          </Grid>
+        </StackPanel>
+
+        <TextBlock Text="{Binding MappingStoreHint}" Classes="muted small" TextWrapping="Wrap"/>
+
+        <Border Classes="card card-raised" IsVisible="{Binding TargetExists}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Es gibt bereits ein Profil an diesem Ort." Classes="warning" FontWeight="SemiBold"/>
+            <TextBlock Text="„Anlegen“ ist gesperrt, solange das so bleibt — sonst ginge das bestehende Regelwerk verloren. Anderen Namen oder Ort wählen, oder das vorhandene Profil öffnen."
+                       Classes="small" TextWrapping="Wrap"/>
+            <Button Content="Stattdessen öffnen" Command="{Binding OpenExistingCommand}" HorizontalAlignment="Left"/>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </Border>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                Spacing="8" Margin="0,12,0,0">
+      <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
+      <Button Content="Anlegen" Classes="primary" Command="{Binding OkCommand}"/>
+    </StackPanel>
+
+  </Grid>
+</Window>

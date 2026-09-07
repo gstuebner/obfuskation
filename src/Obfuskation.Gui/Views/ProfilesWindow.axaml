@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="820" d:DesignHeight="600"
+        x:Class="Obfuskation.Gui.Views.ProfilesWindow"
+        x:DataType="vm:ProfilesViewModel"
+        Title="Profile"
+        Width="820" Height="600" MinWidth="640" MinHeight="440"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="12">
+
+    <TextBlock Grid.Row="0" Classes="muted" Margin="0,0,0,10" TextWrapping="Wrap"
+               Text="Ein Profil bündelt Feldregeln und Ersetzungstabelle. Alle Dateien, die zusammengehören, unter demselben Profil bearbeiten."/>
+
+    <TextBox Grid.Row="1" Text="{Binding FilterText}" Margin="0,0,0,8"
+             PlaceholderText="Suchen nach Name, Beschreibung oder Dateipfad…"/>
+
+    <!-- Spaltenkoepfe: Name, Zuletzt benutzt und Geaendert lassen sich
+         sortieren, Dateien nicht: dafuer gibt es keine sinnvolle Reihenfolge. -->
+    <Grid Grid.Row="2" ColumnDefinitions="2*,1.2*,1.3*,1.1*" Margin="8,0,8,4">
+      <Button Grid.Column="0" Classes="flat" Content="{Binding NameHeader}"
+              Command="{Binding SortByNameCommand}" HorizontalContentAlignment="Left" Padding="0,4"/>
+      <TextBlock Grid.Column="1" Text="Dateien" Classes="muted small" VerticalAlignment="Center"/>
+      <Button Grid.Column="2" Classes="flat" Content="{Binding LastUsedHeader}"
+              Command="{Binding SortByLastUsedCommand}" HorizontalContentAlignment="Left" Padding="0,4"/>
+      <Button Grid.Column="3" Classes="flat" Content="{Binding ModifiedHeader}"
+              Command="{Binding SortByModifiedCommand}" HorizontalContentAlignment="Left" Padding="0,4"/>
+    </Grid>
+
+    <Border Grid.Row="3" Classes="card" Margin="0,0,0,10">
+      <ListBox ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ProfileRowViewModel">
+            <Grid ColumnDefinitions="2*,1.2*,1.3*,1.1*" ColumnSpacing="8">
+              <StackPanel Grid.Column="0" Spacing="1">
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Classes="error"
+                           IsVisible="{Binding HasError}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                           IsVisible="{Binding !HasError}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding ErrorMessage}" Classes="error small"
+                           IsVisible="{Binding HasError}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Text="{Binding Description}" Classes="muted small"
+                           IsVisible="{Binding HasDescription}" TextTrimming="CharacterEllipsis"/>
+              </StackPanel>
+
+              <TextBlock Grid.Column="1" Text="{Binding FilesText}" Classes="small muted"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="2" Text="{Binding LastUsedText}" Classes="small muted"
+                         VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="3" Text="{Binding ModifiedText}" Classes="small muted"
+                         VerticalAlignment="Center"/>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Border>
+
+    <!-- Auskunft zum ausgewaehlten Profil: die Ersetzungstabelle wird erst
+         hier, fuer genau diese eine Zeile, tatsaechlich geoeffnet. -->
+    <Border Grid.Row="4" Classes="card" Margin="0,0,0,10" IsVisible="{Binding HasSelection}">
+      <StackPanel Spacing="3">
+        <TextBlock Text="{Binding Selected.PathLine}" Classes="mono small muted" TextWrapping="Wrap"/>
+        <TextBlock Text="{Binding Selected.MappingLine}" Classes="mono small muted" TextWrapping="Wrap"
+                   IsVisible="{Binding Selected.HasMappingLine}"/>
+        <TextBlock Text="{Binding Selected.FilesLine}" Classes="small muted" TextWrapping="Wrap"
+                   IsVisible="{Binding Selected.HasFilesLine}"/>
+      </StackPanel>
+    </Border>
+
+    <TextBlock Grid.Row="5" Text="{Binding ErrorText}" Classes="error small" TextWrapping="Wrap"
+               Margin="0,0,0,8" IsVisible="{Binding HasErrorText}"/>
+
+    <Grid Grid.Row="6" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+      <Button Grid.Column="0" Content="Öffnen" Classes="primary" Command="{Binding OpenCommand}"/>
+      <Button Grid.Column="1" Content="Umbenennen…" Command="{Binding RenameCommand}" Margin="8,0,0,0"/>
+      <Button Grid.Column="2" Content="Aus Datei wählen…" Command="{Binding BrowseCommand}" Margin="8,0,0,0"/>
+
+      <Button Grid.Column="4" Content="Aus Liste entfernen" Command="{Binding RemoveCommand}"
+              ToolTip.Tip="Entfernt nur den Eintrag aus dieser Übersicht — die Profildatei bleibt unangetastet."/>
+    </Grid>
+
+  </Grid>
+</Window>

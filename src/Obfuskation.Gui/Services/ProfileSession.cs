@@ -34,8 +34,8 @@ public sealed class ProfileSession
     public static ProfileSession Load(string path)
         => new(ProfileStore.Load(PathHelper.ExpandHome(path)), System.IO.Path.GetFullPath(path));
 
-    public static ProfileSession Create(string profileName, string? sampleFilePath)
-        => new(ProfileScaffolder.Create(profileName, sampleFilePath), null) { HasUnsavedChanges = true };
+    public static ProfileSession Create(string profileName, string? sampleFilePath, string? description = null)
+        => new(ProfileScaffolder.Create(profileName, sampleFilePath, description), null) { HasUnsavedChanges = true };
 
     /// <summary>
     /// Meldet eine Aenderung am Regelwerk. Die Engine wird verworfen, damit der

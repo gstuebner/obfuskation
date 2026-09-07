@@ -13,6 +13,9 @@ public sealed class Profile
     /// <summary>Name des Profils. Bestimmt auch den Standardpfad des Mapping-Stores.</summary>
     public string ProfileName { get; set; } = "default";
 
+    /// <summary>Freitext des Anwenders: wofuer dieses Profil da ist. Rein erklaerend.</summary>
+    public string? Description { get; set; }
+
     /// <summary>
     /// Pfad zur Mapping-Datei. <c>~</c> wird aufgeloest. Bleibt das Feld leer,
     /// gilt <c>~/.local/share/obfuskation/&lt;ProfileName&gt;/mapping.json</c>.

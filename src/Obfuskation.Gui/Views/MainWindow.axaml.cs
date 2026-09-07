@@ -21,6 +21,7 @@ public partial class MainWindow : Window
             viewModel.TextRulesRequested += () => ShowTextRules(viewModel);
             viewModel.MappingRequested += () => ShowMapping(viewModel);
             viewModel.AboutRequested += () => ShowAbout(viewModel);
+            viewModel.HelpRequested += ShowHelp;
         };
     }
 
@@ -44,4 +45,6 @@ public partial class MainWindow : Window
 
     private void ShowAbout(MainViewModel viewModel)
         => new AboutWindow(viewModel.MappingStorePath).ShowDialog(this);
+
+    private void ShowHelp() => new HelpWindow().ShowDialog(this);
 }

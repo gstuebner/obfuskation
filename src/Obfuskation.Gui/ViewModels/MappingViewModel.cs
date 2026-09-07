@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 using Obfuskation.Core;
 using Obfuskation.Core.Mapping;
+using Obfuskation.Gui.Services;
 
 namespace Obfuskation.Gui.ViewModels;
 
@@ -18,9 +19,14 @@ public sealed class MappingViewModel : ObservableObject
     public MappingViewModel(ObfuscationEngine engine, string profileName)
     {
         ProfileName = profileName;
-        StorePath = engine.ResolveMappingStorePath();
 
-        if (!File.Exists(StorePath))
+        // Pfad, Anzahl und Existenz kommen aus der gemeinsamen Hilfe, damit sie
+        // nicht ein zweites Mal berechnet werden muessen -- dieselbe Auskunft
+        // steht auch in der Kopfzeile des Hauptfensters.
+        var summary = MappingSummary.For(engine.ResolveMappingStorePath(), profileName);
+        StorePath = summary.StorePath;
+
+        if (!summary.Exists)
         {
             EmptyText = "Es gibt noch keine Ersetzungstabelle. Sie entsteht beim ersten Lauf.";
             Permissions = "—";
@@ -32,14 +38,15 @@ public sealed class MappingViewModel : ObservableObject
 
         try
         {
+            // Fuer die Namensraeume reicht die Kurzauskunft nicht -- dafuer wird
+            // die Tabelle hier zusaetzlich geoeffnet.
             using var store = MappingStore.Open(
                 StorePath, profileName, readOnly: true, allowInsideGitWorkingTree: true);
 
             foreach (var name in store.NamespaceNames.OrderBy(n => n, StringComparer.Ordinal))
                 Namespaces.Add(new NamedCount(name, store.Entries(name).Count));
 
-            var gesamt = store.TotalEntries;
-            TotalText = gesamt == 1 ? "1 Eintrag insgesamt" : $"{gesamt} Einträge insgesamt";
+            TotalText = summary.Text + " insgesamt";
             EmptyText = "Die Tabelle ist noch leer.";
         }
         catch (Exception ex) when (ex is MappingConflictException

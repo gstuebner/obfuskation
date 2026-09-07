@@ -54,15 +54,15 @@ public sealed class RunResultViewModel
 
     public string Headline => Command switch
     {
-        "obfuscate" => "Ersetzt",
-        "deobfuscate" => "Zurueckgeholt",
-        "scan" => "Geprueft",
+        "obfuscate" => "Pseudodatei erzeugt",
+        "deobfuscate" => "Klartextdatei erzeugt",
+        "scan" => "Geprüft",
         _ => Command,
     };
 
     public string Summary
-        => $"{RowsProcessed} Datensaetze · {DurationMs} ms"
-           + (NewMappings > 0 ? $" · {NewMappings} neue Eintraege" : "")
+        => $"{RowsProcessed} Datensätze · {DurationMs} ms"
+           + (NewMappings > 0 ? $" · {NewMappings} neue Einträge" : "")
            + (TotalMappings > 0 ? $" · {TotalMappings} in der Tabelle" : "");
 
     /// <summary>Hinweis, wenn nicht alle Befunde angezeigt werden.</summary>

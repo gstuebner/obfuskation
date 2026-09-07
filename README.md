@@ -88,11 +88,14 @@ Accessible via **More**:
 
 - **Text Rules** — with an interactive test input. Test patterns against real sample text before running them on actual data; overbroad patterns become apparent immediately.
 - **Substitution Table** — path, record counts per namespace, and file permissions. Displays **no values**, identical to `mapping list`.
+- **Quick Help** (»Kurzhilfe…«) — six short cards covering what the tool is for, what a profile is and why it matters, and the path through the program, aimed at someone opening the interface for the first time.
 - **About** — the five notices above and the paths in use.
 
 **Light and Dark:** The toggle in the top right cycles through three states — system default (follows operating system setting), dark, light. The preference is remembered in `~/.config/obfuskation/gui.json`. That file only stores convenience settings: selected view, recently opened profiles, window dimensions — **no file contents and no processed data**.
 
 For large files, the GUI displays progress and allows cancellation; cancelling writes neither an output file nor entries to the substitution table.
+
+**Managing profiles.** A profile bundles the field rules and the substitution table under one name; **New from File…** now asks for a name, an optional description, and a storage location (default: `~/.config/obfuskation/profile/<name>.json`), and **Profiles…** opens a sortable, searchable overview of every known profile together with the files it was last used with. Renaming a profile from that overview never touches the substitution table's entries — only the name changes, in the profile itself and, if the table already exists, inside it too, so no pseudonym is ever invalidated. Closing the window or switching to another profile while rules are unsaved triggers a confirmation (save, discard, or cancel).
 
 ### Desktop Menu Integration (Linux)
 
@@ -112,7 +115,7 @@ obfuskation obfuscate accounts.csv      -o accounts.pseudo.csv      --strict
 obfuskation obfuscate transactions.csv  -o transactions.pseudo.csv  --strict
 ```
 
-In the GUI accordingly: open the profile once, load files sequentially via **Open…**, and click **Obfuscate** for each. The profile remains loaded.
+In the GUI accordingly: open the profile once, load files sequentially via **Open…**, and click **»Pseudodatei erzeugen…«** (*create pseudo file* — the interface is German) for each. The profile remains loaded.
 
 ID `4711` becomes the exact same value across all three files because pseudonyms are derived deterministically from the plaintext and recorded in the shared substitution table. The second and third runs report `0 new entries` for that field — a reliable confirmation that links are preserved.
 
@@ -243,14 +246,18 @@ A format-preserving generator draws from the same pool of values as real data. W
 ## Commands
 
 ```
-obfuskation init [--profile <name>] [--from <file>] [--force]
+obfuskation init [--profile <name>] [--from <file>] [--description <text>]
+                 [--central] [--force]
 obfuskation obfuscate <file> [-o <dest>] [--strict] [--dry-run] [--json]
 obfuskation deobfuscate [<file>] [-o <dest>] [--json]
 obfuskation scan <file> [--json]
 obfuskation mapping list|path
+obfuskation profile list [--sort name|used|changed] [--json]
 ```
 
-Common options: `--config <path>`, `--format csv|json|text`, `--allow-unsafe-store`.
+Common options: `--config <path-or-profile-name>`, `--format csv|json|text`, `--allow-unsafe-store`.
+
+`--config` also accepts a plain profile name instead of a path — `--config demo` resolves to `~/.config/obfuskation/profile/demo.json` if no literal file named `demo` exists, the same central location the GUI uses. `init --central` writes there directly instead of `obfuskation.json` in the current directory, and `profile list` shows every profile the tool knows about — the central folder plus everything remembered in the usage index — with name, file count, last-used and last-modified timestamps.
 
 - `--strict` — Fields without an explicit rule cause execution to abort, regardless of profile defaults.
 - `--dry-run` — Writes neither output files nor table entries, but produces the full report.

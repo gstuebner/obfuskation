@@ -54,11 +54,12 @@ public static class ProfileScaffolder
         ("kommentar", "scanText"),
     ];
 
-    public static Profile Create(string profileName, string? sampleFilePath)
+    public static Profile Create(string profileName, string? sampleFilePath, string? description = null)
     {
         var profile = new Profile
         {
             ProfileName = profileName,
+            Description = description,
             MappingStore = PathHelper.DefaultMappingStorePath(profileName),
             TextRules = DefaultTextRules(),
         };

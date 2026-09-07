@@ -2,22 +2,35 @@
 title: Testdokumentation
 subtitle: Testkonzept, Durchführung und Befunde
 kicker: Obfuskation
-version: 1.0.2
+version: 1.1.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 06.09.2026
+date: 07.09.2026
 lang: de
 preset: modern
 ---
 
 # Testdokumentation
 
-Fassung 1.0.2 · Stand 6. September 2026
+Fassung 1.1.0 · Stand 7. September 2026
 
 Diese Dokumentation beschreibt, wie Obfuskation geprüft wird, welche Fälle
 tatsächlich durchgespielt wurden und was dabei herauskam. Grundlage ist
 ausschließlich `docs/bilder/protokoll-roh.md`, das Rohprotokoll der
 Testdurchführung vom 4. September 2026 — jede Zahl, jeder Meldungstext und
 jeder Rückgabewert in diesem Dokument steht dort im Wortlaut.
+
+> [!IMPORTANT]
+> Die Oberfläche hat sich seit dieser Durchführung geändert: In Fassung 1.1.0
+> heißen die beiden Schaltflächen **Pseudodatei erzeugen…** und
+> **Klartextdatei erzeugen…** statt „Ersetzen“ und „Zurückholen“, und die
+> Ergebniskarte überschreibt entsprechend. Die Abschnitte **Schritte** und
+> **Erwartetes Ergebnis** sind darauf umgestellt, damit die Fälle heute
+> nachspielbar sind. Die Abschnitte **Tatsächliches Ergebnis** stehen dagegen
+> unverändert im Wortlaut des Protokolls und zeigen deshalb noch die alten
+> Beschriftungen — sie sind ein Beobachtungsprotokoll und werden nicht
+> nachträglich umgeschrieben. Die betroffenen Fälle (G-07, G-09, G-10, G-11)
+> sind an Fassung 1.1.0 nachzuspielen; die Bildschirmfotos zeigen bereits die
+> neue Fassung.
 
 ## 1. Testkonzept
 
@@ -50,22 +63,28 @@ beider Programme am selben Datenbestand.
 dotnet test
 ```
 
-![Ausgabe von dotnet test: 101 Tests aus Obfuskation.Core.Tests und 24 aus Obfuskation.Gui.Tests, keine Fehler.](bilder/cli-tests.png)
-*Ausgabe von `dotnet test`: 101 Tests aus `Obfuskation.Core.Tests` und 24 aus
-`Obfuskation.Gui.Tests`, keine Fehler.*
+![Ausgabe von dotnet test: 125 Tests aus Obfuskation.Core.Tests, 6 aus Obfuskation.Cli.Tests und 33 aus Obfuskation.Gui.Tests, keine Fehler.](bilder/cli-tests.png)
+*Ausgabe von `dotnet test`: 125 Tests aus `Obfuskation.Core.Tests`, 6 aus
+`Obfuskation.Cli.Tests` und 33 aus `Obfuskation.Gui.Tests`, keine Fehler.*
 
 ```
-Bestanden!   : Fehler:     0, erfolgreich:   101, übersprungen:     0, gesamt:   101,
-               Dauer: 121 ms - Obfuskation.Core.Tests.dll (net8.0)
-Bestanden!   : Fehler:     0, erfolgreich:    24, übersprungen:     0, gesamt:    24,
-               Dauer: 155 ms - Obfuskation.Gui.Tests.dll (net8.0)
+Bestanden!   : Fehler:     0, erfolgreich:     6, übersprungen:     0, gesamt:     6,
+               Dauer:  78 ms - Obfuskation.Cli.Tests.dll (net8.0)
+Bestanden!   : Fehler:     0, erfolgreich:   125, übersprungen:     0, gesamt:   125,
+               Dauer: 490 ms - Obfuskation.Core.Tests.dll (net8.0)
+Bestanden!   : Fehler:     0, erfolgreich:    33, übersprungen:     0, gesamt:    33,
+               Dauer: 343 ms - Obfuskation.Gui.Tests.dll (net8.0)
 ```
 
-**125 Tests, 0 Fehler.** Der Demo-Datenbestand verändert keinen Test — die
-Testprojekte arbeiten mit eigenen, in Wegwerfverzeichnissen erzeugten
-Beständen.
+**164 Tests, 0 Fehler** (Fassung 1.1.0; davor 125 mit Fassung 1.0.2 — der
+Zuwachs kommt aus der Profilverwaltung: 24 neue Fälle in
+`Obfuskation.Core.Tests`, 9 neue in `Obfuskation.Gui.Tests`, dazu das neue
+Testprojekt `Obfuskation.Cli.Tests` mit 6 Fällen). Der Demo-Datenbestand
+verändert keinen Test — alle drei Testprojekte arbeiten mit eigenen, in
+Wegwerfverzeichnissen erzeugten Beständen.
 
-Die elf Testdateien von `Obfuskation.Core.Tests`, thematisch geordnet:
+Die inzwischen sechzehn Testdateien von `Obfuskation.Core.Tests`, thematisch
+geordnet:
 
 **Fachlogik der Ersetzung**
 
@@ -109,18 +128,80 @@ Die elf Testdateien von `Obfuskation.Core.Tests`, thematisch geordnet:
   einer dieser Tests, können Echtdaten dorthin gelangen, wo sie nicht
   hingehören.
 
-Die drei Dateien von `Obfuskation.Gui.Tests`:
+**Profilverwaltung (neu in Fassung 1.1.0)**
+
+- `PathHelperTests.cs` — `ConfigDirectory` und `ProfileDirectory` folgen
+  `XDG_CONFIG_HOME`; ohne gesetzte Variable greift der Rückfall auf
+  `~/.config/obfuskation/profile`; `DefaultProfilePath` entschärft den
+  Namen. Weil ein Fall dafür `XDG_CONFIG_HOME` kurzzeitig löschen muss, läuft
+  das gesamte Testprojekt sequenziell (`AssemblyInfo.cs`,
+  `[assembly: CollectionBehavior(DisableTestParallelization = true)]`)
+  — sonst schriebe ein zeitgleicher Test in genau diesem Moment in die
+  echte Konfiguration des Anwenders (Befund D-8).
+- `ProfileIndexTests.cs` — Eintragen und Wiederfinden von Nutzungsdaten, die
+  Obergrenzen (20 Dateien je Profil, 50 Profile), `Prune` entfernt
+  verschwundene Profile, eine kaputte Indexdatei ergibt einen leeren Index
+  statt einer Ausnahme, `MoveProfile` zieht den Pfad nach.
+- `ProfileCatalogTests.cs` — Ordner und Zusatzpfade werden entdoppelt;
+  kaputtes JSON ergibt einen Eintrag mit `Error` statt einer Ausnahme;
+  fremdes JSON ohne `profileName`/`fields` wird übergangen; ein fehlender
+  Profilordner ergibt eine leere Liste und legt nichts an.
+- `ProfileRenameTests.cs` — **die wichtigsten Tests des gesamten
+  Vorhabens** (Abschnitt 2 der `entwicklerdokumentation.md`, „Das kritische
+  Detail beim Umbenennen“): nach dem Umbenennen liefert derselbe Klartext
+  weiterhin dasselbe Pseudonym und `Zurückholen` findet den Ursprungswert;
+  ein zuvor leerer `MappingStore` ist danach auf den *alten* Pfad
+  festgeschrieben; der Profilname im Mapping-Dokument ist nachgezogen, ein
+  folgender Lauf warnt nicht mehr; ein leerer oder nur aus Sonderzeichen
+  bestehender neuer Name wird abgewiesen.
+- `TestUmgebung.cs` — wie im Oberflächen-Testprojekt ein
+  `[ModuleInitializer]`, der zusätzlich zu `XDG_CONFIG_HOME` auch
+  `XDG_DATA_HOME` auf ein Wegwerfverzeichnis lenkt, damit die neuen Index-
+  und Umbenenn-Tests nicht in die echten Ersetzungstabellen des Anwenders
+  schreiben.
+
+Die beiden Dateien des neuen Testprojekts `Obfuskation.Cli.Tests` (Fassung
+1.1.0):
+
+- `CommandContextTests.cs` — die Namensauflösung in
+  `CommandContext.LoadProfile`: ein bloßer Profilname wird im zentralen
+  Ordner gefunden; ein unbekannter Name wirft mit dem Hinweis auf
+  `obfuskation profile list`; ein wörtlicher Pfad (mit Trennzeichen oder
+  `.json`-Endung) wird immer wörtlich genommen, auch wenn im zentralen
+  Ordner zufällig ein gleichnamiges Profil liegt; ohne `--config` und ohne
+  auffindbare `obfuskation.json` trägt die Fehlermeldung denselben Hinweis.
+- `TestUmgebung.cs` — dieselbe Umleitung wie in den beiden anderen
+  Testprojekten; weil ein Testfall das aktuelle Arbeitsverzeichnis
+  kurzzeitig wechselt, läuft auch dieses Testprojekt sequenziell.
+
+Die fünf Dateien von `Obfuskation.Gui.Tests`:
 
 - `EquivalenceTests.cs` — Oberfläche und Kommandozeile müssen dasselbe
   Ergebnis liefern, weil beide über dieselbe Engine und Ersetzungstabelle
   laufen.
 - `MainViewModelTests.cs` — die Bedienlogik des Hauptfensters, geprüft ohne
   laufendes Fenster, weil Dateidialoge als Fabrik hereinkommen und
-  Nebenfenster nur als Ereignis erbeten werden.
+  Nebenfenster nur als Ereignis erbeten werden; seit Fassung 1.1.0 zusätzlich
+  die Rückfrage bei ungespeicherten Änderungen (Abbrechen behält das alte
+  Profil, Verwerfen lädt das neue), das Anlegen eines Profils mit Name,
+  Beschreibung und gewähltem Ablageort, `NewFieldsHint` und die Eintragung
+  geöffneter Datendateien in den Nutzungs-Index.
+- `ProfilesViewModelTests.cs` (neu in Fassung 1.1.0) — die Profilübersicht:
+  Sortierung nach allen drei Schlüsseln samt Richtungswechsel, der Filter
+  greift auf Name, Beschreibung und Dateipfade, ein unlesbares Profil lässt
+  sich nicht öffnen, „Aus Liste entfernen“ lässt die Datei auf der Platte
+  stehen.
+- `FakeDialogService.cs` (neu in Fassung 1.1.0) — kein Testfall, sondern das
+  Doppel für `IDialogService`: liefert vorgegebene Antworten auf Rückfragen,
+  Anlegen- und Umbenennen-Dialog sowie die Profilwahl aus der Übersicht,
+  ohne dass dabei ein Fenster entsteht.
 - `TestUmgebung.cs` — keine Testfälle, sondern ein `[ModuleInitializer]`, der
   `XDG_CONFIG_HOME` vor dem ersten Test auf ein Wegwerfverzeichnis lenkt.
   Ohne ihn schreibt der Testlauf in die echte `gui.json` des angemeldeten
-  Benutzers (Befund D-8, in 1.0.1 behoben).
+  Benutzers (Befund D-8, in 1.0.1 behoben). Seit Fassung 1.1.0 greifen
+  mehrere Testklassen (`MainViewModelTests`, `ProfilesViewModelTests`) auf
+  denselben, so umgeleiteten Profil-Index zu, deshalb läuft auch dieses
+  Testprojekt inzwischen sequenziell (`AssemblyInfo.cs`).
 
 ## 3. Testumgebung
 
@@ -499,8 +580,9 @@ unversehrt.
 **Erwartetes Ergebnis:** Leere Feldliste mit Anleitung, alle drei Vorgänge
 abgeblendet.
 **Tatsächliches Ergebnis:** Titelzeile „kein Profil“, leere Feldliste mit
-dem Hinweis „Noch kein Profil geladen.“ und der Anleitung. `Ersetzen`,
-`Zurückholen` und `Prüfen` sind abgeblendet. Statuszeile: „Bereit.“
+dem Hinweis „Noch kein Profil geladen.“ und der Anleitung. `Pseudodatei
+erzeugen…`, `Klartextdatei erzeugen…` und `Prüfen` sind abgeblendet.
+Statuszeile: „Bereit.“
 
 ![Erststart ohne Profil: leere Feldliste, alle drei Vorgänge abgeblendet.](bilder/gui-leer.png)
 *Erststart ohne Profil: leere Feldliste, alle drei Vorgänge abgeblendet.*
@@ -525,21 +607,21 @@ unter „Hinweise zur Konfiguration“ alle zehn Befunde mit Feldpfad
 *Regelgerüst geladen: alle zehn Felder offen, Hinweise zur Konfiguration
 listen jeden Feldpfad.*
 
-#### G-03 — Ersetzen bei offenen Feldern
+#### G-03 — Pseudodatei erzeugen bei offenen Feldern
 
 **Vorbedingung:** G-02.
-**Schritte:** Auf `Ersetzen` klicken.
+**Schritte:** Auf `Pseudodatei erzeugen…` klicken.
 **Erwartetes Ergebnis:** Kein Speichern-Dialog, Meldung über offene Felder,
 nichts wird geschrieben.
 **Tatsächliches Ergebnis:** Es erschien kein Speichern-Dialog; die
 Statuszeile meldet „10 Felder offen — jedes Feld braucht eine Entscheidung,
-bevor ersetzt werden kann.“ Die Auswahl sprang auf das erste offene Feld.
-Es wurde nichts geschrieben. Entspricht N-01 auf der Kommandozeile (dort
-Rückgabewert 3).
+bevor die Pseudodatei erzeugt werden kann.“ Die Auswahl sprang auf das
+erste offene Feld. Es wurde nichts geschrieben. Entspricht N-01 auf der
+Kommandozeile (dort Rückgabewert 3).
 
-![Klick auf Ersetzen bei offenen Feldern: Statuszeile meldet die Anzahl offener Felder, kein Speichern-Dialog erscheint.](bilder/gui-abbruch-offene-felder.png)
-*Klick auf Ersetzen bei offenen Feldern: Statuszeile meldet die Anzahl
-offener Felder, kein Speichern-Dialog erscheint.*
+![Klick auf „Pseudodatei erzeugen…“ bei offenen Feldern: Statuszeile meldet die Anzahl offener Felder, kein Speichern-Dialog erscheint.](bilder/gui-abbruch-offene-felder.png)
+*Klick auf „Pseudodatei erzeugen…“ bei offenen Feldern: Statuszeile meldet
+die Anzahl offener Felder, kein Speichern-Dialog erscheint.*
 
 #### G-04 — Entschiedenes Profil, Feldregel und Vorschau
 
@@ -593,23 +675,25 @@ ein anderes Pseudonym als in G-04, weil das Salt flüchtig ist.
 *Vorschau ohne bestehende Ersetzungstabelle: Grünwald → Bramkamp, mit
 ausdrücklichem Hinweis auf den vorläufigen Charakter.*
 
-#### G-07 — Ersetzen
+#### G-07 — Pseudodatei erzeugen
 
 **Vorbedingung:** G-04.
-**Schritte:** Auf `Ersetzen` klicken, Speichern-Dialog bestätigen.
+**Schritte:** Auf `Pseudodatei erzeugen…` klicken, Speichern-Dialog
+bestätigen.
 **Erwartetes Ergebnis:** Ergebniskarte mit denselben Zählern wie der Lauf
 auf der Kommandozeile (P-03).
 **Tatsächliches Ergebnis:** Im Speichern-Dialog war `stammdaten.pseudo.csv`
 vorbelegt — der Zusatz `.pseudo` kommt vom Programm. Ergebniskarte:
-„Ersetzt — 120 Datensaetze · 20 ms · 1437 in der Tabelle“, darunter city
-120 · dateShift 120 · email 120 · firstName 120 · lastName 120 · numericId
-120 · phone 120 · postalCode 120 · redact 108 · street 120 — **dieselben
-Zähler wie P-03.** Neben den Schaltflächen erschien der Hinweis „↖ vor der
-Weitergabe prüfen“. Statuszeile: „Geschrieben: …/stammdaten.pseudo.csv“.
+„Ersetzt — 120 Datensaetze · 20 ms · 1437 in der Tabelle“,
+darunter city 120 · dateShift 120 · email 120 · firstName 120 · lastName
+120 · numericId 120 · phone 120 · postalCode 120 · redact 108 · street 120
+— **dieselben Zähler wie P-03.** Neben den Schaltflächen erschien der
+Hinweis „↖ vor der Weitergabe prüfen“. Statuszeile: „Geschrieben:
+…/stammdaten.pseudo.csv“.
 
-![Ergebniskarte nach dem Ersetzen: 120 Datensätze, 20 ms, 1437 in der Tabelle, dieselben Zähler wie auf der Kommandozeile.](bilder/gui-ergebnis-ersetzen.png)
-*Ergebniskarte nach dem Ersetzen: 120 Datensätze, 20 ms, 1437 in der
-Tabelle, dieselben Zähler wie auf der Kommandozeile.*
+![Ergebniskarte nach dem Erzeugen der Pseudodatei: 120 Datensätze, 20 ms, 1437 in der Tabelle, dieselben Zähler wie auf der Kommandozeile.](bilder/gui-ergebnis-ersetzen.png)
+*Ergebniskarte nach dem Erzeugen der Pseudodatei: 120 Datensätze, 20 ms,
+1437 in der Tabelle, dieselben Zähler wie auf der Kommandozeile.*
 
 #### G-08 — Gleichwertigkeit Oberfläche und Kommandozeile
 
@@ -657,17 +741,18 @@ zeigt 50 Fundstellen einzeln, die Kommandozeile 20.
 *Prüfen mit Verdachtsfällen: 1112 Funde bei `buchungen.pseudo.csv`,
 dieselbe Zahl wie auf der Kommandozeile.*
 
-#### G-11 — Zurückholen
+#### G-11 — Klartextdatei erzeugen
 
 **Vorbedingung:** `stammdaten.pseudo.csv` aus G-07 geöffnet.
-**Schritte:** Auf `Zurückholen` klicken, Vorschlag
+**Schritte:** Auf `Klartextdatei erzeugen…` klicken, Vorschlag
 `stammdaten.pseudo.klartext.csv` bestätigen.
 **Erwartetes Ergebnis:** Spalten 1–9 wieder identisch mit dem Original,
 Spalte 10 bleibt `***` mit Befund.
-**Tatsächliches Ergebnis:** „Zurueckgeholt — 120 Datensaetze · 26 ms“, city
-120 · dateShift 120 · email 120 · firstName 120 · lastName 120 · numericId
-120 · phone 120 · postalCode 120 · street 120. Verdachtsfälle: Zeile 1–9,
-Spalte Notiz — redact — nicht wiederherstellbar … und 58 weitere.
+**Tatsächliches Ergebnis:** „Zurueckgeholt — 120 Datensaetze · 26
+ms“, city 120 · dateShift 120 · email 120 · firstName 120 · lastName 120 ·
+numericId 120 · phone 120 · postalCode 120 · street 120. Verdachtsfälle:
+Zeile 1–9, Spalte Notiz — redact — nicht wiederherstellbar … und 58
+weitere.
 ```fish
 diff <(cut -d';' -f1-9 stammdaten.csv) <(cut -d';' -f1-9 stammdaten.pseudo.klartext.csv)
 ```
@@ -677,8 +762,8 @@ IDENTISCH
 Spalte 10 bleibt `***`, 108 Meldungen „nicht wiederherstellbar“, so viele
 wie `redact` beim Ersetzen gezählt hat.
 
-![Zurückgeholt: 120 Datensätze, 26 ms, Notiz bleibt als nicht wiederherstellbar gemeldet.](bilder/gui-zurueckholen.png)
-*Zurückgeholt: 120 Datensätze, 26 ms, Notiz bleibt als nicht
+![Klartextdatei erzeugt: 120 Datensätze, 26 ms, Notiz bleibt als nicht wiederherstellbar gemeldet.](bilder/gui-zurueckholen.png)
+*Klartextdatei erzeugt: 120 Datensätze, 26 ms, Notiz bleibt als nicht
 wiederherstellbar gemeldet.*
 
 #### G-12 — Fortschritt
@@ -821,12 +906,12 @@ obfuskation-gui --config kaputt-profil.json stammdaten.csv
 Datei, es wird nichts geschrieben.
 **Tatsächliches Ergebnis:** Statuszeile: „Die Konfiguration ist fehlerhaft
 — siehe Hinweise.“ Die Kopfzeile nennt `stammdaten.csv`, die Feldliste sagt
-aber „Keine Datei geöffnet.“ `Ersetzen` ist abgeblendet, es wurde nichts
-geschrieben — das Schutzziel ist erreicht.
+aber „Keine Datei geöffnet.“ `Pseudodatei erzeugen…` ist abgeblendet, es
+wurde nichts geschrieben — das Schutzziel ist erreicht.
 
-![Fehlerhafte Konfiguration: Statuszeile verweist auf Hinweise, Feldliste bleibt leer, Ersetzen ist abgeblendet.](bilder/gui-kaputte-konfiguration.png)
+![Fehlerhafte Konfiguration: Statuszeile verweist auf Hinweise, Feldliste bleibt leer, „Pseudodatei erzeugen…“ ist abgeblendet.](bilder/gui-kaputte-konfiguration.png)
 *Fehlerhafte Konfiguration: Statuszeile verweist auf Hinweise, Feldliste
-bleibt leer, Ersetzen ist abgeblendet.*
+bleibt leer, „Pseudodatei erzeugen…“ ist abgeblendet.*
 
 > Befund D-3: die Statuszeile verweist auf Hinweise, die nirgends sichtbar
 > sind — der Hinweisbereich hängt am ausgewählten Feld, und ohne gültige
@@ -882,6 +967,94 @@ zeigt ihn unverändert, kein Befund.*
 *Aufgeklappt ist `belegNummer` als gewählter Eintrag markiert — der Beleg
 dafür, dass die Auswahl den Eintrag jetzt tatsächlich in ihrer eigenen Liste
 findet.*
+
+### Profilverwaltung (Oberfläche, Fassung 1.1.0)
+
+Die folgenden vier Fälle sind für die manuelle Durchführung vorbereitet —
+Vorbedingung, Schritte und erwartetes Ergebnis stehen fest, ebenso die
+Bildaufnahme in `docs/bilder/aufnehmen.sh`. Die eigentliche Durchführung an
+den veröffentlichten Binärdateien und die Übernahme des tatsächlichen
+Ergebnisses samt Bildschirmfoto **stehen noch aus** und ergänzen diesen
+Abschnitt, sobald sie erfolgt sind — bis dahin ist er kein Ersatz für die
+automatisierten Tests aus Abschnitt 2 (`ProfileRenameTests` insbesondere),
+die bereits vollständig grün laufen.
+
+#### G-23 — Profil anlegen mit sichtbarem Namen
+
+**Vorbedingung:** Kein Profil geöffnet.
+**Schritte:** Über **Neu aus Datei…** `stammdaten.csv` wählen, im
+Anlegen-Dialog einen Namen und eine Beschreibung eintragen und auf
+**Anlegen** klicken.
+**Erwartetes Ergebnis:** Der Ablageort im Dialog läuft live mit dem
+eingetragenen Namen mit; die Erklärzeile zur Ersetzungstabelle ebenso.
+Nach **Anlegen** ist das Profil sofort unter dem gewählten Pfad gespeichert
+und in der Kopfzeile sichtbar; alle Felder stehen auf „offen“.
+**Tatsächliches Ergebnis:** steht aus.
+
+#### G-24 — Profilübersicht
+
+**Vorbedingung:** Mehrere Profile bereits benutzt (zentraler Ordner und/oder
+Zuletzt-Liste nicht leer).
+**Schritte:** **Profile…** in der Kopfzeile öffnen.
+**Erwartetes Ergebnis:** Sortierbare Liste mit Name, Dateien, zuletzt
+benutzt und geändert; ein Klick auf einen Spaltenkopf sortiert danach, ein
+zweiter Klick dreht die Richtung um; das Suchfeld filtert über Name,
+Beschreibung und Dateipfade; zur ausgewählten Zeile erscheint unten Pfad,
+Ersetzungstabelle und die zugehörigen Dateien.
+**Tatsächliches Ergebnis:** steht aus.
+
+#### G-25 — Profil umbenennen ohne Verlust der Ersetzungstabelle
+
+**Vorbedingung:** Ein Profil mit bereits bestehender Ersetzungstabelle, aus
+der Übersicht ausgewählt.
+**Schritte:** **Umbenennen…** klicken, die Rückfrage lesen, neuen Namen
+eintragen, bestätigen. Danach mit dem umbenannten Profil erneut dieselbe
+Datendatei ersetzen.
+**Erwartetes Ergebnis:** Die Rückfrage nennt vorab den unveränderten Pfad
+der Ersetzungstabelle. Nach dem Umbenennen liefert derselbe Klartext
+weiterhin dasselbe Pseudonym (`Tabelle: 0 neu`), keine Warnung „Der
+Mapping-Store gehört zum Profil …“. Das automatisierte Gegenstück dieses
+Falls (`ProfileRenameTests`, Abschnitt 2) läuft bereits grün und deckt die
+sicherheitskritische Eigenschaft ab; dieser Fall bestätigt sie zusätzlich an
+der tatsächlichen Bedienung.
+**Tatsächliches Ergebnis:** steht aus.
+
+#### G-26 — Rückfrage bei ungespeicherten Änderungen
+
+**Vorbedingung:** Ein Profil geladen, mindestens eine Feldregel seit dem
+letzten Speichern geändert.
+**Schritte:** Über **Profile…** ein anderes Profil zum Öffnen wählen.
+**Erwartetes Ergebnis:** Die Rückfrage „Ungespeicherte Änderungen“ erscheint
+mit den drei Schaltflächen Speichern, Verwerfen und Abbrechen, bevor das
+neue Profil geladen wird. **Abbrechen** behält das bisher geladene Profil
+samt der noch ungespeicherten Änderung bei; dieselbe Rückfrage erscheint
+beim Schließen des Fensters in demselben Zustand.
+**Tatsächliches Ergebnis:** steht aus.
+
+### Kurzhilfe (Oberfläche, Fassung 1.1.0)
+
+Derselbe Stand wie bei der Profilverwaltung oben: Vorbedingung, Schritte
+und erwartetes Ergebnis stehen fest, die tatsächliche Durchführung an den
+veröffentlichten Binärdateien und die Übernahme des Bildschirmfotos
+(`bilder/gui-kurzhilfe.png`, siehe `docs/anwenderdokumentation.md`,
+Abschnitt 4) **stehen noch aus**.
+
+#### G-27 — Kurzhilfe öffnen
+
+**Vorbedingung:** Oberfläche gestartet, mit oder ohne geladenes Profil.
+**Schritte:** Über **Mehr ▾** den Eintrag **Kurzhilfe…** wählen.
+**Erwartetes Ergebnis:** Ein Fenster mit dem Titel „Kurzhilfe“ und dem
+Untertitel „Das Wichtigste in zwei Minuten“ öffnet sich, mit sechs Karten:
+wofür das Programm da ist samt dem Warnhinweis Pseudonymisierung statt
+Anonymisierung, was ein Profil ist und wozu es gut ist (mit dem Beispiel
+stammdaten.csv/buchungen.csv und dem tatsächlichen Ablageort der Profile),
+der Weg durch das Programm in fünf nummerierten Schritten, die Abgrenzung
+von „ersetzen“ (ein Feld) gegen die drei Schaltflächen unten (die ganze
+Datei), der Schutz der Ersetzungstabelle in Fehlerfarbe und der Verweis auf
+die Anwenderdokumentation sowie `obfuskation --help`. **Schließen** beendet
+das Fenster, ohne dass sich am geladenen Profil oder an der geöffneten
+Datei etwas ändert.
+**Tatsächliches Ergebnis:** steht aus.
 
 ### Negativfälle
 
@@ -1253,6 +1426,15 @@ Der Katalog wurde zweimal vollständig abgearbeitet:
 Die folgende Tabelle gibt **Durchführung 2** wieder. Wo ein Befund in
 Durchführung 1 auftrat und inzwischen behoben ist, steht das dabei.
 
+Die Fälle **G-23 bis G-27** kamen erst mit Fassung 1.1.0 zum Katalog hinzu
+(Abschnitt 4) und waren zum Zeitpunkt von Durchführung 2 noch nicht
+vorhanden. Sie stehen der Vollständigkeit halber mit „steht aus“ in der
+Tabelle — die Tabelle soll den Stand **jedes** Falls zeigen, nicht nur der
+seinerzeit vorhandenen. Zusammen mit ihnen sind **G-07, G-09, G-10 und
+G-11** nachzuspielen: sie sind in Durchführung 2 bestanden, ihre
+Meldungstexte lauten seit 1.1.0 aber anders (siehe den Hinweis in
+Abschnitt 1).
+
 Zwischen beiden Durchführungen wurde die Ersetzungstabelle neu angelegt. Die
 Pseudonyme unterscheiden sich deshalb — das Salt entsteht mit jeder neuen
 Tabelle zufällig neu. Alle Zähler blieben gleich bis auf einen: die Zahl der
@@ -1298,6 +1480,11 @@ Meldungstexte müssen aber übereinstimmen.
 | G-20 | bestanden mit Befund | Befund D-3 |
 | G-21 | bestanden | Befund D-4 aus Durchführung 1, in 1.0.1 behoben — Nachweis in Abschnitt 6 |
 | G-22 | bestanden | Nachweis der Behebung von D-4, siehe Abschnitt 6 |
+| G-23 | steht aus | Profilverwaltung, neu in 1.1.0 — noch nicht manuell durchgespielt |
+| G-24 | steht aus | Profilverwaltung, neu in 1.1.0 — noch nicht manuell durchgespielt |
+| G-25 | steht aus | Profilverwaltung, neu in 1.1.0 — noch nicht manuell durchgespielt |
+| G-26 | steht aus | Profilverwaltung, neu in 1.1.0 — noch nicht manuell durchgespielt |
+| G-27 | steht aus | Kurzhilfe, neu in 1.1.0 — noch nicht manuell durchgespielt |
 | N-01 | bestanden | |
 | N-02 | bestanden | |
 | N-03 | bestanden mit Befund | Befund D-1 |

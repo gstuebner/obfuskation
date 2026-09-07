@@ -5,6 +5,7 @@
     <Project Path="src/Obfuskation.Gui/Obfuskation.Gui.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Obfuskation.Cli.Tests/Obfuskation.Cli.Tests.csproj" />
     <Project Path="tests/Obfuskation.Core.Tests/Obfuskation.Core.Tests.csproj" />
     <Project Path="tests/Obfuskation.Gui.Tests/Obfuskation.Gui.Tests.csproj" />
   </Folder>

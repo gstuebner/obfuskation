@@ -126,6 +126,9 @@ gewählten Feldes samt einer Vorschau am echten Wert aus der Datei
   sofort auf.
 - **Ersetzungstabelle** — Pfad, Anzahl je Namensraum und die Dateirechte.
   Zeigt **keine Werte**, gleich wie `mapping list`.
+- **Kurzhilfe** — sechs kurze Karten für alle, die die Oberfläche zum ersten
+  Mal öffnen: wofür das Werkzeug da ist, was ein Profil ist und wozu es gut
+  ist, und der Weg durch das Programm.
 - **Über** — die fünf Hinweise von oben und die verwendeten Pfade.
 
 **Hell und dunkel:** der Umschalter rechts oben geht durch drei Zustände —
@@ -137,6 +140,18 @@ Bequemlichkeiten: gewählte Ansicht, zuletzt geöffnete Profile, Fenstergröße 
 Bei großen Dateien zeigt die Oberfläche den Fortschritt und lässt sich
 abbrechen; ein Abbruch schreibt weder eine Ausgabedatei noch Einträge in die
 Ersetzungstabelle.
+
+**Profile verwalten.** Ein Profil bündelt Feldregeln und Ersetzungstabelle
+unter einem Namen; **Neu aus Datei…** fragt jetzt nach Name, optionaler
+Beschreibung und Ablageort (Vorgabe: `~/.config/obfuskation/profile/<name>.json`),
+und **Profile…** öffnet eine sortier- und durchsuchbare Übersicht aller
+bekannten Profile samt der zuletzt bearbeiteten Dateien. Ein Umbenennen aus
+dieser Übersicht heraus lässt die Einträge der Ersetzungstabelle unangetastet
+— es ändert sich nur der Name, im Profil selbst und, sofern die Tabelle
+schon existiert, auch dort, sodass kein Pseudonym ungültig wird. Beim
+Schließen des Fensters oder beim Wechsel zu einem anderen Profil fragt die
+Oberfläche nach, falls noch ungespeicherte Regeländerungen vorliegen
+(Speichern, Verwerfen oder Abbrechen).
 
 ### Ins Anwendungsmenü aufnehmen (Linux)
 
@@ -161,8 +176,8 @@ obfuskation obfuscate buchungen.csv  -o buchungen.pseudo.csv  --strict
 ```
 
 In der Oberfläche entsprechend: Profil einmal öffnen, dann die Dateien
-nacheinander über **Öffnen…** hereinholen und je **Ersetzen**. Das Profil
-bleibt dabei geladen.
+nacheinander über **Öffnen…** hereinholen und je **Pseudodatei
+erzeugen…**. Das Profil bleibt dabei geladen.
 
 Aus `4711` wird in allen drei Dateien derselbe Wert, weil das Pseudonym
 deterministisch aus dem Klartext abgeleitet und in der gemeinsamen
@@ -320,15 +335,26 @@ im Bestand auf beiden Seiten vorkommt.
 ## Befehle
 
 ```
-obfuskation init [--profile <name>] [--from <datei>] [--force]
+obfuskation init [--profile <name>] [--from <datei>] [--description <text>]
+                 [--central] [--force]
 obfuskation obfuscate <datei> [-o <ziel>] [--strict] [--dry-run] [--json]
 obfuskation deobfuscate [<datei>] [-o <ziel>] [--json]
 obfuskation scan <datei> [--json]
 obfuskation mapping list|path
+obfuskation profile list [--sort name|used|changed] [--json]
 ```
 
-Gemeinsame Optionen: `--config <pfad>`, `--format csv|json|text`,
+Gemeinsame Optionen: `--config <pfad-oder-profilname>`, `--format csv|json|text`,
 `--allow-unsafe-store`.
+
+`--config` nimmt statt eines Pfades auch einen bloßen Profilnamen entgegen —
+`--config demo` löst, sofern keine wörtliche Datei namens `demo` existiert,
+zu `~/.config/obfuskation/profile/demo.json` auf, demselben zentralen Ort,
+den auch die Oberfläche verwendet. `init --central` schreibt direkt dorthin
+statt nach `obfuskation.json` im aktuellen Verzeichnis, und `profile list`
+zeigt alle bekannten Profile — den zentralen Ordner plus alles, was der
+Nutzungs-Index gemerkt hat — mit Name, Anzahl der Dateien sowie den
+Zeitpunkten der letzten Benutzung und Änderung.
 
 - `--strict` — Felder ohne eigene Regel führen zum Abbruch, unabhängig von der
   Vorgabe im Profil.

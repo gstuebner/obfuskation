@@ -53,6 +53,7 @@ rootCommand.Subcommands.Add(BuildObfuscateCommand());
 rootCommand.Subcommands.Add(BuildDeobfuscateCommand());
 rootCommand.Subcommands.Add(BuildScanCommand());
 rootCommand.Subcommands.Add(BuildMappingCommand());
+rootCommand.Subcommands.Add(BuildProfileCommand());
 
 // Fassung und Ersteller stehen unter jeder Hilfe, wie in allen Programmen.
 ProgramInfo.AddHelpFooter(rootCommand);
@@ -72,6 +73,17 @@ Command BuildInitCommand()
         Description = "Beispieldatei, aus der die Feldnamen uebernommen werden",
     };
 
+    var descriptionOption = new Option<string?>("--description")
+    {
+        Description = "Freitext, wofuer dieses Profil da ist",
+    };
+
+    var centralOption = new Option<bool>("--central")
+    {
+        Description = "Im zentralen Profilordner ablegen (~/.config/obfuskation/profile/<name>.json) " +
+                      "statt als obfuskation.json im aktuellen Verzeichnis",
+    };
+
     var forceOption = new Option<bool>("--force")
     {
         Description = "Vorhandene Konfigurationsdatei ueberschreiben",
@@ -80,6 +92,8 @@ Command BuildInitCommand()
     var command = new Command("init", "Legt eine Konfigurationsdatei mit einem Regelgeruest an.");
     command.Options.Add(profileNameOption);
     command.Options.Add(fromOption);
+    command.Options.Add(descriptionOption);
+    command.Options.Add(centralOption);
     command.Options.Add(forceOption);
     command.Options.Add(configOption);
 
@@ -87,20 +101,29 @@ Command BuildInitCommand()
     {
         var profileName = parseResult.GetValue(profileNameOption) ?? "default";
         var from = parseResult.GetValue(fromOption);
+        var description = parseResult.GetValue(descriptionOption);
+        var central = parseResult.GetValue(centralOption);
         var force = parseResult.GetValue(forceOption);
-        var target = parseResult.GetValue(configOption) ?? ProfileStore.DefaultFileName;
+        var explicitTarget = parseResult.GetValue(configOption);
+
+        // --config gewinnt immer, wenn ausdruecklich angegeben; sonst
+        // entscheidet --central zwischen zentralem Ordner und der bisherigen
+        // Vorgabe im aktuellen Verzeichnis.
+        var target = explicitTarget
+            ?? (central ? PathHelper.DefaultProfilePath(profileName) : ProfileStore.DefaultFileName);
+        var fullTarget = Path.GetFullPath(target);
 
         if (File.Exists(target) && !force)
         {
             ConsoleOutput.WriteError(
-                $"{target} ist bereits vorhanden. Mit --force ueberschreiben oder --config setzen.");
+                $"{fullTarget} ist bereits vorhanden. Mit --force ueberschreiben oder --config setzen.");
             return ExitCodes.Failure;
         }
 
-        var profile = ProfileScaffolder.Create(profileName, from);
+        var profile = ProfileScaffolder.Create(profileName, from, description);
         ProfileStore.Save(profile, target);
 
-        ConsoleOutput.WriteInfo($"{target} angelegt (Profil '{profileName}').");
+        ConsoleOutput.WriteInfo($"{fullTarget} angelegt (Profil '{profileName}').");
         ConsoleOutput.WriteInfo($"Ersetzungstabelle: {profile.MappingStore}");
 
         if (profile.Fields.Count > 0)
@@ -329,4 +352,70 @@ Command BuildMappingCommand()
     command.Subcommands.Add(listCommand);
     command.Subcommands.Add(pathCommand);
     return command;
+}
+
+Command BuildProfileCommand()
+{
+    var sortOption = new Option<ProfileListSort>("--sort")
+    {
+        Description = "Sortierung: name, used oder changed",
+        DefaultValueFactory = _ => ProfileListSort.Name,
+    };
+
+    // Eigene --json-Option statt der geteilten: anders als bei obfuscate/
+    // deobfuscate/scan braucht die Liste kein -o, der Hinweistext der
+    // geteilten Option waere hier irrefuehrend.
+    var profileJsonOption = new Option<bool>("--json")
+    {
+        Description = "Liste als JSON auf die Standardausgabe",
+    };
+
+    var command = new Command("profile", "Auskunft ueber bekannte Profile.");
+
+    var listCommand = new Command("list",
+        "Zeigt die Profile im zentralen Ordner sowie aus dem Nutzungs-Index. " +
+        "Die Zuletzt-Liste der Oberflaeche (gui.json) wird nicht gelesen.");
+    listCommand.Options.Add(sortOption);
+    listCommand.Options.Add(profileJsonOption);
+    listCommand.SetAction(parseResult => CommandContext.Run(() =>
+    {
+        var sort = parseResult.GetValue(sortOption);
+        var json = parseResult.GetValue(profileJsonOption);
+
+        var index = ProfileIndex.Load();
+        var summaries = ProfileCatalog.Collect(index, Array.Empty<string>());
+        var sorted = SortProfiles(summaries, sort);
+
+        if (json)
+            ConsoleOutput.WriteProfilesJson(sorted);
+        else
+            ConsoleOutput.WriteProfiles(sorted);
+
+        return ExitCodes.Success;
+    }));
+
+    command.Subcommands.Add(listCommand);
+    return command;
+}
+
+IReadOnlyList<ProfileSummary> SortProfiles(IReadOnlyList<ProfileSummary> summaries, ProfileListSort sort)
+    => sort switch
+    {
+        ProfileListSort.Used => summaries
+            .OrderByDescending(p => p.LastUsedUtc ?? DateTimeOffset.MinValue)
+            .ToList(),
+        ProfileListSort.Changed => summaries
+            .OrderByDescending(p => p.ModifiedUtc)
+            .ToList(),
+        _ => summaries
+            .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList(),
+    };
+
+/// <summary>Sortierschluessel fuer 'obfuskation profile list'.</summary>
+internal enum ProfileListSort
+{
+    Name,
+    Used,
+    Changed,
 }

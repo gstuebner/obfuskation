@@ -1,0 +1,144 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="640"
+        x:Class="Obfuskation.Gui.Views.HelpWindow"
+        Title="Kurzhilfe"
+        Width="620" Height="640" MinWidth="520" MinHeight="440"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <!-- Bewusst kurz gehalten: wer hier landet, sucht eine Antwort, kein
+       zweites Handbuch. Die ausfuehrliche Fassung steht in
+       docs/anwenderdokumentation.md, darauf verweist der Schluss. -->
+  <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+
+    <StackPanel Grid.Row="0" Spacing="2" Margin="0,0,0,14">
+      <TextBlock Text="Kurzhilfe" Classes="heading"/>
+      <TextBlock Classes="muted small"
+                 Text="Das Wichtigste in zwei Minuten"/>
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Spacing="12">
+
+        <!-- ================================================== Zweck ==== -->
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Wofür dieses Programm da ist" Classes="card-title" Margin="0"/>
+            <TextBlock TextWrapping="Wrap"
+                       Text="Sie haben eine Datei mit echten Daten und wollen sie weitergeben — etwa an eine KI, an einen Dienstleister oder in ein Testsystem. Obfuskation tauscht die Echtwerte gegen erfundene, aber gleich aussehende Werte aus. Aus der Antwort, die Sie zurückbekommen, holt es die Echtwerte wieder hervor."/>
+            <TextBlock Classes="warning small" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Das ist Pseudonymisierung, keine Anonymisierung: der Bezug bleibt herstellbar — für Sie und für jeden, der an die Ersetzungstabelle kommt."/>
+          </StackPanel>
+        </Border>
+
+        <!-- ================================================= Profil ==== -->
+        <Border Classes="card" BorderBrush="{DynamicResource BrushAccent}">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Was ein Profil ist — und wozu es gut ist"
+                       Classes="card-title" Margin="0"/>
+            <TextBlock TextWrapping="Wrap"
+                       Text="Ein Profil hält zweierlei zusammen: die Regeln, was mit jedem Feld geschehen soll, und die Ersetzungstabelle, in der steht, welcher Echtwert zu welchem Pseudonym gehört."/>
+            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Warum das nötig ist, zeigt sich, sobald mehrere Dateien zusammengehören. Stehen Kunden in stammdaten.csv und ihre Buchungen in buchungen.csv, muss die Kundennummer 10000 in beiden Dateien dasselbe Pseudonym bekommen — sonst zerfällt die Verbindung, und die Beispieldaten sind wertlos. Genau das leistet ein gemeinsames Profil."/>
+            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Und nur mit derselben Ersetzungstabelle lässt sich später eine Antwort wieder auf die Echtwerte zurückführen. Ein anderes Profil heißt: andere Tabelle, keine Zuordnung."/>
+
+            <Border Classes="card-raised" Padding="10" Margin="0,6,0,0">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="small" FontWeight="SemiBold"
+                           Text="Praktisch heißt das:"/>
+                <TextBlock Classes="small" TextWrapping="Wrap"
+                           Text="Profil einmal öffnen, dann alle zusammengehörenden Dateien nacheinander bearbeiten. Die Reihenfolge spielt keine Rolle — der Zusammenhang hängt am Profil, nicht am Dateinamen."/>
+                <TextBlock Classes="small" TextWrapping="Wrap"
+                           Text="Für einen anderen Datenbestand ein eigenes Profil anlegen. Unter „Profile…“ sehen Sie alle, mit den Dateien, die dazugehören."/>
+              </StackPanel>
+            </Border>
+
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,6,0,0">
+              <TextBlock Text="Profile liegen unter" Classes="muted small"
+                         VerticalAlignment="Center"/>
+              <TextBlock Name="ProfileDirText" Classes="mono small"
+                         VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <!-- =================================================== Weg ===== -->
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Der Weg durch das Programm" Classes="card-title" Margin="0"/>
+
+            <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                  ColumnSpacing="10" RowSpacing="6">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="1." Classes="accent"/>
+              <TextBlock Grid.Row="0" Grid.Column="1" TextWrapping="Wrap"
+                         Text="Profil wählen: „Neu aus Datei…“ leitet aus einer vorhandenen Datei ein Regelgerüst ab, „Profile…“ öffnet ein vorhandenes."/>
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="2." Classes="accent"/>
+              <TextBlock Grid.Row="1" Grid.Column="1" TextWrapping="Wrap"
+                         Text="Datei öffnen. Links erscheint jedes Feld mit einem Punkt: gefüllt heißt entschieden, ein offener Kreis heißt, dass die Entscheidung noch fehlt."/>
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="3." Classes="accent"/>
+              <TextBlock Grid.Row="2" Grid.Column="1" TextWrapping="Wrap"
+                         Text="Jedes Feld entscheiden. Solange auch nur eines offen ist, wird bewusst nichts geschrieben — versehentlich durchgereichte Echtdaten wären der teure Fehler."/>
+
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="4." Classes="accent"/>
+              <TextBlock Grid.Row="3" Grid.Column="1" TextWrapping="Wrap"
+                         Text="„Pseudodatei erzeugen…“ schreibt eine neue Datei; aus kunden.csv wird kunden.pseudo.csv. Die Eingabedatei bleibt unangetastet."/>
+
+              <TextBlock Grid.Row="4" Grid.Column="0" Text="5." Classes="accent"/>
+              <TextBlock Grid.Row="4" Grid.Column="1" TextWrapping="Wrap"
+                         Text="„Prüfen“ vor der Weitergabe: es durchsucht die erzeugte Datei nach Resten von Echtdaten. Erst danach weitergeben."/>
+            </Grid>
+
+            <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Kommt die Antwort zurück, führt „Klartextdatei erzeugen…“ die Pseudonyme wieder auf die Echtwerte zurück — auch in freiem Text, nicht nur in Tabellen."/>
+          </StackPanel>
+        </Border>
+
+        <!-- ============================================== Wortschatz === -->
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Zwei Wörter, die leicht zu verwechseln sind"
+                       Classes="card-title" Margin="0"/>
+            <TextBlock TextWrapping="Wrap" Classes="small"
+                       Text="„ersetzen“ im Regelbereich rechts betrifft immer nur das eine gewählte Feld: dieser Wert bekommt ein Pseudonym. Die Schaltflächen unten betreffen dagegen die ganze Datei."/>
+          </StackPanel>
+        </Border>
+
+        <!-- ================================================ Tabelle ==== -->
+        <Border Classes="card" BorderBrush="{DynamicResource BrushError}">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Die Ersetzungstabelle schützen" Classes="card-title" Margin="0"/>
+            <TextBlock TextWrapping="Wrap"
+                       Text="In der Ersetzungstabelle stehen sämtliche Echtwerte im Klartext. Sie ist das schützenswerteste Stück des ganzen Vorgangs. Das Programm legt sie außerhalb Ihres Projektverzeichnisses ab und weigert sich, sie in einem Git-Arbeitsverzeichnis anzulegen."/>
+            <TextBlock Classes="error small" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Diese Datei niemals weitergeben, nicht einchecken, nicht mit hochladen. Wo sie liegt, zeigt „Ersetzungstabelle…“ im Menü „Mehr“."/>
+          </StackPanel>
+        </Border>
+
+        <!-- ============================================== Weiterlesen == -->
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Wenn das nicht reicht" Classes="card-title" Margin="0"/>
+            <!-- Der Weg ueber die Projektseite und nicht ueber einen Dateipfad:
+                 die ausgelieferten Pakete enthalten nur die READMEs, kein
+                 docs-Verzeichnis. Ein Pfad ginge dort ins Leere. -->
+            <TextBlock TextWrapping="Wrap" Classes="small"
+                       Text="Die ausführliche Anleitung führt einmal durch den vollständigen Ablauf an einem Beispielbestand und erklärt alle Behandlungen, alle Generatoren und jede Fehlermeldung. Sie liegt als „anwenderdokumentation“ im Verzeichnis docs des Projekts — als Text und als PDF."/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Projektseite: github.com/gstuebner/obfuskation · Auf der Kommandozeile hilft obfuskation --help weiter."/>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <Button Grid.Row="2" Content="Schließen" Classes="primary"
+            HorizontalAlignment="Right" Margin="0,14,0,0" Click="OnClose"/>
+  </Grid>
+</Window>

@@ -1,10 +1,13 @@
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using Obfuskation.Core.Configuration;
+using Obfuskation.Gui.ViewModels;
+using Obfuskation.Gui.Views;
 
 namespace Obfuskation.Gui.Services;
 
-/// <summary>Datei- und Rueckfragedialoge.</summary>
-public sealed class DialogService
+/// <summary>Datei- und Rueckfragedialoge. Die einzige echte Umsetzung von <see cref="IDialogService"/>.</summary>
+public sealed class DialogService : IDialogService
 {
     private readonly Window _owner;
 
@@ -79,6 +82,68 @@ public sealed class DialogService
         {
             return null;
         }
+    }
+
+    // -------------------------------------------------------- Rueckfragen
+
+    public async Task<SaveChoice> AskSaveChangesAsync(string profileName)
+    {
+        var window = new ConfirmWindow(
+            "Ungespeicherte Änderungen",
+            $"Das Profil „{profileName}“ hat ungespeicherte Änderungen. Speichern, "
+            + "bevor fortgefahren wird?",
+            new (string Label, string Result)[]
+            {
+                ("Abbrechen", "cancel"),
+                ("Verwerfen", "discard"),
+                ("Speichern", "save"),
+            });
+
+        var ergebnis = await window.ShowDialog<string?>(_owner);
+
+        // Ohne Auswahl (Titelleiste geschlossen) gilt die vorsichtige Richtung:
+        // wie ausdrueckliches Abbrechen, nie wie Verwerfen.
+        return ergebnis switch
+        {
+            "save" => SaveChoice.Save,
+            "discard" => SaveChoice.Discard,
+            _ => SaveChoice.Cancel,
+        };
+    }
+
+    public async Task<NewProfileResult?> AskNewProfileAsync(NewProfileProposal proposal)
+    {
+        var viewModel = new NewProfileViewModel(proposal.SuggestedName, proposal.SampleFilePath);
+        var window = new NewProfileWindow { DataContext = viewModel };
+        viewModel.CloseRequested += () => window.Close();
+
+        await window.ShowDialog(_owner);
+
+        if (!viewModel.Confirmed)
+            return null;
+
+        return new NewProfileResult(viewModel.Name, viewModel.Description, viewModel.TargetPath, viewModel.OpenExisting);
+    }
+
+    public async Task<string?> AskRenameProfileAsync(RenameProposal proposal)
+    {
+        var viewModel = new RenameProfileViewModel(proposal);
+        var window = new RenameProfileWindow { DataContext = viewModel };
+        viewModel.CloseRequested += () => window.Close();
+
+        await window.ShowDialog(_owner);
+
+        return viewModel.Confirmed ? viewModel.NewName : null;
+    }
+
+    public async Task<ProfileSummary?> ShowProfilesAsync(ProfilesViewModel viewModel)
+    {
+        var window = new ProfilesWindow { DataContext = viewModel };
+        viewModel.CloseRequested += () => window.Close();
+
+        await window.ShowDialog(_owner);
+
+        return viewModel.ChosenProfile;
     }
 
     /// <summary>

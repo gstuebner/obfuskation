@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.0.2
+version: 1.1.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 06.09.2026
+date: 07.09.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.0.2 · Stand 6. September 2026
+Fassung 1.1.0 · Stand 7. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -25,7 +25,7 @@ Das Projekt besteht aus drei Projekten:
 src/Obfuskation.Core/    Klassenbibliothek — die gesamte Fachlogik
 src/Obfuskation.Cli/     Kommandozeilenprogramm, eine dünne Hülle darum
 src/Obfuskation.Gui/     Oberfläche (Avalonia), ebenfalls nur eine Hülle
-tests/                   xUnit — Core und Oberfläche getrennt
+tests/                   xUnit — Core, Kommandozeile und Oberfläche getrennt
 ```
 
 Die Bibliothek kennt weder Konsole noch Fenster: `ObfuscationEngine` gibt
@@ -63,6 +63,63 @@ Ausgaben.
 | `GeneratorDescriptions` | `src/Obfuskation.Core/Generation/GeneratorDescriptions.cs` | Deutsche Erklärungen zu jedem eingebauten Generator, gemeinsam genutzt von Oberfläche und Hilfetexten. |
 | Prozessoren | `src/Obfuskation.Core/Formats/{Csv,Json,PlainText}Processor.cs` | Zerlegen und Zusammensetzen der drei Dateiformate; delegieren die Feldentscheidung an einen `IRecordTransformer`. |
 | Transformer | `src/Obfuskation.Core/Formats/{Obfuscate,Deobfuscate,Scan}Transformer.cs` | Implementieren `IRecordTransformer` und damit die eigentliche Fachlogik je Vorgang, unabhängig vom Dateiformat. |
+| `PathHelper` | `src/Obfuskation.Core/PathHelper.cs` | Pfadauflösung an einer Stelle: `ConfigDirectory`, `ProfileDirectory`, `DefaultProfilePath`, `DefaultMappingStorePath` und `ResolveMappingStore` — Letztere gemeinsam genutzt von `ObfuscationEngine.ResolveMappingStorePath` und `ProfileCatalog`, damit die Regel nicht zweimal dasteht. |
+| `ProfileIndex` | `src/Obfuskation.Core/Configuration/ProfileIndex.cs` | Der Nutzungs-Index: merkt sich Pfade bearbeiteter Datendateien je Profil und wann ein Profil zuletzt benutzt wurde. Getrennt von der Profildatei selbst — Begründung unten. |
+| `ProfileCatalog` | `src/Obfuskation.Core/Configuration/ProfileCatalog.cs` | Sammelt alle bekannten Profile (zentraler Ordner plus Zusatzpfade) zu `ProfileSummary`-Zeilen für Übersicht und `profile list`; ein unlesbares Profil ergibt einen Eintrag mit gesetztem `Error`, nie eine Ausnahme. |
+| `ProfileRenamer` | `src/Obfuskation.Core/Configuration/ProfileRenamer.cs` | Der sicherheitskritische Teil der Profilverwaltung: benennt ein Profil um, ohne den Bezug zu seiner Ersetzungstabelle zu verlieren (Einzelheiten unten). |
+
+### Warum die Nutzungsdaten im Index stehen, nicht im Profil
+
+Naheliegend wäre gewesen, Pfad und Zeitpunkt der zuletzt bearbeiteten
+Dateien gleich im Profil selbst mitzuführen — ein Feld `lastUsedFiles` neben
+`fields` und `textRules`. Das wurde bewusst nicht so gebaut, aus einem
+einzigen, aber durchschlagenden Grund: die Profildatei ist die Regeldatei,
+und die Regeldatei wird **nie ungefragt geschrieben**. Jede
+Feldregeländerung in der Oberfläche lebt bis zum ausdrücklichen Klick auf
+„Speichern“ nur im Speicher (`ProfileSession.HasUnsavedChanges`); genau das
+ist die Grundlage für die Rückfrage bei ungespeicherten Änderungen
+(Abschnitt 7). Würde das Öffnen einer Datendatei automatisch das Profil auf
+der Platte aktualisieren, um den neuen Dateipfad zu vermerken, geschähe
+damit zwangsläufig eines von zwei unerwünschten Dingen: entweder es würde
+nur der Nutzungs-Teil geschrieben und der Rest der noch unbestätigten
+Feldregeln im Speicher ignoriert (eine stille Sonderregel, die schwer
+nachvollziehbar wäre), oder es würden gleich alle unbestätigten
+Regeländerungen mitgeschrieben — und genau das darf nicht passieren, weil
+der Anwender sie noch nicht bestätigt hat. Ein einfaches „Datei geöffnet“
+hätte damit den Nebeneffekt, ein halbfertiges Regelwerk festzuschreiben.
+
+Die Trennung in eine eigene, ausschließlich maschinell gepflegte Indexdatei
+(`profil-index.json`) löst das sauber: `ProfileIndex.RecordDataFile` und
+`RecordProfileUse` schreiben bei jedem Öffnen unbekümmert und ohne
+Rückfrage, weil dort ausschließlich Pfade und Zeitstempel stehen — nie eine
+Feldregel, nie ein unbestätigter Zustand. Der Preis dafür ist, dass die
+Indexdatei rein informativ ist und beim Löschen (`ProfileIndex.Forget`,
+„Aus Liste entfernen” in der Übersicht) nichts an den eigentlichen Profilen
+oder Ersetzungstabellen ändert — genau das macht sie aber auch gefahrlos
+löschbar.
+
+### Das kritische Detail beim Umbenennen
+
+`ProfileRenamer.Rename` (`src/Obfuskation.Core/Configuration/ProfileRenamer.cs:29`)
+ändert scheinbar nur ein Textfeld, `Profile.ProfileName`. Der Name bestimmt
+aber über `PathHelper.DefaultMappingStorePath` auch den *Vorgabepfad* der
+Ersetzungstabelle, solange `Profile.MappingStore` leer ist — und dieser
+Vorgabepfad wird beim Anlegen nicht laufend neu berechnet, sondern beim
+allerersten Lauf einmal aufgelöst und ist von da an implizit an den
+damaligen Namen gebunden. Würde `Rename` den Namen zuerst ändern, zeigte die
+Vorgabe für den *neuen* Namen auf ein anderes, leeres Verzeichnis: aus Sicht
+der nächsten Läufe gäbe es plötzlich keine einzige bekannte Pseudonymisierung
+mehr, und `Zurückholen` fände nichts. Deshalb schreibt `Rename` als ersten
+Schritt den bisherigen, aus dem *alten* Namen aufgelösten Pfad ausdrücklich
+in `Profile.MappingStore` fest (`MappingStorePinned` im `RenameOutcome`),
+bevor der Name sich ändert. Erst danach folgt der zweite Schritt: existiert
+die Tabelle bereits, wird der Profilname auch **in ihr** nachgezogen
+(`MappingStore.RenameProfile`) — ohne diesen Schritt würde `MappingStore.Open`
+bei jedem folgenden Lauf mit „Der Mapping-Store gehört zum Profil …“ warnen,
+weil der im Dokument hinterlegte Name dann vom Profilnamen abwiche. Beide
+Schritte zusammen sind der Grund, warum Umbenennen überhaupt eigenen Code
+braucht statt eines einfachen Feldzugriffs; abgesichert durch
+`ProfileRenameTests`, die wichtigsten Tests des gesamten Vorhabens.
 
 ## 3. Datenfluss eines `obfuscate`-Laufs
 
@@ -232,18 +289,69 @@ MVVM ohne Framework: `ObservableObject` und `RelayCommand`/`AsyncRelayCommand`
 `RelayCommand.cs`) sind Eigenbau, keine externe Bibliothek. `MainViewModel`
 kennt weder `Window` noch einen Dateidialog unmittelbar:
 
-- **Dialoge als Fabrik:** der Konstruktor von `MainViewModel` nimmt
-  `Func<DialogService> dialogs` entgegen; erst beim tatsächlichen Aufruf
-  entsteht der `DialogService` mit Bezug auf das echte Fenster
-  (`src/Obfuskation.Gui/Services/DialogService.cs`). Dadurch lässt sich das
-  Ansichtsmodell in Tests mit einer Fabrik füttern, die eine Ausnahme wirft,
-  falls doch ein Dialog aufgerufen würde (siehe
-  `tests/Obfuskation.Gui.Tests/EquivalenceTests.cs:125`).
-- **Nebenfenster als Ereignis:** `TextRulesRequested`, `MappingRequested`
-  und `AboutRequested` sind einfache `Action`-Ereignisse
-  (`src/Obfuskation.Gui/ViewModels/MainViewModel.cs:78`); `MainWindow.axaml.cs`
-  abonniert sie und öffnet das jeweilige Fenster. Das Ansichtsmodell selbst
-  öffnet nie ein Fenster.
+- **Dialoge hinter einer Schnittstelle:** der Konstruktor von
+  `MainViewModel` nimmt `Func<IDialogService> dialogs` entgegen
+  (`src/Obfuskation.Gui/Services/IDialogService.cs`); erst beim
+  tatsächlichen Aufruf entsteht der echte `DialogService` mit Bezug auf das
+  laufende Fenster (`src/Obfuskation.Gui/Services/DialogService.cs`), die
+  einzige Umsetzung der Schnittstelle. Dadurch lässt sich das Ansichtsmodell
+  in Tests mit einer Fabrik füttern, die entweder eine Ausnahme wirft, falls
+  doch ein Dialog aufgerufen würde (`tests/Obfuskation.Gui.Tests/EquivalenceTests.cs:125`),
+  oder — für die Profilverwaltung — mit `FakeDialogService`
+  (`tests/Obfuskation.Gui.Tests/FakeDialogService.cs`) vorgegebene Antworten
+  liefert: welche Wahl bei der Rückfrage „ungespeicherte Änderungen“
+  getroffen wird, welcher Name und Ablageort beim Anlegen herauskommen, oder
+  welches Profil aus der Übersicht gewählt wird — alles ohne ein einziges
+  echtes Fenster.
+- **Nebenfenster als Ereignis** (die drei bestehenden aus Fassung 1.0.0,
+  dazu `HelpRequested` für die Kurzhilfe aus 1.1.0) und **Rückfragen über
+  `IDialogService`** (neu in 1.1.0): `TextRulesRequested`,
+  `MappingRequested`, `AboutRequested` und `HelpRequested` sind einfache
+  `Action`-Ereignisse (`src/Obfuskation.Gui/ViewModels/MainViewModel.cs:78`);
+  `MainWindow.axaml.cs` abonniert sie und öffnet das jeweilige Fenster. Die
+  Kurzhilfe (`HelpWindow.axaml`) folgt damit demselben schlichten Muster wie
+  die drei älteren Nebenfenster, nicht dem `IDialogService` der
+  Profilverwaltung — sie liefert kein Ergebnis, auf das der Aufrufer warten
+  müsste, sondern zeigt nur an. Die drei neuen Fenster der
+  Profilverwaltung — `NewProfileWindow`, `RenameProfileWindow`,
+  `ProfilesWindow` (alle unter `src/Obfuskation.Gui/Views/`) — laufen
+  dagegen über `IDialogService`-Methoden, die ein `Task<TErgebnis?>`
+  liefern: `AskNewProfileAsync`, `AskRenameProfileAsync`,
+  `ShowProfilesAsync`. Der Unterschied zu den älteren Nebenfenstern: diese
+  drei brauchen ein Ergebnis, auf das der Aufrufer wartet (den gewählten
+  Namen, das gewählte Profil), ein Ereignis ohne Rückgabewert würde dafür
+  nicht reichen. `ConfirmWindow` (`src/Obfuskation.Gui/Views/ConfirmWindow.axaml`)
+  ist der schlichte, wiederverwendbare Meldungsdialog mit bis zu drei
+  Schaltflächen dahinter — Avalonia bringt keinen mit; er bedient sowohl
+  `AskSaveChangesAsync` als auch die Umbenennen-Rückfrage. Jede Schaltfläche
+  schließt das Fenster mit ihrem `Tag` als Ergebniswert; ohne Auswahl (etwa
+  Schließen über die Titelleiste) liefert `ShowDialog<string?>` `null`, was
+  der Aufrufer als die vorsichtige Richtung wertet — „Abbrechen“, nie
+  „Verwerfen“.
+- **Warum es die Kurzhilfe gibt:** `docs/anwenderdokumentation.md` erklärt
+  das Programm vollständig, aber eine Anleitung, die neben dem Programm
+  liegt, wird erfahrungsgemäß nicht gelesen — wer die Oberfläche zum ersten
+  Mal öffnet, öffnet kein zweites Dokument dazu. Ohne einen Hinweis
+  unmittelbar im Programm erschließt sich insbesondere nicht, wozu ein
+  Profil überhaupt gut ist: dass es Feldregeln und Ersetzungstabelle
+  bündelt und deshalb dieselbe Datei bei einem falschen Profil ein anderes
+  Pseudonym bekäme. Die Kurzhilfe (`HelpWindow.axaml`) trägt diese
+  Erklärung deshalb in eine einzige, bewusst kurz gehaltene Ansicht im
+  Programm selbst, mit einem Verweis am Ende auf die ausführliche
+  Anwenderdokumentation für alles, was darüber hinausgeht.
+- **Schutz vor Datenverlust:** `MainViewModel.EnsureChangesHandledAsync()`
+  (`src/Obfuskation.Gui/ViewModels/MainViewModel.cs`) fragt über
+  `AskSaveChangesAsync` nach, sobald `HasUnsavedChanges` zutrifft, und
+  liefert `false`, wenn der Anwender „Abbrechen“ wählt; aufgerufen vor
+  `LoadProfile` in `OpenProfileAsync`, `NewProfileAsync` und dem Öffnen
+  eines Profils aus der Übersicht (`ShowProfilesAsync`). Beim
+  Fensterschließen greift dieselbe Methode über einen kleinen Umweg: `Window.Closing`
+  kann nicht auf eine `Task` warten, deshalb bricht `App.axaml.cs` den
+  ersten Schließversuch mit `e.Cancel = true` ab, startet
+  `EnsureChangesHandledAsync()` und ruft bei `true` über einen Merker
+  `_closeConfirmed` ein zweites Mal `window.Close()` — der Merker muss vor
+  diesem zweiten Aufruf gesetzt sein, sonst entstünde eine Schleife aus
+  Abbrechen und erneutem Rückfragen.
 - **Themen** liegen unter `src/Obfuskation.Gui/Themes/` (`Colors.axaml`,
   `Controls.axaml`, `Metrics.axaml`); `ThemeService.Apply`
   (`src/Obfuskation.Gui/Services/ThemeService.cs`) setzt nur
@@ -252,7 +360,20 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
 
 Weil die Bedienlogik so von der laufenden Anwendung entkoppelt ist, lässt
 sie sich ohne Fenster prüfen — `tests/Obfuskation.Gui.Tests/MainViewModelTests.cs`
-tut das für Profilwahl, Feldregeln und die drei Vorgänge.
+tut das für Profilwahl, Feldregeln und die drei Vorgänge, sowie neu für die
+Rückfrage bei ungespeicherten Änderungen und das Anlegen eines Profils;
+`tests/Obfuskation.Gui.Tests/ProfilesViewModelTests.cs` prüft Sortierung,
+Filter und „Aus Liste entfernen“ der Übersicht, ebenfalls ohne ein echtes
+Fenster.
+
+**`MappingSummary`** (`src/Obfuskation.Gui/Services/MappingSummary.cs`) zieht
+die Logik, die bislang nur `MappingViewModel` kannte — Pfad, Anzahl der
+Einträge, Existenz der Tabelle —, in eine kleine, eigenständige Hilfsklasse,
+die jetzt sowohl `MappingViewModel` als auch die neue Untertitelzeile der
+Kopfzeile (`MainViewModel.ProfileSubtitle`) verwenden. Neu berechnet wird
+sie nur beim Profilladen und nach einem abgeschlossenen Lauf, nicht bei
+jeder einzelnen Feldregeländerung — die Tabelle ändert sich schließlich
+auch nur bei einem tatsächlichen Lauf.
 
 ## 8. Bauen, testen, freigeben
 
@@ -301,6 +422,7 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 |---|---|---|---|
 | `version` | `int` | `1` | Muss ≤ der vom Programm unterstützten Version sein, sonst Fehler |
 | `profileName` | `string` | `"default"` | Name des Profils; bestimmt den Standardpfad der Ersetzungstabelle und ist im Store hinterlegt |
+| `description` | `string?` | `null` | Freitext des Anwenders, wofür das Profil da ist. Rein erklärend, ohne Wirkung auf die Verarbeitung; wird von der Oberfläche in Kopfzeile und Profilübersicht angezeigt. Optionales Feld seit Fassung 1.1.0 — `Profile.Version` bleibt trotzdem `1`, da `System.Text.Json` unbekannte Felder überliest und alte Programme neue Profile ohne diese Angabe lesen können |
 | `mappingStore` | `string?` | `null` | Pfad zur Mapping-Datei, `~` wird aufgelöst; leer heißt `~/.local/share/obfuskation/<profileName>/mapping.json` |
 | `input` | `InputSettings` | siehe unten | Einstellungen zum Einlesen |
 | `defaults` | `ProfileDefaults` | siehe unten | Vorgaben für Felder ohne eigene Regel |
@@ -369,13 +491,49 @@ Skripte werten sie aus, sie ändern sich nicht stillschweigend.
 | 4 | `scan` hat Verdachtsfälle gefunden |
 | 5 | Ersetzungstabelle widersprüchlich oder gesperrt |
 
+### Profilverwaltung auf der Kommandozeile
+
+`CommandContext.LoadProfile` (`src/Obfuskation.Cli/CommandContext.cs:18`)
+nimmt für `--config` seit Fassung 1.1.0 auch einen bloßen Profilnamen an,
+nicht mehr nur einen Dateipfad: enthält der übergebene Wert kein
+Verzeichnistrennzeichen und endet nicht auf `.json`, und existiert er nicht
+wörtlich als Datei, wird zusätzlich unter `PathHelper.DefaultProfilePath`
+nachgesehen. Ein Pfad mit Trennzeichen oder mit `.json`-Endung wird
+weiterhin ausschließlich wörtlich genommen — diese Unterscheidung verhindert,
+dass eine tatsächlich vorhandene, aber (noch) nicht auffindbare Datei
+stillschweigend gegen ein gleichnamiges zentrales Profil getauscht wird.
+Schlägt beides fehl, nennt die Fehlermeldung beide versuchten Orte und
+verweist auf `obfuskation profile list`. Abgesichert durch
+`tests/Obfuskation.Cli.Tests/CommandContextTests.cs` — dem ersten
+Testprojekt für die Kommandozeile, mit derselben `TestUmgebung`-Umleitung
+über `XDG_CONFIG_HOME`/`XDG_DATA_HOME` wie in den beiden anderen
+Testprojekten (Befund D-8).
+
+`obfuskation profile list [--sort name|used|changed] [--json]`
+(`Program.cs`, `BuildProfileCommand`) speist sich aus
+`ProfileCatalog.Collect(ProfileIndex.Load(), [])` — bewusst ohne
+Zusatzpfade: die Zuletzt-Liste der Oberfläche (`gui.json`) kennt die
+Kommandozeile nicht, nur den plattformübergreifenden Nutzungs-Index. Die
+Ausgabe läuft über zwei neue Methoden in `ConsoleOutput`: `WriteProfiles`
+(Tabelle auf die Standardfehlerausgabe, wie `WriteSummary`) und
+`WriteProfilesJson` (auf die Standardausgabe). Sortiert wird in `Program.cs`
+selbst, nicht in `ProfileCatalog` — dieselbe Aufgabenteilung wie zwischen
+`ProfileCatalog` und `ProfilesViewModel` auf der Oberflächenseite.
+
+`obfuskation init` kennt zwei neue Optionen: `--description <text>` setzt
+`Profile.Description`, `--central` schreibt nach
+`PathHelper.DefaultProfilePath(profileName)` statt nach `obfuskation.json`
+im aktuellen Verzeichnis — eine ausdrücklich angegebene `--config` gewinnt
+in jedem Fall. Die Ausgabe nennt seither immer den vollständigen,
+aufgelösten Zielpfad statt eines möglicherweise relativen.
+
 ### Fassung und Ersteller in der Hilfe
 
 Unter jeder Hilfeausgabe des Kommandozeilenprogramms — der des Programms
 selbst wie der jedes Unterbefehls — steht eine einzelne Zeile der Form
 
 ```
-obfuskation 1.0.2 · Gregor Stübner & Claude (Anthropic)
+obfuskation 1.1.0 · Gregor Stübner & Claude (Anthropic)
 ```
 
 Sie kommt aus `src/Obfuskation.Cli/ProgramInfo.cs`. Die Fassung stammt aus

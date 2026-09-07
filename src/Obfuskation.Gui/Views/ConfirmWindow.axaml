@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="160"
+        x:Class="Obfuskation.Gui.Views.ConfirmWindow"
+        Title="Rückfrage"
+        Width="440" MinWidth="380" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,Auto" Margin="16">
+
+    <TextBlock Grid.Row="0" Name="MessageText" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="Button1" Click="OnButtonClick"/>
+      <Button Name="Button2" Click="OnButtonClick"/>
+      <Button Name="Button3" Classes="primary" Click="OnButtonClick"/>
+    </StackPanel>
+
+  </Grid>
+</Window>

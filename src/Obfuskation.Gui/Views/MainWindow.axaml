@@ -20,40 +20,61 @@
     </Grid.Styles>
 
     <!-- ============================================== Kopfzeile ======== -->
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+    <Grid Grid.Row="0" RowDefinitions="Auto,Auto" Margin="0,0,0,12">
 
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8"
-                  VerticalAlignment="Center">
-        <TextBlock Text="Obfuskation" Classes="heading" VerticalAlignment="Center"/>
-        <TextBlock Text="{Binding ProfileName}" Classes="muted"
-                   VerticalAlignment="Center" Margin="4,0,0,0"/>
-      </StackPanel>
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
 
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-        <Button Content="Neu aus Datei…" Command="{Binding NewProfileCommand}"
-                ToolTip.Tip="Regelgeruest aus einer vorhandenen Datei ableiten"/>
-        <Button Content="Profil öffnen…" Command="{Binding OpenProfileCommand}"/>
-        <Button Content="Speichern" Command="{Binding SaveProfileCommand}"/>
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
+                    VerticalAlignment="Center">
+          <TextBlock Text="Obfuskation" Classes="heading" VerticalAlignment="Center"/>
+          <TextBlock Text="{Binding ProfileName}" Classes="muted"
+                     VerticalAlignment="Center" Margin="4,0,0,0"/>
 
-        <Button Content="Mehr ▾">
-          <Button.Flyout>
-            <MenuFlyout>
-              <MenuItem Header="Textregeln…" Command="{Binding ShowTextRulesCommand}"/>
-              <MenuItem Header="Ersetzungstabelle…" Command="{Binding ShowMappingCommand}"/>
-              <Separator/>
-              <MenuItem Header="Über Obfuskation…" Command="{Binding ShowAboutCommand}"/>
-            </MenuFlyout>
-          </Button.Flyout>
-        </Button>
+          <!-- Erklaert, wofuer ein Profil da ist: dort, wo der Begriff
+               zum ersten Mal auftaucht. -->
+          <Button Classes="flat" Padding="2" VerticalAlignment="Center"
+                  IsVisible="{Binding HasProfile}" ToolTip.Tip="Was ist ein Profil?">
+            <TextBlock Text="ⓘ" FontSize="13"/>
+            <Button.Flyout>
+              <Flyout>
+                <TextBlock MaxWidth="360" TextWrapping="Wrap" Classes="small"
+                           Text="Ein Profil bündelt die Feldregeln und die Ersetzungstabelle. Alle zusammengehörenden Dateien unter demselben Profil bearbeiten — nur dann bekommt derselbe Klartext in allen Dateien dasselbe Pseudonym. Die Reihenfolge, in der die Dateien geöffnet werden, spielt keine Rolle."/>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
 
-        <Button Classes="flat" Command="{Binding ToggleThemeCommand}"
-                ToolTip.Tip="Ansicht umschalten: System, Dunkel, Hell">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Text="{Binding ThemeSymbol}" FontSize="15"/>
-            <TextBlock Text="{Binding ThemeName}" Classes="small" VerticalAlignment="Center"/>
-          </StackPanel>
-        </Button>
-      </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <Button Content="Neu aus Datei…" Command="{Binding NewProfileCommand}"
+                  ToolTip.Tip="Regelgeruest aus einer vorhandenen Datei ableiten"/>
+          <Button Content="Profile…" Command="{Binding ShowProfilesCommand}"/>
+          <Button Content="Speichern" Command="{Binding SaveProfileCommand}"/>
+
+          <Button Content="Mehr ▾">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Textregeln…" Command="{Binding ShowTextRulesCommand}"/>
+                <MenuItem Header="Ersetzungstabelle…" Command="{Binding ShowMappingCommand}"/>
+                <Separator/>
+                <MenuItem Header="Kurzhilfe…" Command="{Binding ShowHelpCommand}"/>
+                <MenuItem Header="Über Obfuskation…" Command="{Binding ShowAboutCommand}"/>
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+
+          <Button Classes="flat" Command="{Binding ToggleThemeCommand}"
+                  ToolTip.Tip="Ansicht umschalten: System, Dunkel, Hell">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding ThemeSymbol}" FontSize="15"/>
+              <TextBlock Text="{Binding ThemeName}" Classes="small" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <TextBlock Grid.Row="1" Text="{Binding ProfileSubtitle}" Classes="muted small"
+                 IsVisible="{Binding HasProfileSubtitle}" Margin="0,3,0,0"
+                 TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
     </Grid>
 
     <!-- ================================================== Datei ======== -->
@@ -66,6 +87,10 @@
           <TextBlock Text="{Binding DataFileName}" FontWeight="SemiBold"/>
           <TextBlock Text="{Binding DataFileDetails}" Classes="muted small"
                      IsVisible="{Binding HasDataFile}"/>
+          <!-- Neue Felder ohne eigene Regel sollen nicht unbemerkt bleiben,
+               wenn eine Datei zum ersten Mal unter diesem Profil laeuft. -->
+          <TextBlock Text="{Binding NewFieldsHint}" Classes="muted small"
+                     IsVisible="{Binding HasNewFieldsHint}"/>
         </StackPanel>
 
         <Button Grid.Column="2" Content="Öffnen…" Classes="primary"
@@ -280,15 +305,27 @@
     <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
 
       <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-        <Button Content="Ersetzen" Classes="primary" Command="{Binding ObfuscateCommand}"/>
-        <Button Content="Zurückholen" Command="{Binding DeobfuscateCommand}"/>
+        <!-- Die Beschriftungen nennen das Ergebnis, nicht die Taetigkeit: aus
+             kunden.csv wird kunden.pseudo.csv. "Ersetzen" war doppeldeutig, denn
+             das Wort bezeichnet im Regelbereich daneben die Behandlung eines
+             einzelnen Feldes und legt ausserdem nahe, die Eingabedatei werde
+             ueberschrieben. Die Auslassungspunkte, weil beide erst einen
+             Speichern-Dialog oeffnen. -->
+        <Button Content="Pseudodatei erzeugen…" Classes="primary"
+                Command="{Binding ObfuscateCommand}"/>
+        <Button Content="Klartextdatei erzeugen…" Command="{Binding DeobfuscateCommand}"/>
         <Button Content="Prüfen" Command="{Binding ScanCommand}"/>
-
-        <!-- Der Schritt vor der Weitergabe soll nicht untergehen. -->
-        <TextBlock Text="↖ vor der Weitergabe prüfen" Classes="warning small"
-                   VerticalAlignment="Center" Margin="4,0,0,0"
-                   IsVisible="{Binding ScanRecommended}"/>
       </StackPanel>
+
+      <!-- Der Schritt vor der Weitergabe soll nicht untergehen. Der Hinweis
+           steht in der dehnbaren Spalte, nicht neben den Schaltflaechen: dort
+           gibt er bei schmalem Fenster nach, statt in die Spalte rechts
+           hineinzulaufen. Er teilt sich die Spalte mit der Fortschrittsanzeige
+           und weicht ihr waehrend eines Laufs (ShowScanHint). -->
+      <TextBlock Grid.Column="1" Text="↖ vor der Weitergabe prüfen"
+                 Classes="warning small" VerticalAlignment="Center"
+                 Margin="8,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                 IsVisible="{Binding ShowScanHint}"/>
 
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="16,0"
                   VerticalAlignment="Center" IsVisible="{Binding IsBusy}">

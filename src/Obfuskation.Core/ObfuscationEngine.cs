@@ -91,9 +91,7 @@ public sealed class ObfuscationEngine
 
     /// <summary>Pfad des Mapping-Stores, wie er sich aus dem Profil ergibt.</summary>
     public string ResolveMappingStorePath()
-        => string.IsNullOrWhiteSpace(_profile.MappingStore)
-            ? PathHelper.DefaultMappingStorePath(_profile.ProfileName)
-            : PathHelper.ExpandHome(_profile.MappingStore);
+        => PathHelper.ResolveMappingStore(_profile);
 
     /// <summary>
     /// Sieht sich eine Datei an und ordnet jedem Feld seine Behandlung zu.

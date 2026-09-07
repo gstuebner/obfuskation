@@ -1,3 +1,5 @@
+using Obfuskation.Core.Configuration;
+
 namespace Obfuskation.Core;
 
 /// <summary>Aufloesung von Pfadangaben aus der Konfiguration.</summary>
@@ -19,6 +21,30 @@ public static class PathHelper
         return path;
     }
 
+    /// <summary>Konfigurationsverzeichnis: $XDG_CONFIG_HOME/obfuskation, sonst ~/.config/obfuskation.</summary>
+    public static string ConfigDirectory
+    {
+        get
+        {
+            var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            if (string.IsNullOrWhiteSpace(configHome))
+            {
+                configHome = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".config");
+            }
+
+            return Path.Combine(configHome, "obfuskation");
+        }
+    }
+
+    /// <summary>Ablageort zentral verwalteter Profile.</summary>
+    public static string ProfileDirectory => Path.Combine(ConfigDirectory, "profile");
+
+    /// <summary>Vorgabepfad eines zentral abgelegten Profils.</summary>
+    public static string DefaultProfilePath(string profileName)
+        => Path.Combine(ProfileDirectory, SanitizeName(profileName) + ".json");
+
     /// <summary>
     /// Standardablage des Mapping-Stores: ausserhalb des Projekts, damit die
     /// Datei nicht versehentlich mit hochgeladen oder eingecheckt wird.
@@ -33,6 +59,17 @@ public static class PathHelper
 
         return Path.Combine(dataHome, "obfuskation", SanitizeName(profileName), "mapping.json");
     }
+
+    /// <summary>
+    /// Der tatsaechliche Pfad des Mapping-Stores, wie er sich aus dem Profil
+    /// ergibt. Gemeinsame Stelle fuer <see cref="ObfuscationEngine"/> und
+    /// <see cref="Configuration.ProfileCatalog"/> — die Regel darf nicht
+    /// zweimal dastehen.
+    /// </summary>
+    public static string ResolveMappingStore(Profile profile)
+        => string.IsNullOrWhiteSpace(profile.MappingStore)
+            ? DefaultMappingStorePath(profile.ProfileName)
+            : ExpandHome(profile.MappingStore);
 
     /// <summary>Entschaerft einen Profilnamen zur Verwendung als Verzeichnisname.</summary>
     public static string SanitizeName(string name)

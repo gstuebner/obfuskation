@@ -12,8 +12,16 @@
          1.0.1: Behebung der Befunde D-4 und D-8 der Testdurchfuehrung vom
          4. September 2026, siehe docs/testdokumentation.md.
          1.0.2: Fassung und Ersteller stehen jetzt unter jeder Hilfeausgabe
-         des Kommandozeilenprogramms. -->
-    <Version>1.0.2</Version>
+         des Kommandozeilenprogramms.
+         1.1.0: Profilverwaltung: fester Ablageort, Anlegen-Dialog mit Namen
+         und Beschreibung, Profiluebersicht, Umbenennen ohne Verlust der
+         Ersetzungstabelle, Rueckfrage bei ungespeicherten Aenderungen; auf der
+         Kommandozeile 'obfuskation profile list' und die Option config, jetzt
+         auch mit blossem Profilnamen statt Dateipfad. Dazu eine Kurzhilfe im
+         Menue "Mehr" und neue Beschriftungen der beiden Schaltflaechen unten:
+         "Pseudodatei erzeugen..." und "Klartextdatei erzeugen...". Nebenversion
+         statt Korrekturstand, weil Funktionen dazugekommen sind. -->
+    <Version>1.1.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

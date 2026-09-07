@@ -130,6 +130,46 @@ public sealed class MappingStore : IDisposable
         }
     }
 
+    /// <summary>
+    /// Schreibt einen neuen Profilnamen in eine bestehende Tabelle. Salt und
+    /// Eintraege bleiben unberuehrt. Ohne diesen Schritt warnt jeder folgende
+    /// Lauf "Der Mapping-Store gehoert zum Profil ...".
+    ///
+    /// Tut nichts, wenn unter <paramref name="path"/> keine Datei liegt --
+    /// das ist kein Fehlerfall, sondern der erwartete Zustand bei einem frisch
+    /// angelegten Profil ohne eigenen Lauf.
+    /// </summary>
+    public static void RenameProfile(string path, string newProfileName)
+    {
+        path = System.IO.Path.GetFullPath(PathHelper.ExpandHome(path));
+        if (!File.Exists(path))
+            return;
+
+        var lockStream = AcquireLock(path + ".lock");
+        try
+        {
+            var document = Read(path);
+            document.ProfileName = newProfileName;
+            document.UpdatedUtc = DateTimeOffset.UtcNow;
+
+            var temporary = path + ".tmp";
+            using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                JsonSerializer.Serialize(stream, document, JsonOptions);
+                stream.Flush(flushToDisk: true);
+            }
+
+            FilePermissions.RestrictFile(temporary);
+            File.Move(temporary, path, overwrite: true);
+            FilePermissions.RestrictFile(path);
+        }
+        finally
+        {
+            lockStream.Dispose();
+            TryDeleteLock(path + ".lock");
+        }
+    }
+
     private static MappingDocument Read(string path)
     {
         try

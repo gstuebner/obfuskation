@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Obfuskation.Core.Configuration;
 using Obfuskation.Core.Reporting;
 
 namespace Obfuskation.Cli;
@@ -11,6 +12,14 @@ namespace Obfuskation.Cli;
 public static class ConsoleOutput
 {
     private static readonly JsonSerializerOptions ReportJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private static readonly JsonSerializerOptions ProfileJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
@@ -69,6 +78,63 @@ public static class ConsoleOutput
 
         target.WriteLine($"  Dauer: {report.DurationMs} ms");
     }
+
+    /// <summary>
+    /// Tabelle bekannter Profile auf die Standardfehlerausgabe, wie
+    /// <see cref="WriteSummary"/>. Die Reihenfolge kommt bereits sortiert vom
+    /// Aufrufer, hier wird nur ausgerichtet und ausgegeben.
+    /// </summary>
+    public static void WriteProfiles(IReadOnlyList<ProfileSummary> profiles)
+    {
+        var target = Console.Error;
+
+        if (profiles.Count == 0)
+        {
+            target.WriteLine(
+                "Keine Profile gefunden. 'obfuskation init --central' oder die Oberflaeche legen eines an.");
+            return;
+        }
+
+        var rows = profiles.Select(profile => new
+        {
+            Profile = profile,
+            Name = profile.Error is null ? profile.Name : $"{profile.Name} (nicht lesbar)",
+            Files = profile.Error is not null
+                ? "-"
+                : profile.DataFiles.Count == 1 ? "1 Datei" : $"{profile.DataFiles.Count} Dateien",
+            Used = profile.LastUsedUtc is { } lastUsed
+                ? lastUsed.LocalDateTime.ToString("dd.MM.yyyy HH:mm")
+                : "nie",
+            Changed = profile.Error is null ? profile.ModifiedUtc.LocalDateTime.ToString("dd.MM.yyyy") : "-",
+        }).ToList();
+
+        var nameWidth = Math.Max("Name".Length, rows.Max(r => r.Name.Length));
+        var filesWidth = Math.Max("Dateien".Length, rows.Max(r => r.Files.Length));
+        var usedWidth = Math.Max("Zuletzt benutzt".Length, rows.Max(r => r.Used.Length));
+        var changedWidth = Math.Max("Geaendert".Length, rows.Max(r => r.Changed.Length));
+
+        target.WriteLine(
+            $"{"Name".PadRight(nameWidth)}  {"Dateien".PadRight(filesWidth)}  " +
+            $"{"Zuletzt benutzt".PadRight(usedWidth)}  {"Geaendert".PadRight(changedWidth)}  Pfad");
+
+        foreach (var row in rows)
+        {
+            target.WriteLine(
+                $"{row.Name.PadRight(nameWidth)}  {row.Files.PadRight(filesWidth)}  " +
+                $"{row.Used.PadRight(usedWidth)}  {row.Changed.PadRight(changedWidth)}  {row.Profile.Path}");
+
+            if (row.Profile.Error is not null)
+                target.WriteLine($"  Fehler: {row.Profile.Error}");
+        }
+    }
+
+    /// <summary>
+    /// Dieselbe Liste als JSON auf die Standardausgabe. Enthaelt Pfade, aber
+    /// wie <see cref="ProfileSummary"/> selbst keine Echtwerte aus den
+    /// verarbeiteten Dateien.
+    /// </summary>
+    public static void WriteProfilesJson(IReadOnlyList<ProfileSummary> profiles)
+        => Console.Out.WriteLine(JsonSerializer.Serialize(profiles, ProfileJsonOptions));
 
     public static void WriteError(string message)
     {

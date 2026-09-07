@@ -12,24 +12,56 @@ namespace Obfuskation.Cli;
 public static class CommandContext
 {
     /// <summary>
-    /// Laedt das Profil. Ohne ausdruecklichen Pfad wird ab dem aktuellen
-    /// Verzeichnis aufwaerts gesucht.
+    /// Laedt das Profil. <paramref name="configPath"/> darf ein Dateipfad oder
+    /// ein blosser Profilname sein (dann wird unter
+    /// <see cref="PathHelper.DefaultProfilePath"/> gesucht); ohne Angabe wird
+    /// ab dem aktuellen Verzeichnis aufwaerts nach <c>obfuskation.json</c>
+    /// gesucht.
     /// </summary>
     public static Profile LoadProfile(string? configPath)
     {
         if (!string.IsNullOrWhiteSpace(configPath))
-            return ProfileStore.Load(PathHelper.ExpandHome(configPath));
+        {
+            var expanded = PathHelper.ExpandHome(configPath);
+
+            // Sieht der Wert nicht wie ein Pfad aus (kein Trennzeichen, keine
+            // .json-Endung) und existiert er auch nicht woertlich als Datei,
+            // dann steckt vermutlich ein Profilname dahinter -- im zentralen
+            // Ordner nachsehen, bevor aufgegeben wird.
+            if (LooksLikeProfileName(configPath) && !File.Exists(expanded))
+            {
+                var central = PathHelper.DefaultProfilePath(configPath);
+                if (File.Exists(central))
+                    return ProfileStore.Load(central);
+
+                throw new ConfigurationException(
+                    $"Kein Profil gefunden fuer '{configPath}': weder als Datei ({expanded}) " +
+                    $"noch im zentralen Ordner ({central}). Vorhandene Profile zeigt " +
+                    "'obfuskation profile list'.");
+            }
+
+            return ProfileStore.Load(expanded);
+        }
 
         var discovered = ProfileStore.Discover(Directory.GetCurrentDirectory());
         if (discovered is null)
         {
             throw new ConfigurationException(
                 $"Keine {ProfileStore.DefaultFileName} gefunden. Mit 'obfuskation init --from <datei>' " +
-                "ein Regelgeruest erzeugen oder den Pfad mit --config angeben.");
+                "ein Regelgeruest erzeugen oder den Pfad mit --config angeben. Vorhandene Profile " +
+                "zeigt 'obfuskation profile list'.");
         }
 
         return ProfileStore.Load(discovered);
     }
+
+    /// <summary>
+    /// Ob <paramref name="value"/> eher ein blosser Profilname als ein Pfad
+    /// ist: kein Verzeichnistrennzeichen, keine <c>.json</c>-Endung.
+    /// </summary>
+    private static bool LooksLikeProfileName(string value)
+        => value.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) < 0
+           && !value.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
 
     public static byte[] ReadInput(string? path)
     {

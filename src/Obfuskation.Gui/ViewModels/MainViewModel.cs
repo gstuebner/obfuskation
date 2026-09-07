@@ -15,7 +15,7 @@ namespace Obfuskation.Gui.ViewModels;
 public sealed class MainViewModel : ObservableObject
 {
     private readonly GuiSettings _settings;
-    private readonly Func<DialogService> _dialogs;
+    private readonly Func<IDialogService> _dialogs;
 
     private ProfileSession? _session;
     private string? _dataFilePath;
@@ -26,15 +26,17 @@ public sealed class MainViewModel : ObservableObject
     private string _statusText = "Bereit.";
     private bool _isBusy;
     private bool _hasRunSinceOpen;
+    private bool _dataFileIsNewToProfile;
+    private MappingSummary? _mappingSummary;
     private CancellationTokenSource? _cancellation;
     private string _progressText = "";
 
-    public MainViewModel(GuiSettings settings, Func<DialogService> dialogs)
+    public MainViewModel(GuiSettings settings, Func<IDialogService> dialogs)
     {
         _settings = settings;
         _dialogs = dialogs;
 
-        OpenProfileCommand = new AsyncRelayCommand(OpenProfileAsync);
+        ShowProfilesCommand = new AsyncRelayCommand(ShowProfilesAsync);
         NewProfileCommand = new AsyncRelayCommand(NewProfileAsync);
         SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, () => _session is not null);
         OpenDataFileCommand = new AsyncRelayCommand(OpenDataFileAsync, () => _session is not null);
@@ -53,6 +55,7 @@ public sealed class MainViewModel : ObservableObject
         ShowMappingCommand = new RelayCommand(
             () => MappingRequested?.Invoke(), () => _session is not null);
         ShowAboutCommand = new RelayCommand(() => AboutRequested?.Invoke());
+        ShowHelpCommand = new RelayCommand(() => HelpRequested?.Invoke());
 
         Actions = new ObservableCollection<ActionOption>(ActionOption.All);
 
@@ -61,7 +64,7 @@ public sealed class MainViewModel : ObservableObject
 
     // ------------------------------------------------------------- Befehle
 
-    public AsyncRelayCommand OpenProfileCommand { get; }
+    public AsyncRelayCommand ShowProfilesCommand { get; }
     public AsyncRelayCommand NewProfileCommand { get; }
     public AsyncRelayCommand SaveProfileCommand { get; }
     public AsyncRelayCommand OpenDataFileCommand { get; }
@@ -73,11 +76,13 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand ShowTextRulesCommand { get; }
     public RelayCommand ShowMappingCommand { get; }
     public RelayCommand ShowAboutCommand { get; }
+    public RelayCommand ShowHelpCommand { get; }
 
     /// <summary>Bitten an die Ansicht, ein Nebenfenster zu oeffnen.</summary>
     public event Action? TextRulesRequested;
     public event Action? MappingRequested;
     public event Action? AboutRequested;
+    public event Action? HelpRequested;
 
     /// <summary>Das Ansichtsmodell der Textregeln zum laufenden Profil.</summary>
     public TextRulesViewModel? CreateTextRulesViewModel()
@@ -110,6 +115,7 @@ public sealed class MainViewModel : ObservableObject
         _session?.MarkChanged();
         RefreshIssues();
         OnPropertyChanged(nameof(ProfileTitle));
+        OnPropertyChanged(nameof(HasUnsavedChanges));
     }
 
     // -------------------------------------------------------------- Listen
@@ -129,7 +135,31 @@ public sealed class MainViewModel : ObservableObject
         => _session is null ? "Obfuskation" : $"Obfuskation — {_session.DisplayName}"
            + (_session.HasUnsavedChanges ? " *" : "");
 
+    /// <summary>Untertitel der Kopfzeile: Beschreibung und Tabellenauskunft.</summary>
+    public string ProfileSubtitle
+    {
+        get
+        {
+            if (_session is null)
+                return "";
+
+            var teile = new List<string>();
+            if (!string.IsNullOrWhiteSpace(_session.Profile.Description))
+                teile.Add(_session.Profile.Description!.Trim());
+
+            if (_mappingSummary is not null)
+                teile.Add($"Tabelle: {_mappingSummary.StorePath} · {_mappingSummary.Text}");
+
+            return string.Join(" · ", teile);
+        }
+    }
+
+    public bool HasProfileSubtitle => ProfileSubtitle.Length > 0;
+
     public bool HasProfile => _session is not null;
+
+    /// <summary>Ob eine Rueckfrage noetig ist, bevor die Sitzung ersetzt wird.</summary>
+    public bool HasUnsavedChanges => _session?.HasUnsavedChanges == true;
 
     public bool HasDataFile => _dataContent is not null;
 
@@ -177,7 +207,10 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Wegweiser, solange noch nichts geoeffnet ist.</summary>
     public string EmptyHint => _session is null
         ? "Noch kein Profil geladen.\n\nMit \u201eNeu aus Datei\u2026\u201c ein Regelgerüst aus einer "
-          + "vorhandenen Datei ableiten oder eine bestehende Konfiguration öffnen."
+          + "vorhandenen Datei ableiten, oder unter \u201eProfile\u2026\u201c ein bestehendes Profil "
+          + "wählen. Ein Profil bündelt Feldregeln und Ersetzungstabelle für zusammengehörende Dateien."
+          + "\n\nWer zum ersten Mal hier ist: „Mehr ▾“ → „Kurzhilfe…“ "
+          + "erklärt das Nötige auf einer Seite."
         : "Keine Datei geöffnet.\n\nMit \u201eÖffnen\u2026\u201c eine CSV-, JSON- oder Textdatei wählen; "
           + "die Felder erscheinen dann hier.";
 
@@ -209,6 +242,7 @@ public sealed class MainViewModel : ObservableObject
         {
             if (SetProperty(ref _isBusy, value))
             {
+                OnPropertyChanged(nameof(ShowScanHint));
                 CancelCommand.RaiseCanExecuteChanged();
                 RaiseCommandStates();
             }
@@ -237,10 +271,18 @@ public sealed class MainViewModel : ObservableObject
     public bool HasResult => _lastResult is not null;
 
     /// <summary>
-    /// Ob nach einem Ersetzen die Nachpruefung noch aussteht. Der Schritt vor
+    /// Ob nach dem Erzeugen einer Pseudodatei die Nachpruefung noch aussteht. Der Schritt vor
     /// der Weitergabe soll nicht untergehen.
     /// </summary>
     public bool ScanRecommended => _hasRunSinceOpen;
+
+    /// <summary>
+    /// Ob der Hinweis auf die ausstehende Pruefung angezeigt wird. Er teilt
+    /// sich die dehnbare Spalte der Aktionsleiste mit der Fortschrittsanzeige;
+    /// beide gleichzeitig sichtbar hiesse, sie laegen uebereinander. Waehrend
+    /// eines Laufs hat der Fortschritt Vorrang.
+    /// </summary>
+    public bool ShowScanHint => _hasRunSinceOpen && !_isBusy;
 
     public string ThemeSymbol => ThemeService.Symbol(_settings.Theme);
     public string ThemeName => ThemeService.Describe(_settings.Theme);
@@ -274,36 +316,116 @@ public sealed class MainViewModel : ObservableObject
 
     // ------------------------------------------------------------- Profile
 
-    private async Task OpenProfileAsync()
+    /// <summary>
+    /// Fragt bei ungespeicherten Aenderungen nach, bevor die Sitzung ersetzt
+    /// wird. Liefert <c>false</c>, wenn der Anwender abbricht -- dann bleibt
+    /// das alte Profil unangetastet geladen.
+    /// </summary>
+    public async Task<bool> EnsureChangesHandledAsync()
     {
-        var pfad = await _dialogs().OpenProfileAsync(
-            _session?.Path is { } vorher ? Path.GetDirectoryName(vorher) : null);
+        if (!HasUnsavedChanges)
+            return true;
 
-        if (pfad is null)
+        var wahl = await _dialogs().AskSaveChangesAsync(_session!.DisplayName);
+
+        switch (wahl)
+        {
+            case SaveChoice.Save:
+                await SaveProfileAsync();
+                // Ein abgebrochener Speichern-Dialog hinterlaesst weiter
+                // ungespeicherte Aenderungen -- dann nicht fortfahren.
+                return !HasUnsavedChanges;
+
+            case SaveChoice.Discard:
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    public async Task ShowProfilesAsync()
+    {
+        var viewModel = new ProfilesViewModel(_settings, _dialogs, _session?.Path, HasUnsavedChanges);
+        viewModel.CurrentSessionRenamed += OnCurrentSessionRenamed;
+
+        var gewaehlt = await _dialogs().ShowProfilesAsync(viewModel);
+        if (gewaehlt is null)
+            return;
+
+        if (gewaehlt.Error is not null)
+        {
+            StatusText = gewaehlt.Error;
+            return;
+        }
+
+        if (!await EnsureChangesHandledAsync())
             return;
 
         await GuardedAsync(() =>
         {
-            LoadProfile(ProfileSession.Load(pfad));
-            StatusText = $"Profil geladen: {Path.GetFileName(pfad)}";
+            LoadProfile(ProfileSession.Load(gewaehlt.Path));
+            StatusText = $"Profil geladen: {gewaehlt.Name}";
             return Task.CompletedTask;
         });
     }
 
-    private async Task NewProfileAsync()
+    /// <summary>
+    /// Das gerade offene Profil wurde in der Uebersicht umbenannt -- Name und
+    /// Pfad der laufenden Sitzung nachziehen. Wird nur aufgerufen, wenn keine
+    /// ungespeicherten Aenderungen vorlagen (die Uebersicht prueft das vor dem
+    /// Umbenennen selbst), das Neuladen verwirft also nichts.
+    /// </summary>
+    private void OnCurrentSessionRenamed(string newPath)
     {
+        if (_session is null)
+            return;
+
+        try
+        {
+            LoadProfile(ProfileSession.Load(newPath));
+            StatusText = "Das offene Profil wurde umbenannt.";
+        }
+        catch (Exception ex) when (ex is ConfigurationException or IOException or UnauthorizedAccessException)
+        {
+            StatusText = ex.Message;
+        }
+    }
+
+    public async Task NewProfileAsync()
+    {
+        if (!await EnsureChangesHandledAsync())
+            return;
+
         // Der uebliche Weg: aus einer Beispieldatei ein Regelgeruest ableiten,
         // genau wie "obfuskation init --from".
         var beispiel = await _dialogs().OpenDataFileAsync(_settings.LastDataDirectory);
         if (beispiel is null)
             return;
 
+        var vorschlag = Path.GetFileNameWithoutExtension(beispiel);
+        var antwort = await _dialogs().AskNewProfileAsync(new NewProfileProposal(vorschlag, beispiel));
+        if (antwort is null)
+            return;
+
         await GuardedAsync(async () =>
         {
-            var name = Path.GetFileNameWithoutExtension(beispiel);
-            LoadProfile(ProfileSession.Create(name, beispiel));
+            if (antwort.OpenExisting)
+            {
+                LoadProfile(ProfileSession.Load(antwort.TargetPath));
+                StatusText = $"Profil geladen: {Path.GetFileName(antwort.TargetPath)}";
+            }
+            else
+            {
+                // OK legt das Profil sofort an und speichert es: erst damit hat
+                // es einen Pfad und erscheint in Index und Uebersicht.
+                var session = ProfileSession.Create(antwort.Name, beispiel, antwort.Description);
+                session.Save(antwort.TargetPath);
+                LoadProfile(session);
 
-            StatusText = "Neues Profil angelegt. Jedes Feld braucht noch eine Entscheidung.";
+                StatusText = "Neues Profil angelegt. Jedes Feld braucht noch eine Entscheidung.";
+            }
+
             await LoadDataFileAsync(beispiel);
         });
     }
@@ -330,8 +452,13 @@ public sealed class MainViewModel : ObservableObject
             _settings.RememberProfile(ziel);
             _settings.Save();
 
+            var index = ProfileIndex.Load();
+            index.RecordProfileUse(ziel);
+            index.Save();
+
             StatusText = $"Gespeichert: {ziel}";
             OnPropertyChanged(nameof(ProfileTitle));
+            OnPropertyChanged(nameof(HasUnsavedChanges));
             return Task.CompletedTask;
         });
     }
@@ -344,6 +471,10 @@ public sealed class MainViewModel : ObservableObject
         {
             _settings.RememberProfile(session.Path);
             _settings.Save();
+
+            var index = ProfileIndex.Load();
+            index.RecordProfileUse(session.Path);
+            index.Save();
         }
 
         // Die Auswahlliste haengt am Profil: eigene Namensraeume stehen dort.
@@ -352,12 +483,29 @@ public sealed class MainViewModel : ObservableObject
             Generators.Add(option);
 
         RefreshIssues();
+        RefreshMappingSummary();
         RefreshAnalysis();
 
         OnPropertyChanged(nameof(HasProfile));
+        OnPropertyChanged(nameof(HasUnsavedChanges));
         OnPropertyChanged(nameof(ProfileName));
         OnPropertyChanged(nameof(ProfileTitle));
         RaiseCommandStates();
+    }
+
+    /// <summary>
+    /// Auskunft ueber die Ersetzungstabelle fuer die Kopfzeile. Neu berechnet
+    /// wird sie nur beim Profilladen und nach einem Lauf -- nicht bei jeder
+    /// Regelaenderung, sonst wuerde jede Eingabe die Tabelle anfassen.
+    /// </summary>
+    private void RefreshMappingSummary()
+    {
+        _mappingSummary = _session is null
+            ? null
+            : MappingSummary.For(PathHelper.ResolveMappingStore(_session.Profile), _session.Profile.ProfileName);
+
+        OnPropertyChanged(nameof(ProfileSubtitle));
+        OnPropertyChanged(nameof(HasProfileSubtitle));
     }
 
     // --------------------------------------------------------------- Datei
@@ -382,11 +530,24 @@ public sealed class MainViewModel : ObservableObject
         LastResult = null;
         _hasRunSinceOpen = false;
 
+        // Erst die Analyse -- die liest ueber RefreshAnalysis noch den alten
+        // Indexstand, um zu erkennen, ob diese Datei neu fuer das Profil ist.
+        // Erst danach wird der Index selbst nachgefuehrt, sonst faende sich die
+        // eben geoeffnete Datei schon als "bekannt" und der Hinweis unten
+        // verschwaende, kaum dass er erscheinen koennte.
         RefreshAnalysis();
+
+        if (_session?.Path is not null)
+        {
+            var index = ProfileIndex.Load();
+            index.RecordDataFile(_session.Path, pfad);
+            index.Save();
+        }
 
         OnPropertyChanged(nameof(HasDataFile));
         OnPropertyChanged(nameof(DataFileName));
         OnPropertyChanged(nameof(ScanRecommended));
+        OnPropertyChanged(nameof(ShowScanHint));
         RaiseCommandStates();
     }
 
@@ -399,6 +560,7 @@ public sealed class MainViewModel : ObservableObject
     {
         Fields.Clear();
         _analysis = null;
+        _dataFileIsNewToProfile = false;
 
         if (_session is null || _dataContent is null)
         {
@@ -408,6 +570,8 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(HasUndecided));
             OnPropertyChanged(nameof(ShowEmptyHint));
             OnPropertyChanged(nameof(EmptyHint));
+            OnPropertyChanged(nameof(NewFieldsHint));
+            OnPropertyChanged(nameof(HasNewFieldsHint));
             return;
         }
 
@@ -419,6 +583,15 @@ public sealed class MainViewModel : ObservableObject
         }
 
         _analysis = engine.Analyze(_dataContent, _dataFilePath);
+
+        if (_session.Path is not null && _dataFilePath is not null)
+        {
+            var index = ProfileIndex.Load();
+            var eintrag = index.Profiles.FirstOrDefault(p =>
+                string.Equals(p.Path, Path.GetFullPath(_session.Path), StringComparison.Ordinal));
+            _dataFileIsNewToProfile = eintrag is null || !eintrag.Files.Any(f =>
+                string.Equals(f.Path, Path.GetFullPath(_dataFilePath), StringComparison.Ordinal));
+        }
 
         var beispiele = ReadSampleValues(_analysis.File);
 
@@ -438,8 +611,33 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasUndecided));
         OnPropertyChanged(nameof(ShowEmptyHint));
         OnPropertyChanged(nameof(EmptyHint));
+        OnPropertyChanged(nameof(NewFieldsHint));
+        OnPropertyChanged(nameof(HasNewFieldsHint));
         RaiseCommandStates();
     }
+
+    /// <summary>
+    /// Hinweis, wenn die offene Datei noch nicht Teil des Profils war: neue
+    /// Felder ohne eigene Regel fallen sonst leicht unter den Tisch.
+    /// </summary>
+    public string? NewFieldsHint
+    {
+        get
+        {
+            if (_analysis is null || !_dataFileIsNewToProfile)
+                return null;
+
+            var neu = _analysis.Fields.Count(f => f.IsFromDefault);
+            if (neu == 0)
+                return null;
+
+            return neu == 1
+                ? "Diese Datei war bisher nicht Teil des Profils \u2014 1 neues Feld."
+                : $"Diese Datei war bisher nicht Teil des Profils \u2014 {neu} neue Felder.";
+        }
+    }
+
+    public bool HasNewFieldsHint => NewFieldsHint is not null;
 
     /// <summary>
     /// Ein Beispielwert je Feld aus der ersten Datenzeile, damit die Vorschau
@@ -489,6 +687,7 @@ public sealed class MainViewModel : ObservableObject
         RefreshPreview();
 
         OnPropertyChanged(nameof(ProfileTitle));
+        OnPropertyChanged(nameof(HasUnsavedChanges));
         OnPropertyChanged(nameof(UndecidedCount));
         OnPropertyChanged(nameof(UndecidedText));
         OnPropertyChanged(nameof(HasUndecided));
@@ -533,7 +732,7 @@ public sealed class MainViewModel : ObservableObject
         if (UndecidedCount > 0)
         {
             StatusText = $"{UndecidedText} — jedes Feld braucht eine Entscheidung, "
-                       + "bevor ersetzt werden kann.";
+                       + "bevor die Pseudodatei erzeugt werden kann.";
             SelectedField = Fields.FirstOrDefault(f => !f.IsDecided);
             return;
         }
@@ -545,7 +744,7 @@ public sealed class MainViewModel : ObservableObject
         if (ziel is null)
             return;
 
-        await RunAsync("Ersetzen", async (engine, token, fortschritt) =>
+        await RunAsync("Erzeugen der Pseudodatei", async (engine, token, fortschritt) =>
         {
             var ergebnis = await engine.ObfuscateAsync(
                 _dataContent, _dataFilePath, new RunOptions { Strict = true }, token, fortschritt);
@@ -554,6 +753,7 @@ public sealed class MainViewModel : ObservableObject
 
             _hasRunSinceOpen = true;
             OnPropertyChanged(nameof(ScanRecommended));
+        OnPropertyChanged(nameof(ShowScanHint));
 
             return (ergebnis.Report, $"Geschrieben: {ziel}");
         });
@@ -571,7 +771,7 @@ public sealed class MainViewModel : ObservableObject
         if (ziel is null)
             return;
 
-        await RunAsync("Zurückholen", async (engine, token, fortschritt) =>
+        await RunAsync("Erzeugen der Klartextdatei", async (engine, token, fortschritt) =>
         {
             var ergebnis = await engine.DeobfuscateAsync(
                 _dataContent, _dataFilePath, new RunOptions(), token, fortschritt);
@@ -594,6 +794,7 @@ public sealed class MainViewModel : ObservableObject
 
             _hasRunSinceOpen = false;
             OnPropertyChanged(nameof(ScanRecommended));
+        OnPropertyChanged(nameof(ShowScanHint));
 
             var meldung = ergebnis.Report.Findings.Count == 0
                 ? "Keine Restbestände gefunden."
@@ -645,10 +846,14 @@ public sealed class MainViewModel : ObservableObject
 
             LastResult = new RunResultViewModel(bericht);
             StatusText = meldung;
+
+            // Ein Lauf kann neue Eintraege in der Tabelle hinterlassen haben --
+            // die Auskunft in der Kopfzeile soll das ohne weiteres Zutun zeigen.
+            RefreshMappingSummary();
         }
         catch (OperationCanceledException)
         {
-            // Ein Abbruch beim Ersetzen hinterlaesst keine halbe Ausgabedatei:
+            // Ein Abbruch beim Erzeugen hinterlaesst keine halbe Ausgabedatei:
             // geschrieben wird erst, wenn die Verarbeitung fertig ist.
             StatusText = $"{bezeichnung} abgebrochen. Es wurde nichts geschrieben.";
         }
