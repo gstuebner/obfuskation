@@ -50,4 +50,51 @@ public class DeobfuscateWarningTests
 
         Assert.DoesNotContain(zurueck.Report.Warnings, w => w.Code == "datumMitFremdemProfil");
     }
+
+    /// <summary>
+    /// dateGeneralize ist ausdruecklich nicht umkehrbar (viele-zu-eins) und
+    /// bekommt deshalb keinen Eintrag in der Ersetzungstabelle -- wie redact
+    /// ohne Tabelleneintrag. Die Rueckabbildung findet folgerichtig nichts und
+    /// meldet das als nichtWiederherstellbar, statt den gerundeten Wert
+    /// stillschweigend als Original auszugeben. Die Kategorie ist bewusst
+    /// nicht "unbekanntesPseudonym": das legte nahe, ein anderer Bestand
+    /// koennte den Wert noch hergeben.
+    /// </summary>
+    [Fact]
+    public void DateGeneralize_meldet_beim_Zurueckuebersetzen_dass_nichts_wiederherstellbar_ist()
+    {
+        using var setup = new TestProfile()
+            .WithField("Geburtsdatum", FieldAction.Pseudonymize, "dateGeneralize");
+        var engine = setup.CreateEngine();
+
+        var obfuskiert = engine.Obfuscate(
+            TestProfile.Utf8("Geburtsdatum\n15.03.1980\n"), "a.csv", new RunOptions { Strict = true });
+        var zurueck = engine.Deobfuscate(obfuskiert.Content, "a.csv", new RunOptions());
+
+        Assert.Contains(zurueck.Report.Findings,
+            f => f.Kind == "nichtWiederherstellbar" && f.Rule == "dateGeneralize");
+
+        // Und ausdruecklich nicht die Kategorie, die auf ein fremdes Profil deutet.
+        Assert.DoesNotContain(zurueck.Report.Findings, f => f.Kind == "unbekanntesPseudonym");
+
+        // Der gerundete Wert steht unveraendert da -- er wird nicht faelschlich
+        // als wiederhergestelltes Original ausgegeben.
+        Assert.Equal("Geburtsdatum\n01.03.1980\n", TestProfile.FromUtf8(zurueck.Content));
+    }
+
+    /// <summary>Gegenstueck fuer partialMask, ebenfalls nicht umkehrbar.</summary>
+    [Fact]
+    public void PartialMask_meldet_beim_Zurueckuebersetzen_dass_nichts_wiederherstellbar_ist()
+    {
+        using var setup = new TestProfile()
+            .WithField("Telefon", FieldAction.Pseudonymize, "partialMask");
+        var engine = setup.CreateEngine();
+
+        var obfuskiert = engine.Obfuscate(
+            TestProfile.Utf8("Telefon\n01701234567\n"), "a.csv", new RunOptions { Strict = true });
+        var zurueck = engine.Deobfuscate(obfuskiert.Content, "a.csv", new RunOptions());
+
+        Assert.Contains(zurueck.Report.Findings,
+            f => f.Kind == "nichtWiederherstellbar" && f.Rule == "partialMask");
+    }
 }

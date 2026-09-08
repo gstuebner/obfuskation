@@ -86,9 +86,31 @@ public sealed class Pseudonymizer
 
         throw new MappingConflictException(
             $"Der Generator '{generatorName}' fand nach {MaxCollisionRetries} Versuchen kein freies " +
-            "Pseudonym. Der Wertevorrat ist für diesen Datenbestand zu klein — einen Generator mit " +
-            "größerem Vorrat wählen (etwa 'token').");
+            "Pseudonym. Der Wertevorrat ist für diesen Datenbestand zu klein — " +
+            RemedyFor(generator.Name));
     }
+
+    /// <summary>
+    /// Der Abhilfesatz zur <see cref="MappingConflictException"/>. Generatoren
+    /// mit einstellbarem Wertevorrat brauchen einen anderen Rat als ein
+    /// pauschales "nimm token": bei ihnen liegt die Ursache in der eigenen
+    /// Einstellung, und die laesst sich gezielt aufweiten.
+    /// </summary>
+    private static string RemedyFor(string baseName) => baseName switch
+    {
+        "wordlist" => "mehr Werte unter 'values' eintragen.",
+        "pattern" => "eine längere Maske unter 'pattern' wählen.",
+        "dateRange" => "einen weiteren Zeitraum über 'from' und 'to' setzen; ohne Angabe steht " +
+                       "nur das Kalenderjahr des Originals zur Verfügung.",
+        _ => "einen Generator mit größerem Vorrat wählen (etwa 'token').",
+    };
+
+    /// <summary>
+    /// Ob der Generator seine Werte ueberhaupt zurueckfuehren kann. Bei
+    /// <c>false</c> ist ein nicht gefundener Wert kein Hinweis auf einen
+    /// fremden Bestand, sondern die Bauart des Generators.
+    /// </summary>
+    public bool IsReversible(string generatorName) => _generators.Get(generatorName).IsReversible;
 
     /// <summary>
     /// Fuehrt ein Pseudonym auf den Klartext zurueck. Liefert <c>false</c>, wenn

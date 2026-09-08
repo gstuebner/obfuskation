@@ -35,11 +35,91 @@ public sealed class RedactGenerator : IPseudonymGenerator
 
     public void Configure(GeneratorSettings settings)
     {
-        if (!string.IsNullOrEmpty(settings.Domain))
-            _placeholder = settings.Domain;
+        if (!string.IsNullOrEmpty(settings.Placeholder))
+            _placeholder = settings.Placeholder;
     }
 
     public void SetPlaceholder(string placeholder) => _placeholder = placeholder;
+}
+
+/// <summary>Waehlt deterministisch aus einer eigenen Werteliste.</summary>
+public sealed class WordlistGenerator : IPseudonymGenerator
+{
+    private List<string>? _values;
+
+    public string Name => "wordlist";
+    public bool IsReversible => true;
+    public bool IsWordLike => true;
+
+    public void Configure(GeneratorSettings settings)
+    {
+        if (settings.Values is { Count: > 0 })
+            _values = settings.Values;
+    }
+
+    public string Generate(ReadOnlySpan<byte> seed, string original)
+    {
+        // Die einzige Pflichtoption unter den Generatoren: ohne eigene Werte
+        // gibt es nichts, woraus gewaehlt werden koennte. Ein Schein-Default
+        // wuerde das nur verschleiern.
+        if (_values is not { Count: > 0 })
+            throw new GenerationException(Name,
+                "Generator 'wordlist' braucht eine eigene Werteliste unter 'values' im " +
+                "zugehoerigen generators-Eintrag; ohne sie gibt es nichts zur Auswahl.");
+
+        var reader = new SeedReader(seed);
+        return reader.Pick(_values);
+    }
+}
+
+/// <summary>
+/// Behaelt <c>keepFirst</c> Zeichen am Anfang und <c>keepLast</c> am Ende,
+/// ersetzt den Rest durch <c>maskChar</c>. Nicht umkehrbar: aus dem
+/// maskierten Rest laesst sich der Klartext nicht zurueckgewinnen.
+/// </summary>
+public sealed class PartialMaskGenerator : IPseudonymGenerator
+{
+    private int _keepFirst;
+    private int _keepLast = 4;
+    private char _maskChar = '*';
+
+    public string Name => "partialMask";
+    public bool IsReversible => false;
+    public bool IsWordLike => false;
+
+    public void Configure(GeneratorSettings settings)
+    {
+        // Die Vorgabe "hinten vier Zeichen" gilt nur, solange gar nichts
+        // eingestellt ist. Sobald eine der beiden Seiten gesetzt wird, zaehlt
+        // allein das Eingestellte -- sonst gaebe es keinen Weg, ausschliesslich
+        // den Anfang stehen zu lassen: 'keepFirst: 3' zoege die vier Zeichen am
+        // Ende stillschweigend mit.
+        if (settings.KeepFirst > 0 || settings.KeepLast > 0)
+        {
+            _keepFirst = settings.KeepFirst;
+            _keepLast = settings.KeepLast;
+        }
+
+        if (!string.IsNullOrEmpty(settings.MaskChar))
+            _maskChar = settings.MaskChar[0];
+    }
+
+    public string Generate(ReadOnlySpan<byte> seed, string original)
+    {
+        // Ist der Wert kuerzer als die Summe der behaltenen Zeichen, wuerde
+        // ein ueberlappender Ausschnitt einen Teil des Klartexts trotzdem
+        // zeigen -- der einzige wirklich gefaehrliche Fehler an dieser
+        // Stelle. Deshalb dann vollstaendige Maskierung statt eines
+        // Ausschnitts.
+        if (original.Length <= _keepFirst + _keepLast)
+            return new string(_maskChar, original.Length);
+
+        var visibleStart = original[.._keepFirst];
+        var visibleEnd = original[^_keepLast..];
+        var maskedLength = original.Length - _keepFirst - _keepLast;
+
+        return visibleStart + new string(_maskChar, maskedLength) + visibleEnd;
+    }
 }
 
 /// <summary>Vor- und Nachname aus den eingebetteten Wortlisten.</summary>

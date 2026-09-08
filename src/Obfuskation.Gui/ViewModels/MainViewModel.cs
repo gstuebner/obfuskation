@@ -60,6 +60,8 @@ public sealed class MainViewModel : ObservableObject
             () => TextRulesRequested?.Invoke(), () => _session is not null);
         ShowMappingCommand = new RelayCommand(
             () => MappingRequested?.Invoke(), () => _session is not null);
+        ShowGeneratorOptionsCommand = new RelayCommand(
+            () => GeneratorOptionsRequested?.Invoke(), () => _selectedField?.HasOptions == true);
         ShowAboutCommand = new RelayCommand(() => AboutRequested?.Invoke());
         ShowHelpCommand = new RelayCommand(() => HelpRequested?.Invoke());
 
@@ -83,18 +85,29 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand ToggleThemeCommand { get; }
     public RelayCommand ShowTextRulesCommand { get; }
     public RelayCommand ShowMappingCommand { get; }
+    public RelayCommand ShowGeneratorOptionsCommand { get; }
     public RelayCommand ShowAboutCommand { get; }
     public RelayCommand ShowHelpCommand { get; }
 
     /// <summary>Bitten an die Ansicht, ein Nebenfenster zu oeffnen.</summary>
     public event Action? TextRulesRequested;
     public event Action? MappingRequested;
+    public event Action? GeneratorOptionsRequested;
     public event Action? AboutRequested;
     public event Action? HelpRequested;
 
     /// <summary>Das Ansichtsmodell der Textregeln zum laufenden Profil.</summary>
     public TextRulesViewModel? CreateTextRulesViewModel()
         => _session is null ? null : new TextRulesViewModel(_session.Profile, OnTextRulesChanged);
+
+    /// <summary>
+    /// Das Ansichtsmodell des Optionsdialogs fuer das fuehrende gewaehlte
+    /// Feld. Der Dialog bezieht sich immer auf genau ein Feld -- bei
+    /// Mehrfachauswahl bleibt die Schaltflaeche ohnehin verborgen (siehe
+    /// <see cref="ShowGeneratorOptionsButton"/>).
+    /// </summary>
+    public GeneratorOptionsViewModel? CreateGeneratorOptionsViewModel()
+        => _selectedField is null ? null : new GeneratorOptionsViewModel(_selectedField);
 
     /// <summary>Die Auskunft ueber die Ersetzungstabelle.</summary>
     public MappingViewModel? CreateMappingViewModel()
@@ -227,6 +240,8 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(SelectedAction));
             OnPropertyChanged(nameof(SelectedGenerator));
             OnPropertyChanged(nameof(NeedsGenerator));
+            OnPropertyChanged(nameof(ShowGeneratorOptionsButton));
+            ShowGeneratorOptionsCommand.RaiseCanExecuteChanged();
         }
     }
 
@@ -263,6 +278,8 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsMultiSelection));
         OnPropertyChanged(nameof(IsSingleSelection));
         OnPropertyChanged(nameof(MultiSelectionHint));
+        OnPropertyChanged(nameof(ShowGeneratorOptionsButton));
+        ShowGeneratorOptionsCommand.RaiseCanExecuteChanged();
     }
 
     public bool HasSelectedField => _selectedField is not null;
@@ -323,6 +340,15 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Ob die Auswahl einen Generator braucht.</summary>
     public bool NeedsGenerator => _selectedField?.NeedsGenerator ?? false;
+
+    /// <summary>
+    /// Ob die Schaltflaeche zum Optionsdialog erscheint: nur bei
+    /// Einzelauswahl eines Feldes, dessen Generator Optionen kennt. Bei
+    /// Mehrfachauswahl koennten die gewaehlten Felder verschiedene
+    /// Generatoren tragen, der Dialog bezieht sich aber immer auf genau
+    /// einen Namensraum.
+    /// </summary>
+    public bool ShowGeneratorOptionsButton => IsSingleSelection && (_selectedField?.HasOptions ?? false);
 
     /// <summary>
     /// Setzt eine Einstellung auf die ganze Auswahl. Die Nacharbeit
@@ -921,6 +947,12 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(UndecidedCount));
         OnPropertyChanged(nameof(UndecidedText));
         OnPropertyChanged(nameof(HasUndecided));
+        // Eine Optionsaenderung kann einen neuen Namensraum angelegt haben --
+        // das aendert nichts an HasOptions selbst, aber Sichtbarkeit und
+        // Ausfuehrbarkeit der Schaltflaeche sollen mit dem aktuellen Stand
+        // uebereinstimmen.
+        OnPropertyChanged(nameof(ShowGeneratorOptionsButton));
+        ShowGeneratorOptionsCommand.RaiseCanExecuteChanged();
         RaiseCommandStates();
     }
 
@@ -1364,6 +1396,7 @@ public sealed class MainViewModel : ObservableObject
         OpenDataFileCommand.RaiseCanExecuteChanged();
         ShowTextRulesCommand.RaiseCanExecuteChanged();
         ShowMappingCommand.RaiseCanExecuteChanged();
+        ShowGeneratorOptionsCommand.RaiseCanExecuteChanged();
         ObfuscateCommand.RaiseCanExecuteChanged();
         DeobfuscateCommand.RaiseCanExecuteChanged();
         ScanCommand.RaiseCanExecuteChanged();

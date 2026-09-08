@@ -60,6 +60,37 @@ public sealed class ProfileDefaults
 
     /// <summary>Platzhalter fuer <see cref="FieldAction.Redact"/>.</summary>
     public string RedactionPlaceholder { get; set; } = "***";
+
+    /// <summary>
+    /// Werte, die zusaetzlich zu "" und reinem Leerraum als faktisch leer
+    /// gelten (nach Trimmen, ohne Ruecksicht auf Gross-/Kleinschreibung), etwa
+    /// "-" oder "N/A". Solche Werte laufen unveraendert durch, statt ein
+    /// Pseudonym zu bekommen, das einen Wert vortaeuschen wuerde, der im
+    /// Original gar nicht stand.
+    /// </summary>
+    public List<string> EmptyValues { get; set; } = new();
+
+    /// <summary>
+    /// Ob ein Wert faktisch leer ist: "" ist es, reiner Leerraum ist es, und
+    /// nach Trimmen ohne Ruecksicht auf Gross-/Kleinschreibung jeder Eintrag
+    /// aus <see cref="EmptyValues"/>. Gemeinsamer Helfer fuer alle drei
+    /// Transformer (Obfuskation, Pruefung, Rueckuebersetzung), damit die
+    /// Definition an genau einer Stelle steht und die drei nicht auseinanderlaufen.
+    /// </summary>
+    public bool IsEffectivelyEmpty(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+            return true;
+
+        foreach (var candidate in EmptyValues)
+        {
+            if (string.Equals(trimmed, candidate.Trim(), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
 }
 
 public sealed class FieldRule
@@ -112,7 +143,7 @@ public sealed class GeneratorSettings
     /// <summary>Maximaler Betrag der Datumsverschiebung in Tagen (nur <c>dateShift</c>).</summary>
     public int MaxDays { get; set; } = 400;
 
-    /// <summary>Erkannte Datumsformate (nur <c>dateShift</c>).</summary>
+    /// <summary>Erkannte Datumsformate (<c>dateShift</c>, <c>dateRange</c>, <c>dateGeneralize</c>).</summary>
     public List<string>? Formats { get; set; }
 
     /// <summary>Laendercode fuer IBAN und BIC.</summary>
@@ -120,6 +151,51 @@ public sealed class GeneratorSettings
 
     /// <summary>Domain fuer erzeugte E-Mail-Adressen.</summary>
     public string? Domain { get; set; }
+
+    /// <summary>Untere Grenze des Zeitraums (nur <c>dateRange</c>), ISO-Datum ("yyyy-MM-dd").</summary>
+    public string? From { get; set; }
+
+    /// <summary>Obere Grenze des Zeitraums (nur <c>dateRange</c>), ISO-Datum ("yyyy-MM-dd").</summary>
+    public string? To { get; set; }
+
+    /// <summary>
+    /// Rundungsstufe fuer <c>dateGeneralize</c>: "month", "quarter" oder
+    /// "year". Ohne Angabe gilt "month".
+    /// </summary>
+    public string? Granularity { get; set; }
+
+    /// <summary>
+    /// Zeichenmaske fuer <c>pattern</c>: 'A' Grossbuchstabe, 'a' Kleinbuchstabe,
+    /// '9' Ziffer, 'X' alphanumerisch, '\' escaped das Folgezeichen, alles
+    /// Uebrige bleibt woertlich. Ohne Angabe wird die Maske aus dem Original
+    /// abgeleitet.
+    /// </summary>
+    public string? Pattern { get; set; }
+
+    /// <summary>Eigene Werteliste, aus der <c>wordlist</c> deterministisch waehlt.</summary>
+    public List<string>? Values { get; set; }
+
+    /// <summary>Anzahl der am Anfang sichtbar bleibenden Zeichen (nur <c>partialMask</c>).</summary>
+    public int KeepFirst { get; set; }
+
+    /// <summary>
+    /// Anzahl der am Ende sichtbar bleibenden Zeichen (nur <c>partialMask</c>).
+    /// Ohne Angabe (0) gelten effektiv 4 -- wer wirklich keine Endstellen
+    /// sichtbar lassen will, muss deshalb 'keepFirst' und die Maskierung ueber
+    /// die Gesamtlaenge des Wertes steuern.
+    /// </summary>
+    public int KeepLast { get; set; }
+
+    /// <summary>Maskierungszeichen, genau ein Zeichen (nur <c>partialMask</c>). Ohne Angabe '*'.</summary>
+    public string? MaskChar { get; set; }
+
+    /// <summary>
+    /// Eigener Platzhalter (nur <c>redact</c>). Ohne Angabe gilt
+    /// <c>defaults.redactionPlaceholder</c> -- dieses Feld erlaubt einem
+    /// eigenen <c>redact</c>-Namensraum einen abweichenden Platzhalter, der
+    /// nicht von der Profilvorgabe ueberschrieben wird.
+    /// </summary>
+    public string? Placeholder { get; set; }
 
     /// <summary>
     /// Vorangestellte Kennzeichnung des Pseudonyms (nur <c>token</c>). Gehoert

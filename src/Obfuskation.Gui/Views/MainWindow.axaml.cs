@@ -20,6 +20,7 @@ public partial class MainWindow : Window
 
             viewModel.TextRulesRequested += () => ShowTextRules(viewModel);
             viewModel.MappingRequested += () => ShowMapping(viewModel);
+            viewModel.GeneratorOptionsRequested += () => ShowGeneratorOptions(viewModel);
             viewModel.AboutRequested += () => ShowAbout(viewModel);
             viewModel.HelpRequested += ShowHelp;
         };
@@ -57,6 +58,14 @@ public partial class MainWindow : Window
             return;
 
         new MappingWindow { DataContext = inhalt }.ShowDialog(this);
+    }
+
+    private void ShowGeneratorOptions(MainViewModel viewModel)
+    {
+        if (viewModel.CreateGeneratorOptionsViewModel() is not { } inhalt)
+            return;
+
+        new GeneratorOptionsWindow { DataContext = inhalt }.ShowDialog(this);
     }
 
     private void ShowAbout(MainViewModel viewModel)

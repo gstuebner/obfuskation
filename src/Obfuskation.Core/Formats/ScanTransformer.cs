@@ -88,7 +88,9 @@ public sealed class ScanTransformer : IRecordTransformer
 
     private void Inspect(string value, string location)
     {
-        if (string.IsNullOrEmpty(value))
+        // Derselbe Helfer wie in ObfuscateTransformer und DeobfuscateTransformer,
+        // sonst laufen Obfuskation, Pruefung und Rueckuebersetzung auseinander.
+        if (_profile.Defaults.IsEffectivelyEmpty(value))
             return;
 
         // Ein Wert, der selbst ein vergebenes Pseudonym ist, ist geprueft in

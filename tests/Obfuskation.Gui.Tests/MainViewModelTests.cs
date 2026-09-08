@@ -534,6 +534,119 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Eine_Option_am_eingebauten_Generator_legt_einen_eigenen_Namensraum_an()
+    {
+        // Gegenstueck zum Praefix-Test oben, diesmal fuer einen der neuen
+        // Generatoren mit Optionen: "Betrag" steht nach dem Wechsel auf
+        // "pseudonymize" zunaechst auf dem eingebauten "token" (siehe oben),
+        // wird hier aber von Hand auf den eingebauten "pattern" umgestellt.
+        // Das Setzen der Maske darauf darf nicht jedes andere Feld mittreffen,
+        // das ebenfalls schlicht "pattern" verwendet -- also muss auch hier
+        // ein neuer, eigener Namensraum entstehen (FieldRuleViewModel.EnsureNamespace).
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "Betrag");
+        modell.SelectedField = feld;
+        feld.Action = FieldAction.Pseudonymize;
+        feld.Generator = "pattern";
+        Assert.Equal("pattern", feld.Generator);
+        Assert.True(feld.HasOptions);
+        Assert.True(feld.ShowPatternMask);
+
+        feld.Pattern = "999-999";
+
+        Assert.NotNull(feld.Generator);
+        Assert.NotEqual("pattern", feld.Generator);
+
+        var einstellungen = modell.Session!.Profile.Generators[feld.Generator!];
+        Assert.Equal("pattern", einstellungen.Type);
+        Assert.Equal("999-999", einstellungen.Pattern);
+
+        var feldRegel = modell.Session.Profile.Fields.Single(r => r.Match == "Betrag");
+        Assert.Equal(feld.Generator, feldRegel.Generator);
+
+        // Wie beim Praefix: der neue Eintrag muss wertgleich in Generators
+        // stehen, sonst faende ihn die ComboBox nicht.
+        var gewaehlt = feld.SelectedGenerator;
+        Assert.NotNull(gewaehlt);
+        Assert.Contains(gewaehlt, modell.Generators);
+    }
+
+    [Fact]
+    public async Task Ein_Setzer_ohne_Wertaenderung_legt_keinen_Namensraum_an()
+    {
+        // Avalonia schreibt bei NumericUpDown und ComboBox schon beim Oeffnen
+        // des Dialogs den unveraenderten Wert zurueck. Entstuende dabei ein
+        // Namensraum, haette der Anwender nach blossem Hinsehen ein
+        // geaendertes Profil und beim Schliessen die Rueckfrage nach
+        // ungespeicherten Aenderungen.
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "Betrag");
+        modell.SelectedField = feld;
+        feld.Action = FieldAction.Pseudonymize;
+        feld.Generator = "partialMask";
+
+        var vorher = modell.Session!.Profile.Generators.Count;
+
+        // Genau das, was die Bindings beim Oeffnen tun: den geltenden Wert
+        // noch einmal setzen.
+        feld.KeepFirst = feld.KeepFirst;
+        feld.KeepLast = feld.KeepLast;
+        feld.MaskChar = feld.MaskChar;
+
+        // Dasselbe fuer die Auswahlliste des anderen Generators: auch ihr
+        // Vorgabeeintrag darf beim blossen Anzeigen nicht ins Profil wandern.
+        feld.Generator = "dateGeneralize";
+        feld.SelectedGranularity = feld.SelectedGranularity;
+        Assert.Equal("dateGeneralize", feld.Generator);
+
+        feld.Generator = "partialMask";
+
+        Assert.Equal("partialMask", feld.Generator);
+        Assert.Equal(vorher, modell.Session.Profile.Generators.Count);
+
+        // Eine echte Aenderung legt den Namensraum dann sehr wohl an.
+        feld.KeepFirst = 3;
+        Assert.NotEqual("partialMask", feld.Generator);
+        Assert.Equal(3, modell.Session.Profile.Generators[feld.Generator!].KeepFirst);
+    }
+
+    [Fact]
+    public async Task Die_Optionsschaltflaeche_erscheint_nur_bei_Generatoren_mit_Optionen()
+    {
+        // "IBAN" hat keine Optionen (nur Country, das nicht Teil dieser
+        // Etappe ist), "Betrag" bekommt hier "pattern" mit einer Maske --
+        // nur dort soll die Schaltflaeche erscheinen, und der Dialog soll
+        // sich auf genau dieses Feld beziehen.
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var iban = modell.Fields.Single(f => f.FieldName == "IBAN");
+        modell.SelectedField = iban;
+        iban.Action = FieldAction.Pseudonymize;
+        iban.Generator = "iban";
+
+        Assert.False(modell.ShowGeneratorOptionsButton);
+
+        var betrag = modell.Fields.Single(f => f.FieldName == "Betrag");
+        modell.SelectedField = betrag;
+        betrag.Action = FieldAction.Pseudonymize;
+        betrag.Generator = "pattern";
+
+        Assert.True(modell.ShowGeneratorOptionsButton);
+
+        var dialog = modell.CreateGeneratorOptionsViewModel();
+        Assert.NotNull(dialog);
+        Assert.Same(betrag, dialog!.Field);
+    }
+
+    [Fact]
     public async Task Der_ueber_das_Praefix_Feld_angelegte_Namensraum_bleibt_in_der_Auswahlliste()
     {
         // Schutz gegen einen Rueckfall in D-4, diesmal ausgeloest durch das
@@ -597,6 +710,39 @@ public class MainViewModelTests : IDisposable
         Assert.NotNull(regel.Generator);
         Assert.Equal("belegNummer", regel.Generator!.Name);
         Assert.Contains(regel.Generator, textregeln.Generators);
+    }
+
+    [Fact]
+    public async Task Die_Namensraum_Warnung_zaehlt_alle_mitbetroffenen_Regeln()
+    {
+        // Ehemals "PrefixIsShared" -- ein Bool nur fuers Praefix. Jetzt eine
+        // allgemeine Warnung, die genauso fuer die neuen Optionen (Maske,
+        // Werteliste, ...) gilt und die Anzahl der mitbetroffenen Regeln
+        // nennt, nicht nur ein Ja/Nein.
+        var profil = SchreibeProfil(p =>
+        {
+            p.Generators["belegNummer"] = new GeneratorSettings { Type = "numericId" };
+            p.Fields.Add(new FieldRule
+            {
+                Match = "Kundennummer", Action = FieldAction.Pseudonymize, Generator = "belegNummer",
+            });
+            p.TextRules.Add(new TextRule
+            {
+                Name = "beleg", Pattern = @"\bBEL-\d{6}\b", Generator = "belegNummer",
+            });
+        });
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, SchreibeCsv());
+
+        var feld = modell.Fields.Single(f => f.FieldName == "Kundennummer");
+        modell.SelectedField = feld;
+
+        // Die Textregel "beleg" nutzt denselben Namensraum -- eine
+        // Optionsaenderung an "belegNummer" traefe sie mit.
+        Assert.Equal(1, feld.SharedNamespaceCount);
+        Assert.True(feld.NamespaceIsShared);
+        Assert.Contains("1", feld.NamespaceSharedWarning, StringComparison.Ordinal);
     }
 
     [Fact]

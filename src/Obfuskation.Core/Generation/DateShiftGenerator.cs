@@ -1,4 +1,3 @@
-using System.Globalization;
 using Obfuskation.Core.Configuration;
 
 namespace Obfuskation.Core.Generation;
@@ -25,14 +24,7 @@ public sealed class GenerationException : Exception
 /// </summary>
 public sealed class DateShiftGenerator : IPseudonymGenerator
 {
-    private static readonly string[] FallbackFormats =
-    [
-        "dd.MM.yyyy", "d.M.yyyy", "yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy",
-        "yyyy-MM-ddTHH:mm:ss", "yyyy-MM-dd HH:mm:ss", "dd.MM.yyyy HH:mm",
-        "dd.MM.yy", "yyyyMMdd",
-    ];
-
-    private string[] _formats = FallbackFormats;
+    private string[] _formats = DateValues.FallbackFormats;
     private int _maxDays = 400;
     private int _offsetDays;
 
@@ -49,11 +41,7 @@ public sealed class DateShiftGenerator : IPseudonymGenerator
         if (settings.MaxDays > 0)
             _maxDays = settings.MaxDays;
 
-        if (settings.Formats is { Count: > 0 })
-        {
-            // Die eigenen Formate zuerst pruefen, die Standardformate als Auffangnetz.
-            _formats = settings.Formats.Concat(FallbackFormats).Distinct().ToArray();
-        }
+        _formats = DateValues.CombineFormats(settings.Formats);
     }
 
     /// <summary>
@@ -78,9 +66,9 @@ public sealed class DateShiftGenerator : IPseudonymGenerator
 
     public bool TryInvert(string pseudonym, out string original)
     {
-        if (TryParse(pseudonym, out var value, out var format))
+        if (DateValues.TryParse(pseudonym, _formats, out var value, out var format))
         {
-            original = value.AddDays(-_offsetDays).ToString(format, CultureInfo.InvariantCulture);
+            original = DateValues.Format(value.AddDays(-_offsetDays), format);
             return true;
         }
 
@@ -90,29 +78,11 @@ public sealed class DateShiftGenerator : IPseudonymGenerator
 
     private string Shift(string value, int days)
     {
-        if (!TryParse(value, out var parsed, out var format))
+        if (!DateValues.TryParse(value, _formats, out var parsed, out var format))
             throw new GenerationException(Name,
                 $"Wert ist mit keinem der konfigurierten Datumsformate lesbar: '{value}'. " +
                 "Format in generators.dateShift.formats ergänzen oder einen anderen Generator wählen.");
 
-        return parsed.AddDays(days).ToString(format, CultureInfo.InvariantCulture);
-    }
-
-    private bool TryParse(string value, out DateTime result, out string format)
-    {
-        var trimmed = value.Trim();
-        foreach (var candidate in _formats)
-        {
-            if (DateTime.TryParseExact(trimmed, candidate, CultureInfo.InvariantCulture,
-                    DateTimeStyles.None, out result))
-            {
-                format = candidate;
-                return true;
-            }
-        }
-
-        result = default;
-        format = _formats[0];
-        return false;
+        return DateValues.Format(parsed.AddDays(days), format);
     }
 }

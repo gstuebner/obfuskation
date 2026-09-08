@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Obfuskation.Core;
 using Obfuskation.Core.Configuration;
 
@@ -105,8 +107,7 @@ public sealed class FieldRuleViewModel : ObservableObject
             OnPropertyChanged(nameof(Summary));
             OnPropertyChanged(nameof(NeedsGenerator));
             OnPropertyChanged(nameof(SelectedGenerator));
-            OnPropertyChanged(nameof(ShowPrefix));
-            OnPropertyChanged(nameof(Prefix));
+            RaiseOptionVisibilityChanged();
             _onChanged();
         }
     }
@@ -124,17 +125,95 @@ public sealed class FieldRuleViewModel : ObservableObject
 
             OnPropertyChanged(nameof(Summary));
             OnPropertyChanged(nameof(SelectedGenerator));
-            OnPropertyChanged(nameof(ShowPrefix));
-            OnPropertyChanged(nameof(Prefix));
-            OnPropertyChanged(nameof(PrefixIsShared));
+            RaiseOptionVisibilityChanged();
             _onChanged();
         }
+    }
+
+    /// <summary>
+    /// Meldet alle Eigenschaften, die von Generator oder Namensraum abhaengen
+    /// -- Sichtbarkeit der Optionen, ihre Werte, die Freigabe-Warnung. Ein
+    /// Wechsel des Generators (auch ueber <see cref="EnsureNamespace"/>) kann
+    /// jede von ihnen veraendern, darum werden sie gemeinsam an einer Stelle
+    /// gemeldet statt an jedem einzelnen Aufrufer wiederholt aufgezaehlt.
+    /// </summary>
+    private void RaiseOptionVisibilityChanged()
+    {
+        OnPropertyChanged(nameof(ShowPrefix));
+        OnPropertyChanged(nameof(Prefix));
+        OnPropertyChanged(nameof(ShowPlaceholder));
+        OnPropertyChanged(nameof(Placeholder));
+        OnPropertyChanged(nameof(ShowDateRange));
+        OnPropertyChanged(nameof(From));
+        OnPropertyChanged(nameof(To));
+        OnPropertyChanged(nameof(ShowGranularity));
+        OnPropertyChanged(nameof(SelectedGranularity));
+        OnPropertyChanged(nameof(ShowPatternMask));
+        OnPropertyChanged(nameof(Pattern));
+        OnPropertyChanged(nameof(ShowWordlist));
+        OnPropertyChanged(nameof(ValuesText));
+        OnPropertyChanged(nameof(ShowPartialMask));
+        OnPropertyChanged(nameof(KeepFirst));
+        OnPropertyChanged(nameof(KeepLast));
+        OnPropertyChanged(nameof(MaskChar));
+        OnPropertyChanged(nameof(HasOptions));
+        OnPropertyChanged(nameof(SharedNamespaceCount));
+        OnPropertyChanged(nameof(NamespaceIsShared));
+        OnPropertyChanged(nameof(NamespaceSharedWarning));
     }
 
     /// <summary>Ob eine Entscheidung feststeht. Sonst bricht ein Lauf hier ab.</summary>
     public bool IsDecided => _action != FieldAction.Error;
 
     public bool NeedsGenerator => _action == FieldAction.Pseudonymize;
+
+    /// <summary>
+    /// Ordnet jede Option ihrem einzig zulaessigen Basistyp zu -- dieselbe
+    /// Zuordnung wie <c>ProfileValidator.OptionOwnership</c> in der
+    /// Bibliothek. Core-Code ist fuer diese Etappe gesperrt, darum steht die
+    /// Zuordnung hier gespiegelt statt von dort gelesen; sie ist aber genau
+    /// einmal im GUI-Code hinterlegt und bestimmt von hier aus, wann
+    /// Schaltflaeche, Optionsdialog und die inline Kennzeichnung etwas
+    /// anzeigen -- nirgends sonst wird diese Zuordnung nachgebaut.
+    /// </summary>
+    private static readonly Dictionary<string, string> OptionBaseTypes =
+        ProfileValidator.OptionOwnership.ToDictionary(
+            eintrag => eintrag.Option, eintrag => eintrag.BaseType, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Der Basistyp des aktuellen Generators: bei einem eigenen Namensraum
+    /// dessen <c>Type</c> (oder, falls leer, der Schluessel selbst), sonst
+    /// der eingebaute Name unmittelbar.
+    /// </summary>
+    private string? BaseType
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_generator))
+                return null;
+
+            if (!_profile.Generators.TryGetValue(_generator, out var settings))
+                return _generator;
+
+            return string.IsNullOrWhiteSpace(settings.Type) ? _generator : settings.Type;
+        }
+    }
+
+    /// <summary>Ob der aktuelle Generator bei "pseudonymize" auf dem genannten Basistyp beruht.</summary>
+    private bool IsBaseType(string baseType)
+        => _action == FieldAction.Pseudonymize
+           && string.Equals(BaseType, baseType, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Die Einstellungen des aktuellen Generators, sofern er schon einen
+    /// eigenen Namensraum im Profil hat. Bei einem noch unveraenderten
+    /// eingebauten Generator gibt es keine -- die Optionsgetter liefern dann
+    /// ihre Vorgabe.
+    /// </summary>
+    private GeneratorSettings? CurrentSettings
+        => _generator is not null && _profile.Generators.TryGetValue(_generator, out var settings)
+            ? settings
+            : null;
 
     /// <summary>
     /// Ob die Kennzeichnung (das Praefix) angezeigt werden soll: nur bei
@@ -144,7 +223,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// ein Praefix wuerde das zerstoeren; das prueft schon der
     /// <see cref="ProfileValidator"/>, hier geht es nur um die Sichtbarkeit.
     /// </summary>
-    public bool ShowPrefix => _action == FieldAction.Pseudonymize && IsTokenBasedGenerator();
+    public bool ShowPrefix => IsBaseType(OptionBaseTypes["prefix"]);
 
     /// <summary>
     /// Die Kennzeichnung, die dem erzeugten Pseudonym vorangestellt wird.
@@ -155,35 +234,151 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// </summary>
     public string? Prefix
     {
-        get => _generator is not null && _profile.Generators.TryGetValue(_generator, out var settings)
-            ? settings.Prefix
-            : null;
+        get => CurrentSettings?.Prefix;
         set => SetPrefix(string.IsNullOrWhiteSpace(value) ? null : value);
     }
 
+    /// <summary>Ob "placeholder" (nur <c>redact</c>) angezeigt werden soll.</summary>
+    public bool ShowPlaceholder => IsBaseType(OptionBaseTypes["placeholder"]);
+
+    /// <summary>Eigener Platzhalter fuer <c>redact</c>. Ohne Angabe gilt die Profilvorgabe.</summary>
+    public string? Placeholder
+    {
+        get => CurrentSettings?.Placeholder;
+        set => SetOption(s => s.Placeholder = string.IsNullOrWhiteSpace(value) ? null : value);
+    }
+
+    /// <summary>Ob "from"/"to" (nur <c>dateRange</c>) angezeigt werden sollen.</summary>
+    public bool ShowDateRange => IsBaseType(OptionBaseTypes["from"]);
+
+    /// <summary>Untere Grenze des Zeitraums, ISO-Datum. Ohne Angabe gilt das Kalenderjahr des Originals.</summary>
+    public string? From
+    {
+        get => CurrentSettings?.From;
+        set => SetOption(s => s.From = string.IsNullOrWhiteSpace(value) ? null : value);
+    }
+
+    /// <summary>Obere Grenze des Zeitraums, ISO-Datum.</summary>
+    public string? To
+    {
+        get => CurrentSettings?.To;
+        set => SetOption(s => s.To = string.IsNullOrWhiteSpace(value) ? null : value);
+    }
+
+    /// <summary>Ob "granularity" (nur <c>dateGeneralize</c>) angezeigt werden soll.</summary>
+    public bool ShowGranularity => IsBaseType(OptionBaseTypes["granularity"]);
+
+    /// <summary>Die Rundungsstufe fuer <c>dateGeneralize</c>, als Listeneintrag. Ohne Angabe "month".</summary>
+    public GranularityOption SelectedGranularity
+    {
+        get => GranularityOption.For(CurrentSettings?.Granularity);
+        // Wie beim Maskenzeichen: "month" ist die Vorgabe und wird nicht als
+        // gesetzter Wert zurueckgeschrieben.
+        set => SetOption(s => s.Granularity =
+            value.Value == GranularityOption.Default ? null : value.Value);
+    }
+
+    /// <summary>Ob "pattern" (nur <c>pattern</c>) angezeigt werden soll.</summary>
+    public bool ShowPatternMask => IsBaseType(OptionBaseTypes["pattern"]);
+
+    /// <summary>Die Zeichenmaske. Ohne Angabe wird sie aus dem Original abgeleitet.</summary>
+    public string? Pattern
+    {
+        get => CurrentSettings?.Pattern;
+        set => SetOption(s => s.Pattern = string.IsNullOrEmpty(value) ? null : value);
+    }
+
+    /// <summary>Ob "values" (nur <c>wordlist</c>) angezeigt werden soll.</summary>
+    public bool ShowWordlist => IsBaseType(OptionBaseTypes["values"]);
+
     /// <summary>
-    /// Ob der aktuelle Namensraum noch von einer anderen Feld- oder Textregel
-    /// verwendet wird. Eine Aenderung der Kennzeichnung trifft dann auch
-    /// jene Regeln mit — das muss sichtbar sein, bevor jemand versehentlich
-    /// ein fremdes Pseudonymformat aendert.
+    /// Die Werteliste als mehrzeiliger Text, ein Wert je Zeile -- fuer ein
+    /// einfaches Textfeld im Dialog statt einer eigenen Listenbearbeitung.
     /// </summary>
-    public bool PrefixIsShared
+    public string ValuesText
+    {
+        get => CurrentSettings?.Values is { } values ? string.Join('\n', values) : "";
+        set => SetOption(s => s.Values = SplitValues(value));
+    }
+
+    /// <summary>Ob "keepFirst"/"keepLast"/"maskChar" (nur <c>partialMask</c>) angezeigt werden sollen.</summary>
+    public bool ShowPartialMask => IsBaseType(OptionBaseTypes["keepFirst"]);
+
+    /// <summary>Anzahl der am Anfang sichtbar bleibenden Zeichen.</summary>
+    public int KeepFirst
+    {
+        get => CurrentSettings?.KeepFirst ?? 0;
+        set => SetOption(s => s.KeepFirst = value);
+    }
+
+    /// <summary>
+    /// Anzahl der am Ende sichtbar bleibenden Zeichen. Solange beide,
+    /// <see cref="KeepFirst"/> und <see cref="KeepLast"/>, auf 0 stehen, gilt
+    /// die Vorgabe von vier sichtbaren Endstellen; sobald eine der beiden
+    /// gesetzt wird, zaehlt nur noch das tatsaechlich Eingestellte (siehe
+    /// Hinweistext im Dialog).
+    /// </summary>
+    public int KeepLast
+    {
+        get => CurrentSettings?.KeepLast ?? 0;
+        set => SetOption(s => s.KeepLast = value);
+    }
+
+    /// <summary>Maskierungszeichen, genau ein Zeichen. Ohne Angabe '*'.</summary>
+    public string MaskChar
+    {
+        get => CurrentSettings?.MaskChar ?? "*";
+        // Der angezeigte Stern ist die Vorgabe, kein gesetzter Wert. Er wird
+        // deshalb wieder auf "nicht gesetzt" zurueckgefuehrt -- sonst schriebe
+        // schon das blosse Anzeigen ihn als echte Einstellung ins Profil.
+        set => SetOption(s => s.MaskChar = string.IsNullOrEmpty(value) || value == "*" ? null : value);
+    }
+
+    /// <summary>
+    /// Ob der gewaehlte Generator ueberhaupt Optionen kennt -- steuert, ob
+    /// die Schaltflaeche zum Optionsdialog neben der Generator-Auswahl
+    /// erscheint.
+    /// </summary>
+    public bool HasOptions
+        => ShowPrefix || ShowPlaceholder || ShowDateRange || ShowGranularity
+           || ShowPatternMask || ShowWordlist || ShowPartialMask;
+
+    /// <summary>
+    /// Anzahl anderer Feld- oder Textregeln, die denselben Namensraum
+    /// verwenden. Eine Optionsaenderung (Praefix, Maske, Werteliste, ...)
+    /// trifft diese Regeln mit -- das muss sichtbar sein, bevor jemand
+    /// versehentlich ein fremdes Pseudonymformat aendert. Ein noch nicht
+    /// angelegter eigener Namensraum zaehlt nicht: der eingebaute Generator
+    /// (schlicht "token" etc.) gilt nicht als "geteilter Namensraum" im Sinn
+    /// dieser Warnung.
+    /// </summary>
+    public int SharedNamespaceCount
     {
         get
         {
-            if (_generator is null || string.Equals(_generator, "token", StringComparison.OrdinalIgnoreCase))
-                return false;
+            if (_generator is null || CurrentSettings is null)
+                return 0;
 
-            var vonAnderenFeldern = _profile.Fields.Any(regel =>
+            var vonAnderenFeldern = _profile.Fields.Count(regel =>
                 !ReferenceEquals(regel, _rule)
                 && string.Equals(regel.Generator, _generator, StringComparison.OrdinalIgnoreCase));
 
-            var vonTextregeln = _profile.TextRules.Any(regel =>
+            var vonTextregeln = _profile.TextRules.Count(regel =>
                 string.Equals(regel.Generator, _generator, StringComparison.OrdinalIgnoreCase));
 
-            return vonAnderenFeldern || vonTextregeln;
+            return vonAnderenFeldern + vonTextregeln;
         }
     }
+
+    /// <summary>Ob <see cref="SharedNamespaceCount"/> groesser als 0 ist.</summary>
+    public bool NamespaceIsShared => SharedNamespaceCount > 0;
+
+    /// <summary>Anwendersichtbarer Text zur Namensraum-Freigabe, fuer den Optionsdialog und die Karte.</summary>
+    public string NamespaceSharedWarning => SharedNamespaceCount switch
+    {
+        1 => "Dieser Namensraum wird noch von 1 weiteren Regel verwendet.",
+        var n => $"Dieser Namensraum wird noch von {n} weiteren Regeln verwendet.",
+    };
 
     /// <summary>
     /// Setzt oder loescht die Kennzeichnung. Steht die Regel noch auf dem
@@ -193,56 +388,113 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// Zeigt die Regel schon auf einen eigenen Namensraum, wird dessen
     /// Praefix aktualisiert; ein leerer Wert entfernt nur das Praefix, nicht
     /// den Namensraum selbst, damit andere Regeln, die ihn referenzieren,
-    /// nicht ins Leere laufen.
+    /// nicht ins Leere laufen. Diese Sonderbehandlung -- kein Namensraum fuer
+    /// einen leeren Wert -- gilt nur fuer das Praefix; jede andere Option
+    /// legt beim Setzen immer einen Namensraum an (siehe <see cref="SetOption"/>).
     /// </summary>
     private void SetPrefix(string? value)
     {
-        if (string.IsNullOrWhiteSpace(_generator) || !IsTokenBasedGenerator())
+        if (string.IsNullOrWhiteSpace(_generator) || !ShowPrefix)
             return;
 
-        if (string.Equals(_generator, "token", StringComparison.OrdinalIgnoreCase))
-        {
-            // Ohne Wert gibt es nichts einzurichten -- "token" ohne Praefix
-            // ist bereits der Ausgangszustand, ein leerer Namensraum waere
-            // nur unnoetiger Ballast im Profil.
-            if (value is null)
-                return;
-
-            var key = ProfileScaffolder.ToGeneratorKey(FieldName);
-            _profile.Generators[key] = new GeneratorSettings { Type = "token", Prefix = value };
-
-            // Setzt zugleich die Regel um und loest ueber den Generator-Setter
-            // bereits _onChanged() sowie die Benachrichtigungen fuer Prefix
-            // und PrefixIsShared aus.
-            Generator = key;
+        // Ohne Wert gibt es nichts einzurichten -- "token" ohne Praefix ist
+        // bereits der Ausgangszustand, ein leerer Namensraum waere nur
+        // unnoetiger Ballast im Profil.
+        if (value is null && string.Equals(_generator, "token", StringComparison.OrdinalIgnoreCase))
             return;
-        }
 
-        _profile.Generators[_generator].Prefix = value;
+        var settings = EnsureNamespace();
+        settings.Prefix = value;
 
         OnPropertyChanged(nameof(Prefix));
-        OnPropertyChanged(nameof(PrefixIsShared));
+        OnPropertyChanged(nameof(SharedNamespaceCount));
+        OnPropertyChanged(nameof(NamespaceIsShared));
+        OnPropertyChanged(nameof(NamespaceSharedWarning));
         _onChanged();
     }
 
     /// <summary>
-    /// Ob der aktuelle Generator (eingebaut oder eigener Namensraum) auf dem
-    /// Basistyp <c>token</c> beruht.
+    /// Setzt eine Option und meldet die zugehoerigen Aenderungen. Anders als
+    /// <see cref="SetPrefix"/> legt jeder Aufruf bei Bedarf sofort einen
+    /// eigenen Namensraum an, auch fuer einen leeren Wert -- der Dialog zeigt
+    /// die Option ohnehin nur fuer einen Generator, der sie kennt, ein
+    /// versehentlich angelegter leerer Namensraum waere hier kein
+    /// realistischer Fall.
     /// </summary>
-    private bool IsTokenBasedGenerator()
+    private void SetOption(Action<GeneratorSettings> anwenden, [CallerMemberName] string? propertyName = null)
     {
-        if (string.IsNullOrWhiteSpace(_generator))
-            return false;
+        // Ein Setzer, der nichts aendert, darf keinen Namensraum anlegen und
+        // das Profil nicht als geaendert markieren. Avalonia schreibt bei
+        // NumericUpDown und ComboBox schon beim Oeffnen des Dialogs den
+        // geltenden Wert zurueck; ohne diese Pruefung entstuende dabei ein
+        // Namensraum, den niemand angelegt hat -- mitsamt der Rueckfrage nach
+        // ungespeicherten Aenderungen beim Schliessen.
+        var bisher = CurrentSettings ?? NeuerNamensraum();
+        var probe = Kopie(bisher);
+        anwenden(probe);
 
-        if (string.Equals(_generator, "token", StringComparison.OrdinalIgnoreCase))
-            return true;
+        if (Fingerabdruck(bisher) == Fingerabdruck(probe))
+            return;
 
-        if (!_profile.Generators.TryGetValue(_generator, out var settings))
-            return false;
+        var settings = EnsureNamespace();
+        anwenden(settings);
 
-        var baseName = string.IsNullOrWhiteSpace(settings.Type) ? _generator : settings.Type;
-        return string.Equals(baseName, "token", StringComparison.OrdinalIgnoreCase);
+        OnPropertyChanged(propertyName);
+        OnPropertyChanged(nameof(SharedNamespaceCount));
+        OnPropertyChanged(nameof(NamespaceIsShared));
+        OnPropertyChanged(nameof(NamespaceSharedWarning));
+        _onChanged();
     }
+
+    /// <summary>
+    /// Sorgt dafuer, dass der aktuelle Generator einen eigenen Namensraum im
+    /// Profil hat, und liefert dessen Einstellungen.
+    ///
+    /// Steht die Regel noch auf einem eingebauten Generator (schlicht
+    /// "token", "dateRange", "pattern", ...), wird ueber
+    /// <see cref="ProfileScaffolder.ToGeneratorKey"/> ein eigener Namensraum
+    /// mit demselben Basistyp angelegt und die Regel darauf umgesetzt. Zeigt
+    /// die Regel schon auf einen eigenen Namensraum, wird dessen Eintrag
+    /// unveraendert zurueckgegeben.
+    ///
+    /// Der Namensraum haengt damit immer am <c>generators</c>-Eintrag, nie am
+    /// Feldnamen selbst: wuerde eine Option stattdessen aus dem Spaltennamen
+    /// abgeleitet, bekaeme derselbe Klartext in zwei Dateien mit
+    /// abweichenden Spaltennamen zwei verschiedene Pseudonyme, und die
+    /// dateiuebergreifende Verknuepfung braeche (siehe
+    /// <c>MultiFileTests.Auch_bei_verschiedenen_Spaltennamen_bleibt_die_Verknuepfung</c>).
+    /// </summary>
+    /// <summary>
+    /// Der Eintrag, den <see cref="EnsureNamespace"/> anlegen wuerde -- als
+    /// Vergleichsmassstab dafuer, ob eine Option ueberhaupt etwas aendert.
+    /// </summary>
+    private GeneratorSettings NeuerNamensraum() => new() { Type = _generator ?? "token" };
+
+    private static GeneratorSettings Kopie(GeneratorSettings settings)
+        => JsonSerializer.Deserialize<GeneratorSettings>(JsonSerializer.Serialize(settings))!;
+
+    private static string Fingerabdruck(GeneratorSettings settings) => JsonSerializer.Serialize(settings);
+
+    private GeneratorSettings EnsureNamespace()
+    {
+        if (_generator is not null && _profile.Generators.TryGetValue(_generator, out var eigene))
+            return eigene;
+
+        var key = ProfileScaffolder.ToGeneratorKey(FieldName);
+        var settings = NeuerNamensraum();
+        _profile.Generators[key] = settings;
+
+        // Setzt zugleich die Regel um und loest ueber den Generator-Setter
+        // bereits _onChanged() sowie RaiseOptionVisibilityChanged() aus.
+        Generator = key;
+        return settings;
+    }
+
+    private static List<string> SplitValues(string text)
+        => text.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n')
+            .Where(zeile => zeile.Length > 0)
+            .ToList();
 
     /// <summary>Statuspunkt der Feldliste.</summary>
     public string StatusSymbol => IsDecided ? "●" : "○";
@@ -455,6 +707,29 @@ public sealed record ActionOption(FieldAction Action, string Label, string Hint)
 
     public static ActionOption For(FieldAction action)
         => All.First(option => option.Action == action);
+
+    public override string ToString() => Label;
+}
+
+/// <summary>Eine Rundungsstufe fuer <c>dateGeneralize</c>, wie sie im Optionsdialog erscheint.</summary>
+/// <param name="Value">Der Wert, wie er in der Konfigurationsdatei steht.</param>
+/// <param name="Label">Die Bezeichnung fuer den Menschen.</param>
+public sealed record GranularityOption(string Value, string Label)
+{
+    public static IReadOnlyList<GranularityOption> All { get; } =
+    [
+        new("month", "Monat"),
+        new("quarter", "Quartal"),
+        new("year", "Jahr"),
+    ];
+
+    /// <summary>Die Rundungsstufe, die ohne eigene Angabe gilt.</summary>
+    public const string Default = "month";
+
+    /// <summary>Der Listeneintrag zu einem Wert. Ohne Angabe (<c>null</c>) gilt "month".</summary>
+    public static GranularityOption For(string? value)
+        => All.FirstOrDefault(option => string.Equals(option.Value, value, StringComparison.OrdinalIgnoreCase))
+           ?? All[0];
 
     public override string ToString() => Label;
 }

@@ -205,6 +205,15 @@ public class GeneratorTests
     public void Alle_eingebauten_Generatoren_arbeiten_bestaendig()
     {
         var profile = new Profile();
+
+        // wordlist ist der einzige Generator mit einer echten Pflichtoption:
+        // ohne "values" wirft er eine GenerationException (siehe
+        // Wordlist_ohne_Werte_meldet_einen_Fehler unten). Damit dieser
+        // Bestandstest trotzdem alle eingebauten Generatoren durchlaufen kann,
+        // bekommt er hier eine Minimalkonfiguration -- kein Schein-Default im
+        // Generator selbst, nur diese eine Ausnahme im Test.
+        profile.Generators["wordlist"] = new GeneratorSettings { Values = ["Alpha", "Beta", "Gamma"] };
+
         var deriver = Deriver();
         var registry = GeneratorRegistry.Build(profile, deriver);
 
@@ -213,7 +222,9 @@ public class GeneratorTests
             var seed = deriver.Derive(name, "Testwert 12345", 0);
 
             // Datumswerte brauchen eine lesbare Vorlage.
-            var original = generator is DateShiftGenerator ? "15.03.1980" : "Testwert 12345";
+            var original = generator is DateShiftGenerator or DateRangeGenerator or DateGeneralizeGenerator
+                ? "15.03.1980"
+                : "Testwert 12345";
 
             var ersterLauf = generator.Generate(seed, original);
             var zweiterLauf = generator.Generate(seed, original);
@@ -221,5 +232,183 @@ public class GeneratorTests
             Assert.Equal(ersterLauf, zweiterLauf);
             Assert.False(string.IsNullOrEmpty(ersterLauf), $"Generator '{name}' lieferte nichts.");
         }
+    }
+
+    [Fact]
+    public void DateRange_bleibt_ohne_Konfiguration_im_Kalenderjahr_des_Originals()
+    {
+        var generator = new DateRangeGenerator();
+
+        for (var i = 0; i < 30; i++)
+        {
+            var erzeugt = generator.Generate(Seed("Original", i), "15.03.1980");
+            var datum = DateTime.ParseExact(erzeugt, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+            Assert.Equal(1980, datum.Year);
+        }
+    }
+
+    [Fact]
+    public void DateRange_haelt_sich_an_einen_konfigurierten_Zeitraum()
+    {
+        var generator = new DateRangeGenerator();
+        generator.Configure(new GeneratorSettings { From = "2000-01-01", To = "2000-01-31" });
+
+        for (var i = 0; i < 30; i++)
+        {
+            var erzeugt = generator.Generate(Seed("Original", i), "15.03.1980");
+            var datum = DateTime.ParseExact(erzeugt, "dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+            Assert.InRange(datum, new DateTime(2000, 1, 1), new DateTime(2000, 1, 31));
+        }
+    }
+
+    [Fact]
+    public void DateRange_ist_deterministisch()
+    {
+        var generator = new DateRangeGenerator();
+        var seed = Seed("15.03.1980");
+
+        Assert.Equal(generator.Generate(seed, "15.03.1980"), generator.Generate(seed, "15.03.1980"));
+    }
+
+    [Theory]
+    [InlineData("month", "01.03.2021")]
+    [InlineData("quarter", "01.01.2021")]
+    [InlineData("year", "01.01.2021")]
+    public void DateGeneralize_rundet_je_Granularitaet_auf_den_Anfang(string granularity, string erwartet)
+    {
+        var generator = new DateGeneralizeGenerator();
+        generator.Configure(new GeneratorSettings { Granularity = granularity });
+
+        var erzeugt = generator.Generate(Seed("15.03.2021"), "15.03.2021");
+
+        Assert.Equal(erwartet, erzeugt);
+    }
+
+    [Fact]
+    public void DateGeneralize_ist_ausdruecklich_nicht_umkehrbar()
+    {
+        var generator = new DateGeneralizeGenerator();
+        Assert.False(generator.IsReversible);
+    }
+
+    [Fact]
+    public void Pattern_folgt_einer_gesetzten_Maske()
+    {
+        var generator = new PatternGenerator();
+        generator.Configure(new GeneratorSettings { Pattern = "AA-9999" });
+
+        var erzeugt = generator.Generate(Seed("Original"), "Original");
+
+        Assert.Matches("^[A-Z]{2}-[0-9]{4}$", erzeugt);
+    }
+
+    [Fact]
+    public void Pattern_leitet_ohne_gesetzte_Maske_das_Format_aus_dem_Original_ab()
+    {
+        var generator = new PatternGenerator();
+
+        var erzeugt = generator.Generate(Seed("AB-1234"), "AB-1234");
+
+        Assert.Equal(7, erzeugt.Length);
+        Assert.True(char.IsUpper(erzeugt[0]));
+        Assert.True(char.IsUpper(erzeugt[1]));
+        Assert.Equal('-', erzeugt[2]);
+        Assert.All(erzeugt[3..], character => Assert.True(char.IsDigit(character)));
+    }
+
+    [Fact]
+    public void Pattern_behandelt_ein_escaptes_Zeichen_woertlich()
+    {
+        var generator = new PatternGenerator();
+        generator.Configure(new GeneratorSettings { Pattern = @"99\9" });
+
+        var erzeugt = generator.Generate(Seed("Original"), "Original");
+
+        Assert.Equal('9', erzeugt[2]);
+        Assert.True(char.IsDigit(erzeugt[0]));
+        Assert.True(char.IsDigit(erzeugt[1]));
+    }
+
+    [Fact]
+    public void Wordlist_waehlt_ausschliesslich_aus_der_eigenen_Liste()
+    {
+        var generator = new WordlistGenerator();
+        var werte = new List<string> { "Rot", "Gruen", "Blau" };
+        generator.Configure(new GeneratorSettings { Values = werte });
+
+        for (var i = 0; i < 20; i++)
+        {
+            var erzeugt = generator.Generate(Seed("Original", i), "Original");
+            Assert.Contains(erzeugt, werte);
+        }
+    }
+
+    [Fact]
+    public void Wordlist_ohne_Werte_meldet_einen_Fehler()
+    {
+        var generator = new WordlistGenerator();
+
+        var ex = Assert.Throws<GenerationException>(() => generator.Generate(Seed("Original"), "Original"));
+
+        Assert.Contains("values", ex.Message);
+    }
+
+    [Fact]
+    public void PartialMask_behaelt_Anfang_und_Ende_und_maskiert_die_Mitte()
+    {
+        var generator = new PartialMaskGenerator();
+        generator.Configure(new GeneratorSettings { KeepFirst = 2, KeepLast = 2, MaskChar = "#" });
+
+        var erzeugt = generator.Generate(Seed("0123456789"), "0123456789");
+
+        Assert.Equal("01######89", erzeugt);
+    }
+
+    [Fact]
+    public void PartialMask_maskiert_einen_zu_kurzen_Wert_vollstaendig()
+    {
+        // Waere der Wert kuerzer als die Summe der behaltenen Zeichen, zeigte
+        // ein ueberlappender Ausschnitt trotzdem einen Teil des Klartexts --
+        // deshalb muss ein kurzer Wert komplett maskiert werden.
+        var generator = new PartialMaskGenerator();
+        generator.Configure(new GeneratorSettings { KeepFirst = 2, KeepLast = 4 });
+
+        var erzeugt = generator.Generate(Seed("123"), "123");
+
+        Assert.Equal("***", erzeugt);
+    }
+
+    [Fact]
+    public void PartialMask_ist_ausdruecklich_nicht_umkehrbar()
+    {
+        var generator = new PartialMaskGenerator();
+        Assert.False(generator.IsReversible);
+    }
+
+    [Fact]
+    public void PartialMask_haelt_ohne_jede_Einstellung_die_letzten_vier_Zeichen()
+    {
+        var generator = new PartialMaskGenerator();
+        generator.Configure(new GeneratorSettings());
+
+        var erzeugt = generator.Generate(Seed("0123456789"), "0123456789");
+
+        Assert.Equal("******6789", erzeugt);
+    }
+
+    [Fact]
+    public void PartialMask_zieht_bei_gesetztem_keepFirst_nicht_die_Vorgabe_am_Ende_mit()
+    {
+        // Sobald eine Seite eingestellt ist, zaehlt allein das Eingestellte.
+        // Zoege 'keepFirst' die vorgegebenen vier Zeichen am Ende mit, gaebe
+        // es keinen Weg, ausschliesslich den Anfang stehen zu lassen.
+        var generator = new PartialMaskGenerator();
+        generator.Configure(new GeneratorSettings { KeepFirst = 3 });
+
+        var erzeugt = generator.Generate(Seed("0123456789"), "0123456789");
+
+        Assert.Equal("012*******", erzeugt);
     }
 }

@@ -35,6 +35,11 @@ public sealed class GeneratorRegistry
         new IbanGenerator(),
         new BicGenerator(),
         new DateShiftGenerator(),
+        new DateRangeGenerator(),
+        new DateGeneralizeGenerator(),
+        new PatternGenerator(),
+        new WordlistGenerator(),
+        new PartialMaskGenerator(),
     ];
 
     /// <summary>
@@ -63,9 +68,21 @@ public sealed class GeneratorRegistry
             byName[key] = instance;
         }
 
-        // Der Platzhalter von "redact" kommt aus den Profilvorgaben.
-        foreach (var redactor in byName.Values.OfType<RedactGenerator>())
-            redactor.SetPlaceholder(profile.Defaults.RedactionPlaceholder);
+        // Der Platzhalter von "redact" kommt aus den Profilvorgaben -- ausser
+        // der Namensraum hat unter generators.<key>.placeholder einen eigenen
+        // gesetzt; der bleibt dann unangetastet stehen, statt gleich wieder
+        // ueberschrieben zu werden.
+        foreach (var (key, generator) in byName)
+        {
+            if (generator is not RedactGenerator redactor)
+                continue;
+
+            var hasOwnPlaceholder = profile.Generators.TryGetValue(key, out var settings)
+                && !string.IsNullOrEmpty(settings.Placeholder);
+
+            if (!hasOwnPlaceholder)
+                redactor.SetPlaceholder(profile.Defaults.RedactionPlaceholder);
+        }
 
         // Die Datumsverschiebung wird aus dem Salt abgeleitet und bleibt damit
         // ueber alle Laeufe desselben Profils konstant.

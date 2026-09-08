@@ -66,9 +66,12 @@ public sealed class ObfuscateTransformer : IRecordTransformer
     {
         var rule = _resolver.Resolve(fieldName, jsonPath);
 
-        // Leere Werte bleiben leer: ein Pseudonym fuer "nichts" waere eine
-        // Information, die im Original gar nicht stand.
-        if (string.IsNullOrEmpty(value))
+        // Faktisch leere Werte bleiben unveraendert: ein Pseudonym waere eine
+        // Information, die im Original gar nicht stand. Gilt nicht nur fuer
+        // "", sondern auch reinen Leerraum und die in defaults.emptyValues
+        // hinterlegten Platzhalter wie "-" oder "N/A" (ProfileDefaults.IsEffectivelyEmpty,
+        // derselbe Helfer wie in ScanTransformer und DeobfuscateTransformer).
+        if (_profile.Defaults.IsEffectivelyEmpty(value))
             return value;
 
         switch (rule.Action)

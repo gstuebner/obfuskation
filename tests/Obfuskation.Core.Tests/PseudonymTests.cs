@@ -102,6 +102,31 @@ public class PseudonymTests
     }
 
     [Fact]
+    public void Ein_erschoepfter_Wertevorrat_nennt_die_zum_Generator_passende_Abhilfe()
+    {
+        // Drei Werte, vier Klartexte: der vierte kann kein freies Pseudonym
+        // mehr finden. Der Abbruch ist richtig -- ein stilles Duplikat waere
+        // der schlimmere Ausgang. Die Meldung muss aber zur Ursache fuehren,
+        // und die liegt hier in der eigenen Werteliste, nicht in der Wahl des
+        // Generators.
+        using var setup = new TestProfile()
+            .WithField("Abteilung", FieldAction.Pseudonymize, "abteilung");
+
+        setup.Profile.Generators["abteilung"] = new GeneratorSettings
+        {
+            Type = "wordlist",
+            Values = ["Nord", "Sued", "West"],
+        };
+
+        var ex = Assert.Throws<MappingConflictException>(() => setup.CreateEngine().Obfuscate(
+            TestProfile.Utf8("Abteilung\nEins\nZwei\nDrei\nVier\n"), "a.csv",
+            new RunOptions { Strict = true }));
+
+        Assert.Contains("values", ex.Message);
+        Assert.DoesNotContain("token", ex.Message);
+    }
+
+    [Fact]
     public void Auch_bei_engem_Wertevorrat_bleibt_jedes_Pseudonym_eindeutig()
     {
         using var setup = CsvProfile();

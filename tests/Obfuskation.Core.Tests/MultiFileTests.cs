@@ -200,6 +200,50 @@ public class MultiFileTests
             engine.Deobfuscate(kontoErsetzt.Content, "b.csv", new RunOptions()).Content));
     }
 
+    [Fact]
+    public void Wordlist_verknuepft_gleiche_Klartexte_ueber_mehrere_Dateien()
+    {
+        using var setup = new TestProfile(profile =>
+            profile.Generators["kategorie"] = new GeneratorSettings
+            {
+                Type = "wordlist",
+                Values = ["Buero", "Lager", "Produktion", "Vertrieb", "Verwaltung"],
+            });
+
+        setup.WithField("Kategorie", FieldAction.Pseudonymize, "kategorie")
+             .WithField("Warengruppe", FieldAction.Pseudonymize, "kategorie");
+
+        var engine = setup.CreateEngine();
+
+        var eine = engine.Obfuscate(TestProfile.Utf8("Kategorie\nSchrauben\n"),
+            "a.csv", new RunOptions { Strict = true });
+        var andere = engine.Obfuscate(TestProfile.Utf8("Warengruppe\nSchrauben\n"),
+            "b.csv", new RunOptions { Strict = true });
+
+        Assert.Equal(Spalte(eine.Content, 0), Spalte(andere.Content, 0));
+        Assert.Equal(0, andere.Report.NewMappings);
+    }
+
+    [Fact]
+    public void Pattern_verknuepft_gleiche_Klartexte_ueber_mehrere_Dateien()
+    {
+        using var setup = new TestProfile(profile =>
+            profile.Generators["belegNummer"] = new GeneratorSettings { Type = "pattern", Pattern = "AA-9999" });
+
+        setup.WithField("Belegnummer", FieldAction.Pseudonymize, "belegNummer")
+             .WithField("Vorgangsnummer", FieldAction.Pseudonymize, "belegNummer");
+
+        var engine = setup.CreateEngine();
+
+        var eine = engine.Obfuscate(TestProfile.Utf8("Belegnummer\nRE-2024\n"),
+            "a.csv", new RunOptions { Strict = true });
+        var andere = engine.Obfuscate(TestProfile.Utf8("Vorgangsnummer\nRE-2024\n"),
+            "b.csv", new RunOptions { Strict = true });
+
+        Assert.Equal(Spalte(eine.Content, 0), Spalte(andere.Content, 0));
+        Assert.Equal(0, andere.Report.NewMappings);
+    }
+
     /// <summary>Die Werte einer Spalte, ohne die Kopfzeile.</summary>
     private static List<string> Spalte(byte[] content, int index)
         => TestProfile.FromUtf8(content)

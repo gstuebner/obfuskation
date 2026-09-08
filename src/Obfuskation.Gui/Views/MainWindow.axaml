@@ -295,7 +295,7 @@
               </Border>
               </StackPanel>
 
-              <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+              <Grid ColumnDefinitions="90,*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="8">
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Aktion"
                            Classes="muted" VerticalAlignment="Center"/>
                 <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
@@ -330,13 +330,22 @@
                     </DataTemplate>
                   </ComboBox.ItemTemplate>
                 </ComboBox>
+
+                <!-- Nur sichtbar, wenn der gewaehlte Generator ueberhaupt
+                     Optionen kennt (siehe FieldRuleViewModel.HasOptions);
+                     die meisten (personName, iban, ...) haben keine. -->
+                <Button Grid.Row="2" Grid.Column="2" Content="Optionen…" Classes="flat"
+                        Command="{Binding ShowGeneratorOptionsCommand}"
+                        IsVisible="{Binding ShowGeneratorOptionsButton}"/>
               </Grid>
 
               <!-- Kennzeichnung (Feature F-3, Teil 2): nur bei Einzelauswahl
                    und nur, wenn der gewaehlte Generator auf "token" beruht,
                    denn jeder andere Generator liefert das Format seines
                    Wertes; ein Praefix wuerde das zerstoeren (siehe
-                   ProfileValidator). -->
+                   ProfileValidator). Bleibt zusaetzlich zum Optionsdialog
+                   hier inline stehen, denn es ist die mit Abstand
+                   haeufigste Option. -->
               <StackPanel IsVisible="{Binding IsSingleSelection}">
                 <StackPanel Spacing="4" IsVisible="{Binding SelectedField.ShowPrefix}">
                   <TextBlock Text="Kennzeichnung" Classes="muted" VerticalAlignment="Center"/>
@@ -344,8 +353,8 @@
                   <TextBlock Classes="muted small" TextWrapping="Wrap"
                              Text="Wird jedem erzeugten Pseudonym vorangestellt, etwa aus TOK_A1B2C3D4 wird Artikelkategorie~TOK_A1B2C3D4. Gilt für alle Felder, die denselben Namensraum verwenden."/>
                   <TextBlock Classes="accent small" TextWrapping="Wrap"
-                             IsVisible="{Binding SelectedField.PrefixIsShared}"
-                             Text="Andere Felder verwenden denselben Namensraum — die Änderung trifft sie mit."/>
+                             IsVisible="{Binding SelectedField.NamespaceIsShared}"
+                             Text="{Binding SelectedField.NamespaceSharedWarning}"/>
                 </StackPanel>
               </StackPanel>
 

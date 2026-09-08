@@ -280,7 +280,119 @@ public class RoundtripTests
             TestProfile.FromUtf8(restored.Content));
     }
 
+    [Fact]
+    public void DateRange_kommt_unveraendert_zurueck()
+    {
+        using var setup = new TestProfile(profile =>
+                profile.Generators["dateRange"] = new GeneratorSettings { From = "1950-01-01", To = "2005-12-31" })
+            .WithField("Geburtsdatum", FieldAction.Pseudonymize, "dateRange");
+
+        var engine = setup.CreateEngine();
+
+        var original = "Geburtsdatum\n15.03.1980\n22.11.1975\n";
+        var obfuscated = engine.Obfuscate(TestProfile.Utf8(original), "a.csv", new RunOptions { Strict = true });
+        var restored = engine.Deobfuscate(obfuscated.Content, "a.csv", new RunOptions());
+
+        Assert.Equal(original, TestProfile.FromUtf8(restored.Content));
+    }
+
+    [Fact]
+    public void Pattern_kommt_unveraendert_zurueck()
+    {
+        using var setup = new TestProfile(profile =>
+                profile.Generators["belegNummer"] = new GeneratorSettings { Type = "pattern", Pattern = "AA-9999" })
+            .WithField("Belegnummer", FieldAction.Pseudonymize, "belegNummer");
+
+        var engine = setup.CreateEngine();
+
+        var original = "Belegnummer\nRE-2024\nRE-2025\n";
+        var obfuscated = engine.Obfuscate(TestProfile.Utf8(original), "a.csv", new RunOptions { Strict = true });
+        var restored = engine.Deobfuscate(obfuscated.Content, "a.csv", new RunOptions());
+
+        Assert.Equal(original, TestProfile.FromUtf8(restored.Content));
+    }
+
+    [Fact]
+    public void Wordlist_kommt_unveraendert_zurueck()
+    {
+        using var setup = new TestProfile(profile =>
+                profile.Generators["kategorie"] = new GeneratorSettings
+                {
+                    Type = "wordlist",
+                    Values = ["Buero", "Lager", "Produktion", "Vertrieb", "Verwaltung"],
+                })
+            .WithField("Kategorie", FieldAction.Pseudonymize, "kategorie");
+
+        var engine = setup.CreateEngine();
+
+        var original = "Kategorie\nSchrauben\nMuttern\n";
+        var obfuscated = engine.Obfuscate(TestProfile.Utf8(original), "a.csv", new RunOptions { Strict = true });
+        var restored = engine.Deobfuscate(obfuscated.Content, "a.csv", new RunOptions());
+
+        Assert.Equal(original, TestProfile.FromUtf8(restored.Content));
+    }
+
+    [Fact]
+    public void DateGeneralize_laesst_sich_nicht_zurueckholen()
+    {
+        // Viele-zu-eins wie redact ohne Tabelleneintrag: der gerundete Wert
+        // bleibt stehen, das urspruengliche Tagesdatum ist unwiederbringlich weg.
+        using var setup = new TestProfile()
+            .WithField("Geburtsdatum", FieldAction.Pseudonymize, "dateGeneralize");
+        var engine = setup.CreateEngine();
+
+        var original = "Geburtsdatum\n15.03.1980\n";
+        var obfuscated = engine.Obfuscate(TestProfile.Utf8(original), "a.csv", new RunOptions { Strict = true });
+        var restored = engine.Deobfuscate(obfuscated.Content, "a.csv", new RunOptions());
+
+        Assert.NotEqual(original, TestProfile.FromUtf8(restored.Content));
+        Assert.Equal(TestProfile.FromUtf8(obfuscated.Content), TestProfile.FromUtf8(restored.Content));
+    }
+
+    [Fact]
+    public void PartialMask_laesst_sich_nicht_zurueckholen()
+    {
+        using var setup = new TestProfile()
+            .WithField("Telefon", FieldAction.Pseudonymize, "partialMask");
+        var engine = setup.CreateEngine();
+
+        var original = "Telefon\n01701234567\n";
+        var obfuscated = engine.Obfuscate(TestProfile.Utf8(original), "a.csv", new RunOptions { Strict = true });
+        var restored = engine.Deobfuscate(obfuscated.Content, "a.csv", new RunOptions());
+
+        Assert.NotEqual(original, TestProfile.FromUtf8(restored.Content));
+        Assert.Equal(TestProfile.FromUtf8(obfuscated.Content), TestProfile.FromUtf8(restored.Content));
+    }
+
     /// <summary>Serialisiert JSON ohne Leerraum neu, damit nur der Inhalt zaehlt.</summary>
+    [Fact]
+    public void Faktisch_leere_Werte_bleiben_unveraendert_stehen()
+    {
+        // Ein Pseudonym fuer "nichts" waere eine Information, die im Original
+        // gar nicht stand. Reines Leerzeichen und die vereinbarten
+        // Platzhaltertexte zaehlen deshalb wie ein leeres Feld.
+        using var setup = new TestProfile()
+            .WithField("Nummer", FieldAction.Pseudonymize, "numericId");
+
+        setup.Profile.Defaults.EmptyValues = ["-", "N/A"];
+
+        var ausgabe = setup.CreateEngine().Obfuscate(
+            TestProfile.Utf8("Nummer\n4711\n-\nn/a\n   \n"), "a.csv",
+            new RunOptions { Strict = true });
+
+        var zeilen = TestProfile.FromUtf8(ausgabe.Content)
+            .Split('\n').Select(z => z.TrimEnd('\r')).ToArray();
+
+        Assert.NotEqual("4711", zeilen[1]);   // der echte Wert wird ersetzt
+        Assert.Equal("-", zeilen[2]);
+        Assert.Equal("n/a", zeilen[3]);       // ohne Ruecksicht auf Gross-/Kleinschreibung erkannt
+
+        // Reiner Leerraum zaehlt wie leer. Die Anfuehrungszeichen stammen vom
+        // CSV-Schreiber, der Werte mit Leerraum am Rand schuetzt -- der Inhalt
+        // ist unveraendert durchgelaufen.
+        Assert.Equal("\"   \"", zeilen[4]);
+    }
+
     private static string Normalize(string json)
         => System.Text.Json.JsonSerializer.Serialize(
             System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json));

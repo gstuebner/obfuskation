@@ -1,0 +1,129 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="560"
+        x:Class="Obfuskation.Gui.Views.GeneratorOptionsWindow"
+        x:DataType="vm:GeneratorOptionsViewModel"
+        Title="{Binding Title}"
+        Width="520" Height="560" MinWidth="440" MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+
+    <TextBlock Grid.Row="0" Classes="muted" Margin="0,0,0,12" TextWrapping="Wrap"
+               Text="Diese Optionen hängen am Generator, nicht am Feldnamen: sie gelten für jede Regel, die denselben Namensraum verwendet. Beim ersten Ändern legt das Programm dafür bei Bedarf einen eigenen Namensraum an."/>
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Spacing="16">
+
+        <!-- Kennzeichnung (token) -->
+        <StackPanel Spacing="4" IsVisible="{Binding Field.ShowPrefix}">
+          <TextBlock Text="Kennzeichnung" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Field.Prefix}" PlaceholderText="z. B. Artikelkategorie~"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Wird jedem erzeugten Pseudonym vorangestellt, etwa aus TOK_A1B2C3D4 wird Artikelkategorie~TOK_A1B2C3D4."/>
+        </StackPanel>
+
+        <!-- Platzhalter (redact) -->
+        <StackPanel Spacing="4" IsVisible="{Binding Field.ShowPlaceholder}">
+          <TextBlock Text="Platzhalter" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Field.Placeholder}" PlaceholderText="ohne Angabe: Vorgabe des Profils"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ersetzt den Wert vollständig. Ohne Angabe gilt der Platzhalter aus den Profilvorgaben."/>
+        </StackPanel>
+
+        <!-- Zeitraum (dateRange) -->
+        <StackPanel Spacing="4" IsVisible="{Binding Field.ShowDateRange}">
+          <TextBlock Text="Zeitraum" Classes="card-title" Margin="0"/>
+          <Grid ColumnDefinitions="60,*,60,*" ColumnSpacing="8">
+            <TextBlock Grid.Column="0" Text="Von" Classes="muted" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="1" Text="{Binding Field.From}" Classes="mono" PlaceholderText="JJJJ-MM-TT"/>
+            <TextBlock Grid.Column="2" Text="Bis" Classes="muted" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="3" Text="{Binding Field.To}" Classes="mono" PlaceholderText="JJJJ-MM-TT"/>
+          </Grid>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ohne Angabe bleibt das Kalenderjahr des Originals erhalten, nur Tag und Monat werden neu gezogen."/>
+        </StackPanel>
+
+        <!-- Rundungsstufe (dateGeneralize) -->
+        <StackPanel Spacing="4" IsVisible="{Binding Field.ShowGranularity}">
+          <TextBlock Text="Rundungsstufe" Classes="card-title" Margin="0"/>
+          <ComboBox HorizontalAlignment="Stretch"
+                    ItemsSource="{Binding GranularityOptions}"
+                    SelectedItem="{Binding Field.SelectedGranularity}"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Rundet auf den Anfang von Monat, Quartal oder Jahr. Nicht umkehrbar: „Klartext wiederherstellen“ lässt dieses Feld unverändert."/>
+        </StackPanel>
+
+        <!-- Maske (pattern) -->
+        <StackPanel Spacing="4" IsVisible="{Binding Field.ShowPatternMask}">
+          <TextBlock Text="Zeichenmaske" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Field.Pattern}" Classes="mono"
+                   PlaceholderText="ohne Angabe: aus dem Original abgeleitet"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="'A' Großbuchstabe, 'a' Kleinbuchstabe, '9' Ziffer, 'X' alphanumerisch, '\' escaped das Folgezeichen, alles Übrige bleibt wörtlich. Eine kurze Maske lässt nur wenige Werte zu — bei vielen Klartexten kann der Lauf dann mit einer Kollisionsmeldung abbrechen."/>
+        </StackPanel>
+
+        <!-- Werteliste (wordlist) -->
+        <StackPanel Spacing="4" IsVisible="{Binding Field.ShowWordlist}">
+          <TextBlock Text="Werteliste" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Field.ValuesText}" Classes="mono" AcceptsReturn="True"
+                   MinHeight="90" TextWrapping="Wrap"
+                   PlaceholderText="ein Wert je Zeile"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ein Wert je Zeile. Ohne Werte bricht der Lauf mit einer Fehlermeldung ab — eine kurze Liste lässt zudem nur wenige verschiedene Pseudonyme zu und kann bei vielen Klartexten mit einer Kollisionsmeldung abbrechen."/>
+        </StackPanel>
+
+        <!-- Teilmaskierung (partialMask) -->
+        <StackPanel Spacing="4" IsVisible="{Binding Field.ShowPartialMask}">
+          <TextBlock Text="Teilmaskierung" Classes="card-title" Margin="0"/>
+          <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Anfang sichtbar" Classes="muted" VerticalAlignment="Center"/>
+            <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding Field.KeepFirst}"
+                           Width="100" Minimum="0" Maximum="64" Increment="1" FormatString="0"/>
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="Ende sichtbar" Classes="muted" VerticalAlignment="Center"/>
+            <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding Field.KeepLast}"
+                           Width="100" Minimum="0" Maximum="64" Increment="1" FormatString="0"/>
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Maskierungszeichen" Classes="muted" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding Field.MaskChar}" Classes="mono" Width="60" MaxLength="1"/>
+          </StackPanel>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ohne Angabe bleiben die letzten vier Zeichen sichtbar. Sobald „Anfang sichtbar“ oder „Ende sichtbar“ gesetzt ist, gilt nur noch das hier Eingestellte — die Vier-Zeichen-Vorgabe greift nur, solange beide auf 0 stehen. Ist der Wert kürzer als die Summe der sichtbaren Zeichen, wird er vollständig maskiert. Nicht umkehrbar."/>
+        </StackPanel>
+
+        <TextBlock Classes="accent small" TextWrapping="Wrap"
+                   IsVisible="{Binding Field.NamespaceIsShared}"
+                   Text="{Binding Field.NamespaceSharedWarning}"/>
+
+        <!-- Vorschau -->
+        <Border Classes="card" IsVisible="{Binding Field.HasSampleValues}">
+          <StackPanel Spacing="4">
+            <TextBlock Text="{Binding Field.SampleCardTitle}" Classes="card-title" Margin="0"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="{Binding Field.SampleValue}" Classes="mono" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Text="→" Classes="accent" IsVisible="{Binding Field.HasPreview}"/>
+              <TextBlock Text="{Binding Field.Preview}" Classes="mono accent"
+                         TextTrimming="CharacterEllipsis" IsVisible="{Binding Field.HasPreview}"/>
+            </StackPanel>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       IsVisible="{Binding Field.PreviewIsExample}"
+                       Text="Nur ein Beispiel — es gibt noch keine Ersetzungstabelle. Der erste echte Lauf legt sie an und bestimmt die endgültigen Werte."/>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                Spacing="8" Margin="0,12,0,0">
+      <Button Content="Schließen" Classes="primary" Click="OnClose"/>
+    </StackPanel>
+
+  </Grid>
+</Window>

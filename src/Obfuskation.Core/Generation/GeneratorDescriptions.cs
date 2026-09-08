@@ -25,6 +25,11 @@ public static class GeneratorDescriptions
         ["bic"] = "BIC",
         ["numericId"] = "Zahlenkennung, Stellenzahl bleibt",
         ["dateShift"] = "Datum, um festen Betrag verschoben",
+        ["dateRange"] = "Datum, zufällig aus einem Zeitraum — ohne Angabe im Kalenderjahr des Originals",
+        ["dateGeneralize"] = "Datum, auf Monats-, Quartals- oder Jahresanfang gerundet — nicht umkehrbar",
+        ["pattern"] = "Wert nach Zeichenmaske, ohne Angabe aus dem Original abgeleitet",
+        ["wordlist"] = "Wert aus einer eigenen Werteliste",
+        ["partialMask"] = "teilweise maskiert, Anfang und Ende bleiben sichtbar — nicht umkehrbar",
         ["token"] = "allgemeine Kennung (TOK_…), mit Kennzeichnung davor",
         ["redact"] = "durch *** ersetzen — nicht umkehrbar",
     };

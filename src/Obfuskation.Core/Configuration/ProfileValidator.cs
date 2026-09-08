@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Obfuskation.Core.Generation;
 
@@ -18,6 +19,47 @@ public static class ProfileValidator
     /// </summary>
     private static readonly Regex PrefixPattern =
         new(@"^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    /// <summary>Erlaubte Rundungsstufen fuer <c>dateGeneralize</c>.</summary>
+    private static readonly string[] AllowedGranularities = ["month", "quarter", "year"];
+
+    /// <summary>
+    /// Ab wie vielen Werten der Wertevorrat von <c>wordlist</c> nicht mehr als
+    /// zu knapp gilt. Kein hartes Limit -- der Pseudonymizer verwirft nur
+    /// Kollisionen -- aber ein kleiner Vorrat lässt die 100 Ausweichversuche
+    /// schnell aufbrauchen (siehe <c>Pseudonymizer.MaxCollisionRetries</c>).
+    /// </summary>
+    private const int MinimumWordlistValues = 5;
+
+    /// <summary>Dieselbe Schwelle, angewandt auf die Grosse des Wertevorrats einer <c>pattern</c>-Maske.</summary>
+    private const long MinimumPatternValuePool = 1000;
+
+    /// <summary>
+    /// Ordnet jede generatorspezifische Option ihrem einzig zulaessigen
+    /// Basistyp zu. Ersetzt die fruehere Sonderbehandlung einzelner Optionen:
+    /// alle gesetzten Optionen eines Generator-Eintrags werden gegen diese
+    /// Tabelle geprueft, statt fuer jede Option einen eigenen Codepfad zu pflegen.
+    /// </summary>
+    /// <remarks>
+    /// Oeffentlich, weil die Oberflaeche dieselbe Zuordnung braucht, um zu
+    /// entscheiden, welche Optionen sie zu einem Generator anzeigt. Zwei
+    /// Kopien liefen bei jedem neuen Generator auseinander -- die Oberflaeche
+    /// zeigte dann ein Feld, das der Validator bemaengelt, oder verbaerge
+    /// eines, das gebraucht wird.
+    /// </remarks>
+    public static readonly (string Option, string BaseType)[] OptionOwnership =
+    [
+        ("prefix", "token"),
+        ("placeholder", "redact"),
+        ("from", "dateRange"),
+        ("to", "dateRange"),
+        ("granularity", "dateGeneralize"),
+        ("pattern", "pattern"),
+        ("values", "wordlist"),
+        ("keepFirst", "partialMask"),
+        ("keepLast", "partialMask"),
+        ("maskChar", "partialMask"),
+    ];
 
     public static IReadOnlyList<ValidationIssue> Validate(Profile profile)
     {
@@ -75,39 +117,218 @@ public static class ProfileValidator
                     "maxDays darf nicht negativ sein."));
             }
 
-            if (!string.IsNullOrEmpty(settings.Prefix))
-            {
-                if (!string.Equals(baseName, "token", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Alle anderen Generatoren liefern das Format ihres Wertes (eine
-                    // gueltige IBAN, eine Zahlenkennung mit erhaltener Stellenzahl,
-                    // ein verschobenes Datum) — ein vorangestelltes Praefix zerstoert
-                    // genau das und macht z. B. aus einer IBAN keine IBAN mehr.
-                    issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
-                        $"'prefix' gilt nur für den Generatortyp 'token'. Generator '{key}' erzeugt Werte " +
-                        $"vom Typ '{baseName}', die ihr eigenes Format tragen; ein Präfix würde dieses " +
-                        "Format zerstören."));
-                }
-                else
-                {
-                    if (!PrefixPattern.IsMatch(settings.Prefix))
-                    {
-                        issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
-                            $"Das Präfix '{settings.Prefix}' ist ungültig. Erlaubt sind Buchstaben, " +
-                            "Ziffern, '_' und '-', abgeschlossen mit '~' oder '_' " +
-                            "(Muster: ^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$)."));
-                    }
+            ValidateOptionOwnership(key, baseName, settings, issues);
 
-                    // Unabhaengig vom Zeichenvorrat geprueft: das Praefix steht in
-                    // jedem einzelnen Wert der Spalte, laenger macht die Pseudodatei
-                    // unleserlicher, statt sie lesbar zu machen.
-                    if (settings.Prefix.Length > 32)
-                    {
-                        issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
-                            "Das Präfix darf höchstens 32 Zeichen lang sein."));
-                    }
+            if (string.Equals(baseName, "token", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(settings.Prefix))
+            {
+                if (!PrefixPattern.IsMatch(settings.Prefix))
+                {
+                    issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
+                        $"Das Präfix '{settings.Prefix}' ist ungültig. Erlaubt sind Buchstaben, " +
+                        "Ziffern, '_' und '-', abgeschlossen mit '~' oder '_' " +
+                        "(Muster: ^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$)."));
+                }
+
+                // Unabhaengig vom Zeichenvorrat geprueft: das Praefix steht in
+                // jedem einzelnen Wert der Spalte, laenger macht die Pseudodatei
+                // unleserlicher, statt sie lesbar zu machen.
+                if (settings.Prefix.Length > 32)
+                {
+                    issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
+                        "Das Präfix darf höchstens 32 Zeichen lang sein."));
                 }
             }
+
+            if (string.Equals(baseName, "dateRange", StringComparison.OrdinalIgnoreCase))
+                ValidateDateRange(key, settings, issues);
+
+            if (string.Equals(baseName, "dateGeneralize", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(settings.Granularity)
+                && !AllowedGranularities.Contains(settings.Granularity, StringComparer.OrdinalIgnoreCase))
+            {
+                issues.Add(new ValidationIssue($"generators.{key}.granularity", ValidationSeverity.Error,
+                    $"'{settings.Granularity}' ist keine gültige Granularität. Erlaubt: " +
+                    string.Join(", ", AllowedGranularities) + "."));
+            }
+
+            if (string.Equals(baseName, "pattern", StringComparison.OrdinalIgnoreCase))
+                ValidatePattern(key, settings, issues);
+
+            if (string.Equals(baseName, "wordlist", StringComparison.OrdinalIgnoreCase))
+                ValidateWordlist(key, settings, issues);
+
+            if (string.Equals(baseName, "partialMask", StringComparison.OrdinalIgnoreCase))
+                ValidatePartialMask(key, settings, issues);
+        }
+    }
+
+    /// <summary>
+    /// Prueft jede gesetzte Option gegen <see cref="OptionOwnership"/>: eine
+    /// Option, die an einem anderen Basistyp haengt als dem, fuer den sie
+    /// gedacht ist, hat dort keine Wirkung und ist ein Konfigurationsfehler.
+    /// </summary>
+    private static void ValidateOptionOwnership(
+        string key, string baseName, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        foreach (var (option, allowedBaseType) in OptionOwnership)
+        {
+            if (!IsOptionSet(settings, option))
+                continue;
+
+            if (string.Equals(baseName, allowedBaseType, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (option == "prefix")
+            {
+                // Alle anderen Generatoren liefern das Format ihres Wertes (eine
+                // gueltige IBAN, eine Zahlenkennung mit erhaltener Stellenzahl,
+                // ein verschobenes Datum) — ein vorangestelltes Praefix zerstoert
+                // genau das und macht z. B. aus einer IBAN keine IBAN mehr.
+                issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
+                    $"'prefix' gilt nur für den Generatortyp 'token'. Generator '{key}' erzeugt Werte " +
+                    $"vom Typ '{baseName}', die ihr eigenes Format tragen; ein Präfix würde dieses " +
+                    "Format zerstören."));
+                continue;
+            }
+
+            issues.Add(new ValidationIssue($"generators.{key}.{option}", ValidationSeverity.Error,
+                $"'{option}' gilt nur für den Generatortyp '{allowedBaseType}'. Generator '{key}' " +
+                $"erzeugt Werte vom Typ '{baseName}' und wertet '{option}' nicht aus."));
+        }
+    }
+
+    private static bool IsOptionSet(GeneratorSettings settings, string option) => option switch
+    {
+        "prefix" => !string.IsNullOrEmpty(settings.Prefix),
+        "placeholder" => !string.IsNullOrEmpty(settings.Placeholder),
+        "from" => !string.IsNullOrWhiteSpace(settings.From),
+        "to" => !string.IsNullOrWhiteSpace(settings.To),
+        "granularity" => !string.IsNullOrWhiteSpace(settings.Granularity),
+        "pattern" => !string.IsNullOrEmpty(settings.Pattern),
+        "values" => settings.Values is { Count: > 0 },
+        "keepFirst" => settings.KeepFirst > 0,
+        "keepLast" => settings.KeepLast > 0,
+        "maskChar" => !string.IsNullOrEmpty(settings.MaskChar),
+        _ => false,
+    };
+
+    private static void ValidateDateRange(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        if (string.IsNullOrWhiteSpace(settings.From) && string.IsNullOrWhiteSpace(settings.To))
+            return; // Ohne Angabe gilt das Kalenderjahr des Originals, siehe DateRangeGenerator.
+
+        var fromOk = DateTime.TryParseExact(settings.From, "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out var from);
+        var toOk = DateTime.TryParseExact(settings.To, "yyyy-MM-dd",
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out var to);
+
+        if (!fromOk || !toOk)
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.from", ValidationSeverity.Error,
+                "'from' und 'to' müssen beide als ISO-Datum gesetzt sein (z. B. '1950-01-01')."));
+            return;
+        }
+
+        if (from > to)
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.from", ValidationSeverity.Error,
+                "'from' darf nicht nach 'to' liegen."));
+        }
+    }
+
+    private static void ValidatePattern(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        if (settings.Pattern is { Length: 0 })
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.pattern", ValidationSeverity.Error,
+                "Die Maske darf nicht leer sein. Nicht gesetzt ist erlaubt -- dann wird sie aus dem " +
+                "Original abgeleitet."));
+            return;
+        }
+
+        if (settings.Pattern is not { Length: > 0 } mask)
+            return;
+
+        var pool = PatternValuePool(mask);
+        if (pool < MinimumPatternValuePool)
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.pattern", ValidationSeverity.Warning,
+                $"Die Maske '{mask}' lässt nur {pool} verschiedene Werte zu. Bei vielen Klartexten kann " +
+                "der Generator keinen freien Wert mehr finden und der Lauf mit einer " +
+                "MappingConflictException abbrechen; eine längere Maske schafft mehr Spielraum."));
+        }
+    }
+
+    /// <summary>
+    /// Groesse des Wertevorrats einer Maske: 'A'/'a' 26 Moeglichkeiten, '9' 10,
+    /// 'X' 62, alles andere (auch ein escaptes Zeichen) genau eine. Bricht
+    /// frueh ab, sobald die Warnschwelle erreicht ist -- die genaue Groesse
+    /// jenseits davon interessiert fuer die Warnung nicht mehr.
+    /// </summary>
+    private static long PatternValuePool(string mask)
+    {
+        long pool = 1;
+        for (var i = 0; i < mask.Length; i++)
+        {
+            var symbol = mask[i];
+            if (symbol == '\\' && i + 1 < mask.Length)
+            {
+                i++;
+                continue;
+            }
+
+            pool *= symbol switch
+            {
+                'A' or 'a' => 26,
+                '9' => 10,
+                'X' => 62,
+                _ => 1,
+            };
+
+            if (pool >= MinimumPatternValuePool)
+                return pool;
+        }
+
+        return pool;
+    }
+
+    private static void ValidateWordlist(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        if (settings.Values is not { Count: > 0 })
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.values", ValidationSeverity.Error,
+                $"Generator '{key}' vom Typ 'wordlist' braucht mindestens einen Wert unter 'values'."));
+            return;
+        }
+
+        if (settings.Values.Count < MinimumWordlistValues)
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.values", ValidationSeverity.Warning,
+                $"Nur {settings.Values.Count} Werte unter 'values'. Bei vielen Klartexten kann der " +
+                "Generator keinen freien Wert mehr finden und der Lauf mit einer " +
+                "MappingConflictException abbrechen; mehr Werte schaffen mehr Spielraum."));
+        }
+    }
+
+    private static void ValidatePartialMask(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        if (settings.KeepFirst < 0)
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.keepFirst", ValidationSeverity.Error,
+                "'keepFirst' darf nicht negativ sein."));
+        }
+
+        if (settings.KeepLast < 0)
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.keepLast", ValidationSeverity.Error,
+                "'keepLast' darf nicht negativ sein."));
+        }
+
+        if (settings.MaskChar is { Length: not 1 })
+        {
+            issues.Add(new ValidationIssue($"generators.{key}.maskChar", ValidationSeverity.Error,
+                "'maskChar' muss genau ein Zeichen lang sein."));
         }
     }
 

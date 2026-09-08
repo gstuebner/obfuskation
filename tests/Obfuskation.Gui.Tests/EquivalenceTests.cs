@@ -141,6 +141,71 @@ public class EquivalenceTests : IDisposable
         Assert.Equal(ersteZeile[1], feld.Preview);
     }
 
+    /// <summary>
+    /// Ein zweites Profil, das "Betrag" ueber einen eigenen Namensraum auf
+    /// je einen der neuen Generatoren stellt -- dieselbe Konstruktion, die
+    /// der Optionsdialog anlegt (siehe FieldRuleViewModel.EnsureNamespace),
+    /// hier von Hand nachgebaut, um Oberflaeche und Kommandozeile auch fuer
+    /// diese Generatoren gegeneinander zu pruefen.
+    /// </summary>
+    private Profile ErzeugeProfilMitNeuenGeneratoren()
+    {
+        var profil = new Profile
+        {
+            ProfileName = "gleichlauf-neu",
+            MappingStore = Path.Combine(_verzeichnis, "mapping-neu.json"),
+            Generators =
+            {
+                ["betragMaske"] = new GeneratorSettings { Type = "pattern", Pattern = "999,99" },
+            },
+            Fields =
+            [
+                new FieldRule
+                {
+                    Match = "Kundennummer", Action = FieldAction.Pseudonymize, Generator = "numericId",
+                },
+                new FieldRule
+                {
+                    Match = "Kundenname", Action = FieldAction.Pseudonymize, Generator = "personName",
+                },
+                new FieldRule { Match = "IBAN", Action = FieldAction.Pseudonymize, Generator = "iban" },
+                new FieldRule
+                {
+                    Match = "Betrag", Action = FieldAction.Pseudonymize, Generator = "betragMaske",
+                },
+            ],
+        };
+
+        ProfileStore.Save(profil, Path.Combine(_verzeichnis, "profil-neu.json"));
+        return profil;
+    }
+
+    [Fact]
+    public async Task Die_Oberflaeche_liefert_dasselbe_wie_ein_unmittelbarer_Lauf_mit_den_neuen_Generatoren()
+    {
+        var profil = ErzeugeProfilMitNeuenGeneratoren();
+        var eingabe = new UTF8Encoding(false).GetBytes(Inhalt);
+
+        var ueberEngine = new ObfuscationEngine(profil)
+            .Obfuscate(eingabe, "kunden.csv", new RunOptions { Strict = true });
+
+        var csvPfad = Path.Combine(_verzeichnis, "kunden.csv");
+        await File.WriteAllBytesAsync(csvPfad, eingabe);
+
+        var sitzung = ProfileSession.Load(Path.Combine(_verzeichnis, "profil-neu.json"));
+        var ueberOberflaeche = sitzung.Engine.Obfuscate(
+            await File.ReadAllBytesAsync(csvPfad), csvPfad, new RunOptions { Strict = true });
+
+        Assert.Equal(
+            Encoding.UTF8.GetString(ueberEngine.Content),
+            Encoding.UTF8.GetString(ueberOberflaeche.Content));
+
+        // Die Maske muss auch tatsaechlich gegriffen haben, sonst prueft der
+        // Vergleich oben nur zwei gleich falsche Ergebnisse gegeneinander.
+        var ersteZeile = Encoding.UTF8.GetString(ueberOberflaeche.Content).Split('\n')[1].Split(';');
+        Assert.Matches(@"^\d{3},\d{2}$", ersteZeile[3]);
+    }
+
     [Fact]
     public async Task Die_Pruefung_der_Oberflaeche_findet_die_Echtwerte_wieder()
     {

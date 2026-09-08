@@ -49,7 +49,9 @@ public sealed class DeobfuscateTransformer : IRecordTransformer
 
     public string TransformField(string fieldName, string? jsonPath, string value, string location)
     {
-        if (string.IsNullOrEmpty(value))
+        // Derselbe Helfer wie in ObfuscateTransformer und ScanTransformer,
+        // sonst laufen Obfuskation, Pruefung und Rueckuebersetzung auseinander.
+        if (_profile.Defaults.IsEffectivelyEmpty(value))
             return value;
 
         var rule = _resolver.Resolve(fieldName, jsonPath);
@@ -63,6 +65,17 @@ public sealed class DeobfuscateTransformer : IRecordTransformer
                 {
                     _report.CountHit(generatorName);
                     return plaintext;
+                }
+
+                // Nicht umkehrbare Generatoren (etwa partialMask oder
+                // dateGeneralize) haben nie einen Tabelleneintrag angelegt.
+                // Sie hier als "unbekanntes Pseudonym" zu melden legte den
+                // falschen Schluss nahe, ein anderer Bestand koennte den Wert
+                // noch hergeben -- es ist die Bauart des Generators.
+                if (!_pseudonymizer.IsReversible(generatorName))
+                {
+                    _report.Findings.Add(new ReportFinding(generatorName, location, "nichtWiederherstellbar"));
+                    return value;
                 }
 
                 // Unbekannter Wert: entweder war er nie ersetzt worden, oder er

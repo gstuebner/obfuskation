@@ -229,6 +229,128 @@ public class ScanAndConfigTests
     }
 
     [Fact]
+    public void Ein_unlesbares_dateRange_von_bis_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["dateRange"] = new GeneratorSettings { From = "nicht-parsebar", To = "2000-12-31" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.dateRange.from");
+    }
+
+    [Fact]
+    public void Ein_dateRange_bei_dem_von_nach_bis_liegt_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["dateRange"] = new GeneratorSettings { From = "2000-12-31", To = "2000-01-01" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.dateRange.from");
+    }
+
+    [Fact]
+    public void Eine_unbekannte_Granularitaet_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["dateGeneralize"] = new GeneratorSettings { Granularity = "woche" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.dateGeneralize.granularity");
+    }
+
+    [Fact]
+    public void Eine_leere_pattern_Maske_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["pattern"] = new GeneratorSettings { Pattern = "" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.pattern.pattern");
+    }
+
+    [Fact]
+    public void Eine_kurze_pattern_Maske_wird_angemahnt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["pattern"] = new GeneratorSettings { Pattern = "99" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Warning && b.Path == "generators.pattern.pattern");
+    }
+
+    [Fact]
+    public void Ein_wordlist_ohne_Werte_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["wordlist"] = new GeneratorSettings();
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.wordlist.values");
+    }
+
+    [Fact]
+    public void Ein_wordlist_mit_wenigen_Werten_wird_angemahnt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["wordlist"] = new GeneratorSettings { Values = ["A", "B"] };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Warning && b.Path == "generators.wordlist.values");
+    }
+
+    [Fact]
+    public void Negative_partialMask_Werte_werden_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["partialMask"] = new GeneratorSettings { KeepFirst = -1 };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.partialMask.keepFirst");
+    }
+
+    [Fact]
+    public void Ein_mehrstelliges_partialMask_Maskierungszeichen_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["partialMask"] = new GeneratorSettings { MaskChar = "**" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.partialMask.maskChar");
+    }
+
+    [Fact]
+    public void Eine_Option_an_einem_dafuer_nicht_vorgesehenen_Basistyp_wird_bemaengelt()
+    {
+        // Die Tabelle aus ValidateOptionOwnership deckt nicht nur "prefix" ab:
+        // "granularity" gehoert zu dateGeneralize, nicht zu numericId.
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kundenId"] = new GeneratorSettings { Type = "numericId", Granularity = "year" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.kundenId.granularity");
+    }
+
+    [Fact]
     public void Profile_ueberstehen_das_Schreiben_und_Lesen_unveraendert()
     {
         using var setup = ScanProfile();
