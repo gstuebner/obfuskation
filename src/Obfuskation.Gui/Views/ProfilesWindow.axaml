@@ -76,13 +76,15 @@
     <TextBlock Grid.Row="5" Text="{Binding ErrorText}" Classes="error small" TextWrapping="Wrap"
                Margin="0,0,0,8" IsVisible="{Binding HasErrorText}"/>
 
-    <Grid Grid.Row="6" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+    <Grid Grid.Row="6" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto">
       <Button Grid.Column="0" Content="Öffnen" Classes="primary" Command="{Binding OpenCommand}"/>
       <Button Grid.Column="1" Content="Umbenennen…" Command="{Binding RenameCommand}" Margin="8,0,0,0"/>
       <Button Grid.Column="2" Content="Aus Datei wählen…" Command="{Binding BrowseCommand}" Margin="8,0,0,0"/>
 
       <Button Grid.Column="4" Content="Aus Liste entfernen" Command="{Binding RemoveCommand}"
-              ToolTip.Tip="Entfernt nur den Eintrag aus dieser Übersicht — die Profildatei bleibt unangetastet."/>
+              ToolTip.Tip="Blendet den Eintrag dauerhaft aus — die Profildatei bleibt unangetastet. Über „Aus Datei wählen…“ kommt sie zurück."/>
+      <Button Grid.Column="5" Content="Profil löschen…" Command="{Binding DeleteCommand}" Margin="8,0,0,0"
+              ToolTip.Tip="Löscht die Profildatei endgültig, auf Wunsch auch die Ersetzungstabelle. Nicht rückgängig zu machen."/>
     </Grid>
 
   </Grid>

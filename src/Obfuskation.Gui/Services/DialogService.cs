@@ -41,6 +41,23 @@ public sealed class DialogService : IDialogService
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }
 
+    public async Task<IReadOnlyList<string>> OpenDataFilesAsync(string? startDirectory = null)
+    {
+        var files = await _owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Dateien oeffnen",
+            AllowMultiple = true,
+            FileTypeFilter = [DataFiles, AllFiles],
+            SuggestedStartLocation = await FolderAsync(startDirectory),
+        });
+
+        return files
+            .Select(f => f.TryGetLocalPath())
+            .Where(p => p is not null)
+            .Select(p => p!)
+            .ToList();
+    }
+
     public async Task<string?> OpenProfileAsync(string? startDirectory = null)
     {
         var files = await _owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -134,6 +151,59 @@ public sealed class DialogService : IDialogService
         await window.ShowDialog(_owner);
 
         return viewModel.Confirmed ? viewModel.NewName : null;
+    }
+
+    public async Task<DeleteChoice> AskDeleteProfileAsync(DeleteProposal proposal)
+    {
+        var tabellenHinweis = proposal.MappingStoreExists
+            ? $"Die Ersetzungstabelle unter {proposal.MappingStorePath} enthält sämtliche Echtwerte. "
+              + "Wird sie mitgelöscht, ist der Rückweg zu den Originaldaten unmöglich."
+            : $"Unter {proposal.MappingStorePath} besteht noch keine Ersetzungstabelle.";
+
+        var window = new ConfirmWindow(
+            "Profil löschen",
+            $"Profil „{proposal.Name}“ endgültig löschen? Das lässt sich nicht rückgängig machen.\n\n"
+            + tabellenHinweis,
+            new (string Label, string Result)[]
+            {
+                ("Abbrechen", "cancel"),
+                ("Nur Profil", "profileOnly"),
+                ("Profil und Tabelle", "profileAndMapping"),
+            });
+
+        var ergebnis = await window.ShowDialog<string?>(_owner);
+
+        return ergebnis switch
+        {
+            "profileOnly" => DeleteChoice.ProfileOnly,
+            "profileAndMapping" => DeleteChoice.ProfileAndMapping,
+            _ => DeleteChoice.Cancel,
+        };
+    }
+
+    public async Task<bool> AskBatchRunAsync(BatchRunProposal proposal)
+    {
+        var dateiwort = proposal.FileCount == 1 ? "1 Datei" : $"{proposal.FileCount} Dateien";
+        var ueberschreibenHinweis = proposal.OverwriteCount switch
+        {
+            0 => "",
+            1 => " Dabei wird 1 schon vorhandene Zieldatei überschrieben.",
+            var n => $" Dabei werden {n} schon vorhandene Zieldateien überschrieben.",
+        };
+
+        var window = new ConfirmWindow(
+            "Sammellauf",
+            $"{dateiwort} werden verarbeitet, jede Ausgabe entsteht neben ihrer Eingabedatei mit dem "
+            + $"Zusatz „.{proposal.Marker}“.{ueberschreibenHinweis} "
+            + "Diese eine Rückfrage gilt für alle Dateien — danach folgt keine weitere.",
+            new (string Label, string Result)[]
+            {
+                ("Abbrechen", "cancel"),
+                ("Erzeugen", "create"),
+            });
+
+        var ergebnis = await window.ShowDialog<string?>(_owner);
+        return ergebnis == "create";
     }
 
     public async Task<ProfileSummary?> ShowProfilesAsync(ProfilesViewModel viewModel)

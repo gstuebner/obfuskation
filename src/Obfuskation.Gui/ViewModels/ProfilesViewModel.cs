@@ -49,6 +49,7 @@ public sealed class ProfilesViewModel : ObservableObject
         OpenCommand = new RelayCommand(Open, () => _selected is { CanOpen: true });
         RenameCommand = new AsyncRelayCommand(RenameAsync, () => _selected is { CanOpen: true });
         RemoveCommand = new RelayCommand(Remove, () => _selected is not null);
+        DeleteCommand = new AsyncRelayCommand(DeleteAsync, () => _selected is not null);
         BrowseCommand = new AsyncRelayCommand(BrowseAsync);
 
         Refresh();
@@ -101,6 +102,7 @@ public sealed class ProfilesViewModel : ObservableObject
     public RelayCommand OpenCommand { get; }
     public AsyncRelayCommand RenameCommand { get; }
     public RelayCommand RemoveCommand { get; }
+    public AsyncRelayCommand DeleteCommand { get; }
     public AsyncRelayCommand BrowseCommand { get; }
     public RelayCommand SortByNameCommand { get; }
     public RelayCommand SortByLastUsedCommand { get; }
@@ -149,7 +151,12 @@ public sealed class ProfilesViewModel : ObservableObject
     {
         var summaries = ProfileCatalog.Collect(_index, _settings.RecentProfiles);
 
-        IEnumerable<ProfileSummary> gefiltert = summaries;
+        // Ausgeblendete Profile zuerst heraussieben: ProfileCatalog.Collect
+        // zaehlt den zentralen Profilordner immer mit auf und wuesste nichts
+        // von einem zuvor "entfernten" Eintrag -- ohne diesen Schritt kaeme er
+        // sofort wieder in die Liste, nur ohne Nutzungsdaten (der eigentliche
+        // Fehlerbericht).
+        IEnumerable<ProfileSummary> gefiltert = summaries.Where(s => !_settings.IsHidden(s.Path));
         if (!string.IsNullOrWhiteSpace(_filterText))
         {
             var suchtext = _filterText.Trim();
@@ -214,6 +221,12 @@ public sealed class ProfilesViewModel : ObservableObject
         if (gefunden is null)
             return;
 
+        // Ein von Hand gewaehltes Profil, das zuvor ausgeblendet war, muss
+        // wieder erreichbar sein -- sonst gaebe es fuer ein "entferntes" Profil
+        // gar keinen Weg mehr zurueck in die Uebersicht.
+        _settings.UnhideProfile(pfad);
+        _settings.Save();
+
         ChosenProfile = gefunden;
         CloseRequested?.Invoke();
     }
@@ -230,7 +243,75 @@ public sealed class ProfilesViewModel : ObservableObject
 
         _settings.RecentProfiles.RemoveAll(p =>
             string.Equals(Path.GetFullPath(p), Path.GetFullPath(pfad), StringComparison.Ordinal));
+
+        // Der zentrale Profilordner wird von ProfileCatalog.Collect immer mit
+        // aufgezaehlt -- ohne dieses dauerhafte Ausblenden kaeme der Eintrag
+        // beim naechsten Refresh sofort wieder herein, nur ohne
+        // Nutzungsdaten. Genau das war der gemeldete Fehler.
+        _settings.HideProfile(pfad);
         _settings.Save();
+
+        Refresh();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_selected is not { } row)
+            return;
+
+        var summary = row.Summary;
+
+        // Das gerade offene Profil zu loeschen waere gefaehrlich: die Sitzung
+        // im Hauptfenster wuerde weiter mit einer verschwundenen Datei
+        // arbeiten. Sicherer, den Vorgang ganz zu verweigern, statt eine
+        // Rueckfrage zu bauen, die dort ohnehin niemand beantworten kann.
+        if (IsCurrentSession(summary.Path))
+        {
+            ErrorText = "Das gerade geöffnete Profil lässt sich nicht löschen. " +
+                        "Erst ein anderes Profil öffnen, dann erneut versuchen.";
+            return;
+        }
+
+        var proposal = new DeleteProposal(
+            summary.Name, summary.Path, summary.MappingStorePath, summary.MappingStoreExists);
+        var wahl = await _dialogs().AskDeleteProfileAsync(proposal);
+        if (wahl == DeleteChoice.Cancel)
+            return;
+
+        try
+        {
+            File.Delete(summary.Path);
+
+            if (wahl == DeleteChoice.ProfileAndMapping && File.Exists(summary.MappingStorePath))
+            {
+                File.Delete(summary.MappingStorePath);
+
+                // Die Sperrdatei ueberlebt einen Absturz waehrend eines Laufs --
+                // ohne sie mitzuloeschen bliebe ein Geisterschloss zurueck, das
+                // MappingStore.AcquireLock spaeter faelschlich als belegt sieht.
+                var sperrdatei = summary.MappingStorePath + ".lock";
+                if (File.Exists(sperrdatei))
+                    File.Delete(sperrdatei);
+            }
+
+            _index.Forget(summary.Path);
+            _index.Save();
+
+            _settings.RecentProfiles.RemoveAll(p =>
+                string.Equals(Path.GetFullPath(p), Path.GetFullPath(summary.Path), StringComparison.Ordinal));
+            _settings.UnhideProfile(summary.Path);
+            _settings.Save();
+
+            ErrorText = null;
+        }
+        catch (Exception ex) when (ex is ConfigurationException
+                                       or MappingConflictException
+                                       or MappingLockedException
+                                       or IOException
+                                       or UnauthorizedAccessException)
+        {
+            ErrorText = ex.Message;
+        }
 
         Refresh();
     }
@@ -345,6 +426,7 @@ public sealed class ProfilesViewModel : ObservableObject
         OpenCommand.RaiseCanExecuteChanged();
         RenameCommand.RaiseCanExecuteChanged();
         RemoveCommand.RaiseCanExecuteChanged();
+        DeleteCommand.RaiseCanExecuteChanged();
     }
 }
 

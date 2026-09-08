@@ -32,6 +32,9 @@ public sealed class GuiSettings
 {
     private const int MaxRecentProfiles = 8;
 
+    /// <summary>Obergrenze der ausgeblendeten Profile — wie bei <see cref="MaxRecentProfiles"/>.</summary>
+    private const int MaxHiddenProfiles = 50;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -48,6 +51,16 @@ public sealed class GuiSettings
 
     /// <summary>Verzeichnis, in dem zuletzt eine Datendatei geoeffnet wurde.</summary>
     public string? LastDataDirectory { get; set; }
+
+    /// <summary>
+    /// Profile, die "Aus Liste entfernen" aus der Uebersicht ausgeblendet hat,
+    /// Vollpfade. <see cref="Obfuskation.Core.Configuration.ProfileCatalog.Collect"/> zaehlt den
+    /// zentralen Profilordner immer mit auf; ohne diese Liste kaeme ein
+    /// entferntes Profil dort sofort wieder herein, nur ohne Nutzungsdaten. Die
+    /// Profildatei selbst bleibt unangetastet -- "Aus Datei waehlen…" holt den
+    /// Eintrag jederzeit zurueck.
+    /// </summary>
+    public List<string> HiddenProfiles { get; set; } = new();
 
     public double WindowWidth { get; set; } = 1040;
 
@@ -104,5 +117,32 @@ public sealed class GuiSettings
 
         if (RecentProfiles.Count > MaxRecentProfiles)
             RecentProfiles.RemoveRange(MaxRecentProfiles, RecentProfiles.Count - MaxRecentProfiles);
+    }
+
+    /// <summary>Blendet ein Profil dauerhaft aus der Uebersicht aus.</summary>
+    public void HideProfile(string path)
+    {
+        var full = Path.GetFullPath(path);
+        if (HiddenProfiles.Any(entry => string.Equals(Path.GetFullPath(entry), full, StringComparison.Ordinal)))
+            return;
+
+        HiddenProfiles.Insert(0, full);
+
+        if (HiddenProfiles.Count > MaxHiddenProfiles)
+            HiddenProfiles.RemoveRange(MaxHiddenProfiles, HiddenProfiles.Count - MaxHiddenProfiles);
+    }
+
+    /// <summary>Holt ein ausgeblendetes Profil zurueck -- etwa ueber "Aus Datei waehlen…".</summary>
+    public void UnhideProfile(string path)
+    {
+        var full = Path.GetFullPath(path);
+        HiddenProfiles.RemoveAll(entry =>
+            string.Equals(Path.GetFullPath(entry), full, StringComparison.Ordinal));
+    }
+
+    public bool IsHidden(string path)
+    {
+        var full = Path.GetFullPath(path);
+        return HiddenProfiles.Any(entry => string.Equals(Path.GetFullPath(entry), full, StringComparison.Ordinal));
     }
 }

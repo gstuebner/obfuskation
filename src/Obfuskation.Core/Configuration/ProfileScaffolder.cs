@@ -65,6 +65,19 @@ public static class ProfileScaffolder
     ];
 
     public static Profile Create(string profileName, string? sampleFilePath, string? description = null)
+        => Create(profileName,
+            string.IsNullOrWhiteSpace(sampleFilePath) ? Array.Empty<string>() : new[] { sampleFilePath },
+            description);
+
+    /// <summary>
+    /// Wie die Einzelfassung, aber aus mehreren zusammengehoerenden Dateien auf
+    /// einmal -- fuer "Neu aus Datei…" mit Mehrfachauswahl. Die Feldnamen aller
+    /// Dateien werden in Lesereihenfolge vereinigt, ein doppelt vorkommender
+    /// Name (etwa die gemeinsame Schluesselspalte zweier Tabellen) erscheint
+    /// nur bei seinem ersten Auftreten -- sonst bekaeme er zwei widerspruechliche
+    /// Vorschlaege.
+    /// </summary>
+    public static Profile Create(string profileName, IEnumerable<string> sampleFilePaths, string? description = null)
     {
         var profile = new Profile
         {
@@ -74,12 +87,19 @@ public static class ProfileScaffolder
             TextRules = DefaultTextRules(),
         };
 
-        if (string.IsNullOrWhiteSpace(sampleFilePath))
-            return profile;
+        var gesehen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var fieldNames = ReadFieldNames(sampleFilePath);
-        foreach (var fieldName in fieldNames)
-            profile.Fields.Add(CreateRule(profile, fieldName));
+        foreach (var pfad in sampleFilePaths)
+        {
+            if (string.IsNullOrWhiteSpace(pfad))
+                continue;
+
+            foreach (var fieldName in ReadFieldNames(pfad))
+            {
+                if (gesehen.Add(fieldName))
+                    profile.Fields.Add(CreateRule(profile, fieldName));
+            }
+        }
 
         return profile;
     }

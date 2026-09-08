@@ -48,6 +48,9 @@ public sealed class MainViewModel : ObservableObject
         DeobfuscateCommand = new AsyncRelayCommand(DeobfuscateAsync, CanRun);
         ScanCommand = new AsyncRelayCommand(ScanAsync, CanRun);
 
+        ObfuscateAllCommand = new AsyncRelayCommand(() => RunBatchAsync(obfuscate: true), CanRunBatch);
+        DeobfuscateAllCommand = new AsyncRelayCommand(() => RunBatchAsync(obfuscate: false), CanRunBatch);
+
         CancelCommand = new RelayCommand(Cancel, () => _isBusy);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
 
@@ -74,6 +77,8 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand ObfuscateCommand { get; }
     public AsyncRelayCommand DeobfuscateCommand { get; }
     public AsyncRelayCommand ScanCommand { get; }
+    public AsyncRelayCommand ObfuscateAllCommand { get; }
+    public AsyncRelayCommand DeobfuscateAllCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand ToggleThemeCommand { get; }
     public RelayCommand ShowTextRulesCommand { get; }
@@ -540,14 +545,18 @@ public sealed class MainViewModel : ObservableObject
         if (!await EnsureChangesHandledAsync())
             return;
 
-        // Der uebliche Weg: aus einer Beispieldatei ein Regelgeruest ableiten,
-        // genau wie "obfuskation init --from".
-        var beispiel = await _dialogs().OpenDataFileAsync(_settings.LastDataDirectory);
-        if (beispiel is null)
+        // Der uebliche Weg: aus einer oder mehreren Beispieldateien ein
+        // Regelgeruest ableiten, genau wie "obfuskation init --from". Mehrere
+        // zusammengehoerende Dateien (etwa Stammdaten und Adressen ueber die
+        // gemeinsame Kundennummer) ergeben so ein einziges Profil mit den
+        // Feldern aller Dateien statt eines pro Datei.
+        var beispiele = await _dialogs().OpenDataFilesAsync(_settings.LastDataDirectory);
+        if (beispiele.Count == 0)
             return;
 
-        var vorschlag = Path.GetFileNameWithoutExtension(beispiel);
-        var antwort = await _dialogs().AskNewProfileAsync(new NewProfileProposal(vorschlag, beispiel));
+        var erste = beispiele[0];
+        var vorschlag = Path.GetFileNameWithoutExtension(erste);
+        var antwort = await _dialogs().AskNewProfileAsync(new NewProfileProposal(vorschlag, erste));
         if (antwort is null)
             return;
 
@@ -562,14 +571,26 @@ public sealed class MainViewModel : ObservableObject
             {
                 // OK legt das Profil sofort an und speichert es: erst damit hat
                 // es einen Pfad und erscheint in Index und Uebersicht.
-                var session = ProfileSession.Create(antwort.Name, beispiel, antwort.Description);
+                var session = ProfileSession.Create(antwort.Name, beispiele, antwort.Description);
                 session.Save(antwort.TargetPath);
                 LoadProfile(session);
 
                 StatusText = "Neues Profil angelegt. Jedes Feld braucht noch eine Entscheidung.";
             }
 
-            await LoadDataFileAsync(beispiel);
+            // Alle gewaehlten Dateien sofort eintragen, nicht erst die erste
+            // ueber LoadDataFileAsync unten -- sonst kennten Schnellwahl und
+            // Sammellauf die restlichen Dateien erst, nachdem jede einzeln
+            // geoeffnet wurde.
+            if (_session?.Path is not null)
+            {
+                var index = ProfileIndex.Load();
+                foreach (var datei in beispiele)
+                    index.RecordDataFile(_session.Path, datei);
+                index.Save();
+            }
+
+            await LoadDataFileAsync(erste);
         });
     }
 
@@ -776,6 +797,7 @@ public sealed class MainViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasRecentDataFiles));
+        RaiseCommandStates();
     }
 
     /// <summary>
@@ -1023,6 +1045,214 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Ob ein Sammellauf ueberhaupt Arbeit haette: eine Sitzung muss geladen
+    /// sein, kein Lauf darf laufen, und mindestens eine der dem Profil
+    /// bekannten Dateien muss noch existieren -- sonst gaebe es nichts zu
+    /// verarbeiten und die Rueckfrage waere fuer die Katz.
+    /// </summary>
+    private bool CanRunBatch()
+        // Bewusst ein frischer File.Exists-Aufruf statt RecentFileViewModel.Exists:
+        // das dort zwischengespeicherte Ergebnis stammt vom letzten Aufbau der
+        // Schnellwahl und wird sonst nirgends aufgefrischt. Ein Sammellauf soll
+        // aber genau wissen, was gerade auf der Platte liegt.
+        => !IsBusy && _session is not null && RecentDataFiles.Any(f => File.Exists(f.FullPath));
+
+    /// <summary>
+    /// Erzeugt fuer jede dem Profil bekannte, noch vorhandene Datei eine
+    /// Ausgabe -- "Alle Pseudodateien erzeugen…" beziehungsweise "Alle
+    /// Klartextdateien erzeugen…". Anders als beim Einzellauf (<see cref="RunAsync"/>)
+    /// gibt es nur eine einzige Rueckfrage vorab, danach laeuft die Liste ohne
+    /// weitere Unterbrechung durch. Jede Datei wird erst vollstaendig
+    /// verarbeitet und erst danach geschrieben -- ein Abbruch mitten in einer
+    /// Datei hinterlaesst also nie eine halbe Ausgabedatei, nur eine fehlende.
+    /// </summary>
+    private async Task RunBatchAsync(bool obfuscate)
+    {
+        if (_session is null)
+            return;
+
+        var vorhandeneDateien = RecentDataFiles.Where(f => File.Exists(f.FullPath)).Select(f => f.FullPath).ToList();
+        var fehlendeDateien = RecentDataFiles.Where(f => !File.Exists(f.FullPath)).Select(f => f.DisplayName).ToList();
+
+        if (vorhandeneDateien.Count == 0)
+            return;
+
+        var marker = obfuscate ? "pseudo" : "klartext";
+
+        // Ziel steht schon vor der Rueckfrage fest -- nur so laesst sich die
+        // Anzahl der ueberschriebenen Dateien darin nennen.
+        var ziele = vorhandeneDateien.ToDictionary(
+            datei => datei,
+            datei => System.IO.Path.Combine(
+                Path.GetDirectoryName(datei) ?? "", DialogService.SuggestOutputName(datei, marker)));
+
+        // Traegt eine Datei den Zusatz schon im Namen (kunden.pseudo.csv bei
+        // "Alle Pseudodateien erzeugen"), haengt SuggestOutputName ihn bewusst
+        // kein zweites Mal an -- der Vorschlag faellt dann auf den Namen der
+        // Eingabe selbst zurueck, und der Lauf schriebe sein Ergebnis ueber
+        // seine eigene Eingabedatei. Solche Dateien bleiben aussen vor und
+        // werden in der Abschlussmeldung genannt.
+        var selbstbezuegliche = ziele
+            .Where(paar => string.Equals(
+                Path.GetFullPath(paar.Key), Path.GetFullPath(paar.Value), StringComparison.Ordinal))
+            .Select(paar => Path.GetFileName(paar.Key))
+            .ToList();
+
+        vorhandeneDateien.RemoveAll(datei => string.Equals(
+            Path.GetFullPath(datei), Path.GetFullPath(ziele[datei]), StringComparison.Ordinal));
+
+        if (vorhandeneDateien.Count == 0)
+        {
+            StatusText = BuildBatchStatusText(0, 0, Array.Empty<string>(), fehlendeDateien,
+                selbstbezuegliche, abgebrochen: false);
+            return;
+        }
+
+        var ueberschreibenAnzahl = vorhandeneDateien.Count(datei => File.Exists(ziele[datei]));
+
+        var vorschlag = new BatchRunProposal(vorhandeneDateien.Count, marker, ueberschreibenAnzahl);
+        if (!await _dialogs().AskBatchRunAsync(vorschlag))
+            return;
+
+        if (!_session.TryGetEngine(out var engine, out var befunde) || engine is null)
+        {
+            StatusText = "Die Konfiguration ist fehlerhaft — siehe Hinweise.";
+            Issues.Clear();
+            foreach (var befund in befunde)
+                Issues.Add(befund);
+            OnPropertyChanged(nameof(HasIssues));
+            return;
+        }
+
+        IsBusy = true;
+        StatusText = (obfuscate ? "Erzeugen der Pseudodateien" : "Erzeugen der Klartextdateien") + " läuft …";
+        ProgressText = "";
+
+        _cancellation?.Dispose();
+        _cancellation = new CancellationTokenSource();
+
+        var summe = new RunReport { Command = obfuscate ? "obfuscateAll" : "deobfuscateAll" };
+        var geschriebenAnzahl = 0;
+        var uebersprungeneDateien = new List<string>();
+        var abgebrochen = false;
+
+        try
+        {
+            for (var i = 0; i < vorhandeneDateien.Count; i++)
+            {
+                _cancellation.Token.ThrowIfCancellationRequested();
+
+                var eingabe = vorhandeneDateien[i];
+                var ziel = ziele[eingabe];
+                var dateiNummer = i + 1;
+
+                var fortschritt = new Progress<RunProgress>(stand =>
+                    ProgressText = $"Datei {dateiNummer} von {vorhandeneDateien.Count} · "
+                                  + $"{stand.RowsProcessed} Datensätze");
+
+                try
+                {
+                    var inhalt = await File.ReadAllBytesAsync(eingabe, _cancellation.Token);
+
+                    var ergebnis = obfuscate
+                        ? await engine.ObfuscateAsync(
+                            inhalt, eingabe, new RunOptions { Strict = true }, _cancellation.Token, fortschritt)
+                        : await engine.DeobfuscateAsync(
+                            inhalt, eingabe, new RunOptions(), _cancellation.Token, fortschritt);
+
+                    await File.WriteAllBytesAsync(ziel, ergebnis.Content, _cancellation.Token);
+
+                    MergeReport(summe, ergebnis.Report);
+                    geschriebenAnzahl++;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex) when (ex is UnhandledFieldException
+                                               or ConfigurationException
+                                               or MappingConflictException
+                                               or MappingLockedException
+                                               or Core.Generation.GenerationException
+                                               or IOException
+                                               or UnauthorizedAccessException)
+                {
+                    // Nichts wird still uebergangen: diese eine Datei faellt
+                    // aus, die uebrigen laufen weiter, und die Abschlussmeldung
+                    // nennt Datei und Grund.
+                    uebersprungeneDateien.Add($"{Path.GetFileName(eingabe)} ({ex.Message})");
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Vor der naechsten Datei abgebrochen -- schon geschriebene
+            // Dateien bleiben stehen und werden unten mitgezaehlt.
+            abgebrochen = true;
+        }
+        finally
+        {
+            IsBusy = false;
+            ProgressText = "";
+        }
+
+        if (geschriebenAnzahl > 0)
+        {
+            LastResult = new RunResultViewModel(summe);
+            RefreshMappingSummary();
+
+            if (obfuscate)
+            {
+                _hasRunSinceOpen = true;
+                OnPropertyChanged(nameof(ScanRecommended));
+                OnPropertyChanged(nameof(ShowScanHint));
+            }
+        }
+
+        StatusText = BuildBatchStatusText(
+            geschriebenAnzahl, vorhandeneDateien.Count, uebersprungeneDateien, fehlendeDateien,
+            selbstbezuegliche, abgebrochen);
+    }
+
+    /// <summary>Traegt den Bericht eines Einzellaufs in die Sammelsumme des Sammellaufs ein.</summary>
+    private static void MergeReport(RunReport summe, RunReport einzelbericht)
+    {
+        summe.RowsProcessed += einzelbericht.RowsProcessed;
+        summe.NewMappings += einzelbericht.NewMappings;
+
+        // Die Tabelle waechst mit jedem Lauf -- der letzte Stand ist der
+        // aktuelle, ein Aufsummieren wuerde ihn vervielfachen.
+        summe.TotalMappings = einzelbericht.TotalMappings;
+
+        foreach (var (regel, anzahl) in einzelbericht.RuleHits)
+            summe.RuleHits[regel] = summe.RuleHits.GetValueOrDefault(regel) + anzahl;
+
+        summe.Findings.AddRange(einzelbericht.Findings);
+        summe.Warnings.AddRange(einzelbericht.Warnings);
+    }
+
+    private static string BuildBatchStatusText(
+        int geschrieben, int versucht, IReadOnlyList<string> uebersprungen, IReadOnlyList<string> fehlend,
+        IReadOnlyList<string> selbstbezueglich, bool abgebrochen)
+    {
+        var text = abgebrochen
+            ? $"Abgebrochen: {geschrieben} von {versucht} Dateien geschrieben."
+            : $"{geschrieben} von {versucht} Dateien geschrieben.";
+
+        if (uebersprungen.Count > 0)
+            text += " Übersprungen: " + string.Join("; ", uebersprungen) + ".";
+
+        if (fehlend.Count > 0)
+            text += " Nicht mehr vorhanden: " + string.Join(", ", fehlend) + ".";
+
+        if (selbstbezueglich.Count > 0)
+            text += " Ausgelassen, weil die Ausgabe die Eingabedatei selbst überschriebe: "
+                  + string.Join(", ", selbstbezueglich) + ".";
+
+        return text;
+    }
+
+    /// <summary>
     /// Gemeinsamer Rahmen der drei Vorgaenge: Engine holen, Fehler abfangen,
     /// Bericht anzeigen.
     /// </summary>
@@ -1137,5 +1367,7 @@ public sealed class MainViewModel : ObservableObject
         ObfuscateCommand.RaiseCanExecuteChanged();
         DeobfuscateCommand.RaiseCanExecuteChanged();
         ScanCommand.RaiseCanExecuteChanged();
+        ObfuscateAllCommand.RaiseCanExecuteChanged();
+        DeobfuscateAllCommand.RaiseCanExecuteChanged();
     }
 }

@@ -161,7 +161,31 @@ dieser Übersicht heraus lässt die Einträge der Ersetzungstabelle unangetastet
 schon existiert, auch dort, sodass kein Pseudonym ungültig wird. Beim
 Schließen des Fensters oder beim Wechsel zu einem anderen Profil fragt die
 Oberfläche nach, falls noch ungespeicherte Regeländerungen vorliegen
-(Speichern, Verwerfen oder Abbrechen).
+(Speichern, Verwerfen oder Abbrechen). **Aus Liste entfernen** blendet einen
+Eintrag dauerhaft aus (die Profildatei bleibt unangetastet; **Aus Datei
+wählen…** holt ihn zurück), **Profil löschen…** löscht die Profildatei
+tatsächlich, wahlweise samt Ersetzungstabelle — mit einer Rückfrage, die
+ausdrücklich sagt, dass die Tabelle sämtliche Echtwerte enthält und ihr
+Verlust den Rückweg unmöglich macht. Das gerade im Hauptfenster geöffnete
+Profil lässt sich auf diesem Weg nicht löschen.
+
+**Neu aus Datei…** erlaubt jetzt eine Mehrfachauswahl: mehrere
+zusammengehörende Dateien mit gemeinsamer Schlüsselspalte (siehe unten) auf
+einmal wählen, das Regelgerüst des entstehenden Profils deckt dann die
+Felder aller Dateien ab, nicht nur einer.
+
+**Sammelläufe.** Neben **Pseudodatei erzeugen…** bietet das Menü **Alle ▾**
+die Einträge **Alle Pseudodateien erzeugen…** und **Alle Klartextdateien
+erzeugen…** — sie verarbeiten alle dem Profil bekannten, noch vorhandenen
+Dateien (aus **Zuletzt ▾**) und schreiben jede Ausgabe neben ihre
+Eingabedatei, mit demselben Zusatz `.pseudo`/`.klartext` wie beim
+Einzellauf. Eine einzige Rückfrage gilt dem ganzen Sammellauf — sie nennt
+Dateianzahl, Namensmuster und die Anzahl schon vorhandener Zieldateien, die
+überschrieben würden — **danach folgt keine weitere Rückfrage**, ein
+bestätigter Sammellauf überschreibt also ohne weitere Warnung. Ein Abbruch
+wirkt vor der nächsten Datei; schon geschriebene Dateien bleiben stehen und
+werden mitgezählt, eine fehlende oder fehlschlagende Datei (etwa ein Feld
+ohne Entscheidung) wird übersprungen und in der Abschlussmeldung genannt.
 
 ### Ins Anwendungsmenü aufnehmen (Linux)
 

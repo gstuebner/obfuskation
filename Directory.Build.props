@@ -41,8 +41,20 @@
          im Bericht ("datumMitFremdemProfil"); D-7 teilweise behoben: Text der
          Hilfeoption jetzt deutsch, die Ueberschrift "Description:" bleibt aus
          den in Abschnitt 11 der Entwicklerdokumentation genannten Gruenden
-         eine bekannte Einschraenkung des Pakets System.CommandLine 2.0.11. -->
-    <Version>1.3.0</Version>
+         eine bekannte Einschraenkung des Pakets System.CommandLine 2.0.11.
+         1.4.0: Profiluebersicht: "Aus Liste entfernen" blendet den Eintrag
+         jetzt dauerhaft aus (GuiSettings.HiddenProfiles), statt dass er beim
+         naechsten Aufbau der Liste ohne Nutzungsdaten zurueckkommt, weil
+         ProfileCatalog.Collect den zentralen Profilordner ohnehin immer
+         vollstaendig auflistet. Dazu neu "Profil
+         loeschen..." mit Rueckfrage, ob die Ersetzungstabelle mitgeloescht
+         wird. "Neu aus Datei..." erlaubt jetzt Mehrfachauswahl: ein Profil
+         entsteht aus den Feldern aller gewaehlten Dateien auf einmal
+         (ProfileScaffolder.Create mit mehreren Pfaden). Neu die Sammellaeufe
+         "Alle Pseudodateien erzeugen..." und "Alle Klartextdateien
+         erzeugen...", mit genau einer Rueckfrage statt einer je Datei;
+         geschrieben wird jeweils neben die Eingabedatei. -->
+    <Version>1.4.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

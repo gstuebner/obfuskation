@@ -69,7 +69,7 @@ public class InspectionTests
         // Zustand muss die Oberflaeche anzeigen koennen — ein Abbruch waere
         // hier das Gegenteil von hilfreich.
         using var setup = new TestProfile();
-        var profil = ProfileScaffolder.Create("test", null);
+        var profil = ProfileScaffolder.Create("test", (string?)null);
         foreach (var name in new[] { "Kundennummer", "Kundenname", "IBAN" })
             profil.Fields.Add(new FieldRule { Match = name, Action = FieldAction.Error });
         profil.MappingStore = setup.Profile.MappingStore;
@@ -223,5 +223,27 @@ public class InspectionTests
         var regel = profil.Fields.Single(f => f.Match == "IBAN");
         Assert.Equal("iban", regel.Generator);
         Assert.Empty(profil.Generators);
+    }
+
+    [Fact]
+    public void Create_aus_mehreren_Dateien_vereinigt_die_Felder_ohne_Doppelte()
+    {
+        // Der Fall aus dem Fehlerbericht: zwei Dateien mit gemeinsamer Spalte
+        // "Kundennummer" sollen ein einziges Profil ergeben, dessen Felder aus
+        // beiden Dateien stammen -- die gemeinsame Spalte aber nur einmal.
+        using var setup = new TestProfile();
+        var stammdaten = Path.Combine(setup.Directory, "kunden_stammdaten.csv");
+        File.WriteAllText(stammdaten,
+            "Kundennummer;Nachname;Vorname\nK1001;Altmaier;Anton\n", new UTF8Encoding(false));
+
+        var adressen = Path.Combine(setup.Directory, "kunden_adressen.csv");
+        File.WriteAllText(adressen,
+            "Kundennummer;Strasse;Ort\nK1001;Altenstraße 1;Altheim\n", new UTF8Encoding(false));
+
+        var profil = ProfileScaffolder.Create("test", new[] { stammdaten, adressen });
+
+        Assert.Equal(
+            new[] { "Kundennummer", "Nachname", "Vorname", "Strasse", "Ort" },
+            profil.Fields.Select(f => f.Match));
     }
 }

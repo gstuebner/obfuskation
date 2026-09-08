@@ -19,3 +19,6 @@ mapping.lock
 *.pseudo.*
 *.klartext.*
 obfuskation.json
+
+# Arbeitsordner fuer gemeldete Fehler und Wuensche samt Testdaten
+features+bugs/

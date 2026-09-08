@@ -448,6 +448,21 @@
                 Command="{Binding ObfuscateCommand}"/>
         <Button Content="Klartextdatei erzeugen…" Command="{Binding DeobfuscateCommand}"/>
         <Button Content="Prüfen" Command="{Binding ScanCommand}"/>
+
+        <!-- Sammellaeufe: alle dem Profil bekannten, noch vorhandenen Dateien
+             auf einmal verarbeiten, mit genau einer Rueckfrage statt einer je
+             Datei. Als Flyout statt eigener Schaltflaechen, damit die Leiste
+             bei schmalem Fenster nicht ueberlaeuft. -->
+        <Button Content="Alle ▾">
+          <Button.Flyout>
+            <MenuFlyout>
+              <MenuItem Header="Alle Pseudodateien erzeugen…" Command="{Binding ObfuscateAllCommand}"
+                        ToolTip.Tip="Schreibt für jede bekannte Datendatei eine Pseudodatei neben die Eingabedatei."/>
+              <MenuItem Header="Alle Klartextdateien erzeugen…" Command="{Binding DeobfuscateAllCommand}"
+                        ToolTip.Tip="Schreibt für jede bekannte Datendatei eine Klartextdatei neben die Eingabedatei."/>
+            </MenuFlyout>
+          </Button.Flyout>
+        </Button>
       </StackPanel>
 
       <!-- Der Schritt vor der Weitergabe soll nicht untergehen. Der Hinweis

@@ -13,6 +13,13 @@ public interface IDialogService
 {
     Task<string?> OpenDataFileAsync(string? startDirectory = null);
 
+    /// <summary>
+    /// Wie <see cref="OpenDataFileAsync"/>, aber mit Mehrfachauswahl -- fuer
+    /// "Neu aus Datei…", wenn ein Profil aus mehreren zusammengehoerenden
+    /// Dateien auf einmal entstehen soll. Eine leere Liste bedeutet Abbruch.
+    /// </summary>
+    Task<IReadOnlyList<string>> OpenDataFilesAsync(string? startDirectory = null);
+
     Task<string?> OpenProfileAsync(string? startDirectory = null);
 
     Task<string?> SaveFileAsync(string suggestedName, string? startDirectory = null);
@@ -30,12 +37,35 @@ public interface IDialogService
     Task<string?> AskRenameProfileAsync(RenameProposal proposal);
 
     /// <summary>
+    /// Rueckfrage vorm endgueltigen Loeschen. Sagt ausdruecklich, dass die
+    /// Ersetzungstabelle alle Echtwerte enthaelt und ihr Verlust den Rueckweg zu
+    /// den Originaldaten unmoeglich macht. Liefert <see cref="DeleteChoice.Cancel"/>
+    /// ohne Auswahl -- die vorsichtige Richtung.
+    /// </summary>
+    Task<DeleteChoice> AskDeleteProfileAsync(DeleteProposal proposal);
+
+    /// <summary>
+    /// Die eine Rueckfrage vor einem Sammellauf ("Alle Pseudodateien
+    /// erzeugen…" / "Alle Klartextdateien erzeugen…"). Liefert <c>true</c>, wenn
+    /// der Anwender fortfahren will.
+    /// </summary>
+    Task<bool> AskBatchRunAsync(BatchRunProposal proposal);
+
+    /// <summary>
     /// Die Profiluebersicht. <paramref name="viewModel"/> traegt bereits alle
     /// Daten und Befehle; hier entsteht nur das Fenster darum. Liefert das zum
     /// Oeffnen gewaehlte Profil, oder <c>null</c>, wenn das Fenster ohne Wahl
     /// geschlossen wurde.
     /// </summary>
     Task<ProfileSummary?> ShowProfilesAsync(ProfilesViewModel viewModel);
+}
+
+/// <summary>Antwort auf die Rueckfrage vorm Loeschen eines Profils.</summary>
+public enum DeleteChoice
+{
+    Cancel,
+    ProfileOnly,
+    ProfileAndMapping,
 }
 
 /// <summary>Antwort auf die Rueckfrage bei ungespeicherten Aenderungen.</summary>
@@ -66,3 +96,20 @@ public sealed record NewProfileResult(string Name, string? Description, string T
 /// unveraendert stehen bleibt.
 /// </param>
 public sealed record RenameProposal(string OldName, string SuggestedName, string MappingStorePath);
+
+/// <param name="Name">Name des zu loeschenden Profils, zur Anzeige.</param>
+/// <param name="ProfilePath">Pfad der Profildatei.</param>
+/// <param name="MappingStorePath">Pfad der Ersetzungstabelle, zur Anzeige.</param>
+/// <param name="MappingStoreExists">
+/// Ob unter <see cref="MappingStorePath"/> ueberhaupt schon eine Tabelle liegt
+/// -- sonst waere die Warnung vor dem Verlust der Echtwerte gegenstandslos.
+/// </param>
+public sealed record DeleteProposal(string Name, string ProfilePath, string MappingStorePath, bool MappingStoreExists);
+
+/// <param name="FileCount">Anzahl der Dateien, die verarbeitet werden.</param>
+/// <param name="Marker">Namenszusatz der Ausgabe, "pseudo" oder "klartext".</param>
+/// <param name="OverwriteCount">
+/// Anzahl schon vorhandener Zieldateien, die dabei ueberschrieben wuerden --
+/// muss die Rueckfrage ausdruecklich nennen.
+/// </param>
+public sealed record BatchRunProposal(int FileCount, string Marker, int OverwriteCount);

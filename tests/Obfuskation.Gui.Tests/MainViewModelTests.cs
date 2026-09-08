@@ -679,7 +679,7 @@ public class MainViewModelTests : IDisposable
 
         var dialoge = new FakeDialogService
         {
-            DataFileToOpen = csv,
+            DataFilesToOpen = new[] { csv },
             NewProfileResult = new NewProfileResult("eigenerName", "Testbeschreibung", ziel, OpenExisting: false),
         };
 
@@ -826,7 +826,7 @@ public class MainViewModelTests : IDisposable
         var csv = SchreibeCsv();
         var dialoge = new FakeDialogService
         {
-            DataFileToOpen = csv,
+            DataFilesToOpen = new[] { csv },
             NewProfileResult = new NewProfileResult(
                 "kunden", null, Path.Combine(_verzeichnis, "kunden.json"), OpenExisting: false),
         };
@@ -920,5 +920,200 @@ public class MainViewModelTests : IDisposable
         modell.UpdateSelection([modell.Fields[0], zweites]);
 
         Assert.Equal(zweites, modell.SelectedField);
+    }
+
+    // ------------------------------------------- Mehrfachauswahl bei Dateien
+
+    [Fact]
+    public async Task Ein_Profil_aus_zwei_Dateien_kennt_die_Felder_beider_und_listet_beide_Dateien()
+    {
+        var stammdaten = Path.Combine(_verzeichnis, "kunden_stammdaten.csv");
+        File.WriteAllText(stammdaten,
+            "Kundennummer;Nachname;Vorname\nK1001;Altmaier;Anton\n", new UTF8Encoding(false));
+
+        var adressen = Path.Combine(_verzeichnis, "kunden_adressen.csv");
+        File.WriteAllText(adressen,
+            "Kundennummer;Strasse;Ort\nK1001;Altenstraße 1;Altheim\n", new UTF8Encoding(false));
+
+        var dialoge = new FakeDialogService
+        {
+            DataFilesToOpen = new[] { stammdaten, adressen },
+            NewProfileResult = new NewProfileResult(
+                "kunden", null, Path.Combine(_verzeichnis, "kunden.json"), OpenExisting: false),
+        };
+
+        var modell = Erzeugen(dialoge);
+        await modell.NewProfileAsync();
+
+        // Das Regelwerk des Profils kennt die Felder beider Dateien -- die
+        // sichtbare Feldliste (modell.Fields) zeigt dagegen immer nur die
+        // Spalten der gerade geoeffneten Datei, hier also nur die erste.
+        Assert.Equal(
+            new[] { "Kundennummer", "Nachname", "Vorname", "Strasse", "Ort" },
+            modell.Session!.Profile.Fields.Select(f => f.Match));
+
+        Assert.Equal(2, modell.RecentDataFiles.Count);
+        Assert.Contains(modell.RecentDataFiles, f => f.DisplayName == "kunden_stammdaten.csv");
+        Assert.Contains(modell.RecentDataFiles, f => f.DisplayName == "kunden_adressen.csv");
+    }
+
+    // -------------------------------------------------------- Sammellaeufe
+
+    private static void EntscheideAlleFelder(MainViewModel modell)
+    {
+        foreach (var feld in modell.Fields)
+            feld.Action = FieldAction.Passthrough;
+    }
+
+    [Fact]
+    public async Task Ein_Sammellauf_schreibt_fuer_alle_bekannten_Dateien_eine_Ausgabe_daneben()
+    {
+        var profil = SchreibeProfil();
+        var csv1 = SchreibeCsv("kunden.csv");
+        var csv2 = SchreibeCsv("kunden2.csv");
+
+        var index = ProfileIndex.Load();
+        index.RecordDataFile(profil, csv1);
+        index.RecordDataFile(profil, csv2);
+        index.Save();
+
+        var dialoge = new FakeDialogService { BatchRunConfirmed = true };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv1);
+        EntscheideAlleFelder(modell);
+
+        await AusfuehrenUndWartenAsync(modell.ObfuscateAllCommand);
+
+        Assert.NotNull(dialoge.LastBatchRunProposal);
+        Assert.Equal(2, dialoge.LastBatchRunProposal!.FileCount);
+
+        var ziel1 = Path.Combine(_verzeichnis, "kunden.pseudo.csv");
+        var ziel2 = Path.Combine(_verzeichnis, "kunden2.pseudo.csv");
+        Assert.True(File.Exists(ziel1));
+        Assert.True(File.Exists(ziel2));
+
+        Assert.Contains("2 von 2", modell.StatusText);
+        Assert.NotNull(modell.LastResult);
+        Assert.Equal("Pseudodateien erzeugt", modell.LastResult!.Headline);
+    }
+
+    [Fact]
+    public async Task Eine_abgelehnte_Rueckfrage_schreibt_nichts()
+    {
+        var profil = SchreibeProfil();
+        var csv1 = SchreibeCsv("kunden.csv");
+
+        var index = ProfileIndex.Load();
+        index.RecordDataFile(profil, csv1);
+        index.Save();
+
+        var dialoge = new FakeDialogService { BatchRunConfirmed = false };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv1);
+        EntscheideAlleFelder(modell);
+
+        await AusfuehrenUndWartenAsync(modell.ObfuscateAllCommand);
+
+        Assert.False(File.Exists(Path.Combine(_verzeichnis, "kunden.pseudo.csv")));
+    }
+
+    [Fact]
+    public async Task Eine_fehlende_Datei_wird_im_Sammellauf_uebersprungen_und_gemeldet()
+    {
+        var profil = SchreibeProfil();
+        var csv1 = SchreibeCsv("kunden.csv");
+        var csv2 = SchreibeCsv("kunden2.csv");
+
+        var index = ProfileIndex.Load();
+        index.RecordDataFile(profil, csv1);
+        index.RecordDataFile(profil, csv2);
+        index.Save();
+
+        var dialoge = new FakeDialogService { BatchRunConfirmed = true };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv1);
+        EntscheideAlleFelder(modell);
+
+        // Zweite Datei verschwindet, bevor der Sammellauf startet.
+        File.Delete(csv2);
+
+        await AusfuehrenUndWartenAsync(modell.ObfuscateAllCommand);
+
+        Assert.Equal(1, dialoge.LastBatchRunProposal!.FileCount);
+        Assert.True(File.Exists(Path.Combine(_verzeichnis, "kunden.pseudo.csv")));
+        Assert.Contains("kunden2.csv", modell.StatusText);
+    }
+
+    [Fact]
+    public async Task Ein_Sammellauf_der_Klartextdateien_liefert_die_Ausgangswerte()
+    {
+        var profil = SchreibeProfil();
+        var csv1 = SchreibeCsv("kunden.csv");
+        var csv2 = SchreibeCsv("kunden2.csv");
+
+        var index = ProfileIndex.Load();
+        index.RecordDataFile(profil, csv1);
+        index.RecordDataFile(profil, csv2);
+        index.Save();
+
+        var dialoge = new FakeDialogService { BatchRunConfirmed = true };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv1);
+        EntscheideAlleFelder(modell);
+
+        await AusfuehrenUndWartenAsync(modell.ObfuscateAllCommand);
+
+        var pseudo1 = Path.Combine(_verzeichnis, "kunden.pseudo.csv");
+        var pseudo2 = Path.Combine(_verzeichnis, "kunden2.pseudo.csv");
+
+        // Als Datendateien des Profils oeffnen -- wie im Handdurchgang des
+        // Plans: die Pseudodateien selbst werden zu den bekannten Dateien.
+        index = ProfileIndex.Load();
+        index.RecordDataFile(profil, pseudo1);
+        index.RecordDataFile(profil, pseudo2);
+        index.Save();
+
+        var modell2 = Erzeugen(dialoge);
+        await modell2.InitializeAsync(profil, pseudo1);
+
+        await AusfuehrenUndWartenAsync(modell2.DeobfuscateAllCommand);
+
+        var klartext1 = Path.Combine(_verzeichnis, "kunden.pseudo.klartext.csv");
+        var klartext2 = Path.Combine(_verzeichnis, "kunden2.pseudo.klartext.csv");
+
+        Assert.True(File.Exists(klartext1));
+        Assert.True(File.Exists(klartext2));
+        Assert.Equal(await File.ReadAllTextAsync(csv1), await File.ReadAllTextAsync(klartext1));
+        Assert.Equal(await File.ReadAllTextAsync(csv2), await File.ReadAllTextAsync(klartext2));
+    }
+
+    [Fact]
+    public async Task Eine_Pseudodatei_wird_im_Sammellauf_nicht_ueber_sich_selbst_geschrieben()
+    {
+        var profil = SchreibeProfil();
+        var csv = SchreibeCsv("kunden.csv");
+
+        // Eine Datei, die den Zusatz schon traegt: SuggestOutputName haengt ihn
+        // kein zweites Mal an, das Ziel waere also die Datei selbst.
+        var pseudo = SchreibeCsv("kunden.pseudo.csv");
+        var inhaltVorher = await File.ReadAllTextAsync(pseudo);
+
+        var index = ProfileIndex.Load();
+        index.RecordDataFile(profil, csv);
+        index.RecordDataFile(profil, pseudo);
+        index.Save();
+
+        var dialoge = new FakeDialogService { BatchRunConfirmed = true };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv);
+        EntscheideAlleFelder(modell);
+
+        await AusfuehrenUndWartenAsync(modell.ObfuscateAllCommand);
+
+        // Die Rueckfrage zaehlt sie gar nicht erst mit, ihr Inhalt bleibt
+        // unberuehrt, und die Abschlussmeldung nennt sie.
+        Assert.Equal(1, dialoge.LastBatchRunProposal!.FileCount);
+        Assert.Equal(inhaltVorher, await File.ReadAllTextAsync(pseudo));
+        Assert.Contains("kunden.pseudo.csv", modell.StatusText);
     }
 }

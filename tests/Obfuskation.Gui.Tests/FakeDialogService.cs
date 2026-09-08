@@ -13,6 +13,7 @@ namespace Obfuskation.Gui.Tests;
 internal sealed class FakeDialogService : IDialogService
 {
     public string? DataFileToOpen { get; set; }
+    public IReadOnlyList<string> DataFilesToOpen { get; set; } = Array.Empty<string>();
     public string? ProfileToOpen { get; set; }
     public string? SaveTarget { get; set; }
 
@@ -25,7 +26,18 @@ internal sealed class FakeDialogService : IDialogService
     public string? RenameResult { get; set; }
     public ProfileSummary? ProfilesResult { get; set; }
 
+    /// <summary>Vorgabe ist die vorsichtige Richtung: nicht loeschen.</summary>
+    public DeleteChoice DeleteChoice { get; set; } = DeleteChoice.Cancel;
+
+    /// <summary>Vorgabe ist die vorsichtige Richtung: keinen Sammellauf starten.</summary>
+    public bool BatchRunConfirmed { get; set; }
+
+    public BatchRunProposal? LastBatchRunProposal { get; private set; }
+
     public Task<string?> OpenDataFileAsync(string? startDirectory = null) => Task.FromResult(DataFileToOpen);
+
+    public Task<IReadOnlyList<string>> OpenDataFilesAsync(string? startDirectory = null)
+        => Task.FromResult(DataFilesToOpen);
 
     public Task<string?> OpenProfileAsync(string? startDirectory = null) => Task.FromResult(ProfileToOpen);
 
@@ -42,6 +54,14 @@ internal sealed class FakeDialogService : IDialogService
         => Task.FromResult(NewProfileResult);
 
     public Task<string?> AskRenameProfileAsync(RenameProposal proposal) => Task.FromResult(RenameResult);
+
+    public Task<DeleteChoice> AskDeleteProfileAsync(DeleteProposal proposal) => Task.FromResult(DeleteChoice);
+
+    public Task<bool> AskBatchRunAsync(BatchRunProposal proposal)
+    {
+        LastBatchRunProposal = proposal;
+        return Task.FromResult(BatchRunConfirmed);
+    }
 
     public Task<ProfileSummary?> ShowProfilesAsync(ProfilesViewModel viewModel) => Task.FromResult(ProfilesResult);
 }

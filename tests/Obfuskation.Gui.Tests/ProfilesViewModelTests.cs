@@ -47,6 +47,33 @@ public class ProfilesViewModelTests : IDisposable
             () => throw new InvalidOperationException("In diesem Test darf kein Dialog aufgehen."),
             aktuellerSitzungspfad, ungespeichert);
 
+    /// <summary>
+    /// Fuehrt einen <see cref="AsyncRelayCommand"/> aus und wartet dessen Ende
+    /// ab -- wie in MainViewModelTests: <c>Execute</c> ist <c>async void</c>,
+    /// ohne diesen Umweg liefe der Test weiter, bevor der Vorgang fertig ist.
+    /// </summary>
+    private static async Task AusfuehrenUndWartenAsync(AsyncRelayCommand befehl)
+    {
+        var fertig = new TaskCompletionSource();
+
+        void Beobachten(object? sender, EventArgs args)
+        {
+            if (!befehl.IsRunning)
+                fertig.TrySetResult();
+        }
+
+        befehl.CanExecuteChanged += Beobachten;
+        try
+        {
+            befehl.Execute(null);
+            await fertig.Task;
+        }
+        finally
+        {
+            befehl.CanExecuteChanged -= Beobachten;
+        }
+    }
+
     private string SchreibeProfil(string dateiname, string profilName, string? description = null)
     {
         var profil = new Profile
@@ -179,5 +206,82 @@ public class ProfilesViewModelTests : IDisposable
         var index = ProfileIndex.Load();
         Assert.DoesNotContain(index.Profiles, p =>
             string.Equals(p.Path, Path.GetFullPath(kunden), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Ein_entferntes_Profil_bleibt_auch_in_einer_neu_erzeugten_Uebersicht_weg()
+    {
+        // Der gemeldete Fehler: ProfileCatalog.Collect zaehlt den zentralen
+        // Profilordner immer mit auf, ein zuvor entferntes Profil kam darum
+        // sofort zurueck. Entscheidend ist deshalb nicht nur, dass die
+        // laufende Uebersicht den Eintrag verliert, sondern dass ein frisch
+        // aufgebautes Ansichtsmodell (wie beim erneuten Oeffnen des Fensters)
+        // ihn ebenfalls nicht mehr zeigt.
+        var kunden = SchreibeProfil("kunden.json", "kunden");
+        _settings.RecentProfiles.Add(kunden);
+
+        var erstesModell = Erzeugen();
+        erstesModell.Selected = Assert.Single(erstesModell.Rows);
+        erstesModell.RemoveCommand.Execute(null);
+
+        var zweitesModell = Erzeugen();
+        Assert.Empty(zweitesModell.Rows);
+    }
+
+    [Fact]
+    public async Task Aus_Datei_waehlen_holt_ein_entferntes_Profil_zurueck()
+    {
+        var kunden = SchreibeProfil("kunden.json", "kunden");
+        _settings.RecentProfiles.Add(kunden);
+
+        var modell = Erzeugen();
+        modell.Selected = Assert.Single(modell.Rows);
+        modell.RemoveCommand.Execute(null);
+        Assert.Empty(modell.Rows);
+
+        var dialoge = new FakeDialogService { ProfileToOpen = kunden };
+        var mitDialog = new ProfilesViewModel(_settings, () => dialoge, null, false);
+
+        await AusfuehrenUndWartenAsync(mitDialog.BrowseCommand);
+
+        Assert.False(_settings.IsHidden(kunden));
+        Assert.NotNull(mitDialog.ChosenProfile);
+        Assert.Equal("kunden", mitDialog.ChosenProfile!.Name);
+    }
+
+    [Fact]
+    public async Task Loeschen_entfernt_die_Profildatei_und_wahlweise_die_Tabelle()
+    {
+        var kunden = SchreibeProfil("kunden.json", "kunden");
+        var mappingPfad = Path.Combine(_verzeichnis, "kunden.json.mapping.json");
+        File.WriteAllText(mappingPfad, "{}");
+        _settings.RecentProfiles.Add(kunden);
+
+        var dialoge = new FakeDialogService { DeleteChoice = DeleteChoice.ProfileAndMapping };
+        var modell = new ProfilesViewModel(_settings, () => dialoge, null, false);
+        modell.Selected = Assert.Single(modell.Rows);
+
+        await AusfuehrenUndWartenAsync(modell.DeleteCommand);
+
+        Assert.False(File.Exists(kunden));
+        Assert.False(File.Exists(mappingPfad));
+        Assert.Empty(modell.Rows);
+    }
+
+    [Fact]
+    public async Task Loeschen_des_Sitzungsprofils_wird_verweigert()
+    {
+        var kunden = SchreibeProfil("kunden.json", "kunden");
+        _settings.RecentProfiles.Add(kunden);
+
+        var dialoge = new FakeDialogService();
+        var modell = new ProfilesViewModel(_settings, () => dialoge, kunden, false);
+        modell.Selected = Assert.Single(modell.Rows);
+
+        await AusfuehrenUndWartenAsync(modell.DeleteCommand);
+
+        Assert.True(File.Exists(kunden));
+        Assert.True(modell.HasErrorText);
+        Assert.NotEmpty(modell.Rows);
     }
 }

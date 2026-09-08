@@ -37,6 +37,10 @@ public sealed class ProfileSession
     public static ProfileSession Create(string profileName, string? sampleFilePath, string? description = null)
         => new(ProfileScaffolder.Create(profileName, sampleFilePath, description), null) { HasUnsavedChanges = true };
 
+    /// <summary>Wie die Einzelfassung, aber das Regelgeruest entsteht aus mehreren Dateien auf einmal.</summary>
+    public static ProfileSession Create(string profileName, IEnumerable<string> sampleFilePaths, string? description = null)
+        => new(ProfileScaffolder.Create(profileName, sampleFilePaths, description), null) { HasUnsavedChanges = true };
+
     /// <summary>
     /// Meldet eine Aenderung am Regelwerk. Die Engine wird verworfen, damit der
     /// naechste Zugriff sie mit den neuen Regeln aufbaut.

@@ -56,6 +56,8 @@ public sealed class RunResultViewModel
     {
         "obfuscate" => "Pseudodatei erzeugt",
         "deobfuscate" => "Klartextdatei erzeugt",
+        "obfuscateAll" => "Pseudodateien erzeugt",
+        "deobfuscateAll" => "Klartextdateien erzeugt",
         "scan" => "Geprüft",
         _ => Command,
     };

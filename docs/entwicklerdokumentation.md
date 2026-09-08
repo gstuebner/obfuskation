@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.3.0
+version: 1.4.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 07.09.2026
+date: 08.09.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.3.0 · Stand 7. September 2026
+Fassung 1.4.0 · Stand 8. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -97,6 +97,37 @@ Indexdatei rein informativ ist und beim Löschen (`ProfileIndex.Forget`,
 „Aus Liste entfernen” in der Übersicht) nichts an den eigentlichen Profilen
 oder Ersetzungstabellen ändert — genau das macht sie aber auch gefahrlos
 löschbar.
+
+**Der Fehler hinter „Aus Liste entfernen“ (behoben in 1.4.0):**
+`ProfileCatalog.Collect` (`src/Obfuskation.Core/Configuration/ProfileCatalog.cs:33`)
+zählt den zentralen Profilordner bei jedem Aufruf vollständig neu auf —
+richtig so, sonst müsste jedes neu angelegte Profil erst irgendwo
+eingetragen werden, um in der Übersicht aufzutauchen. `ProfilesViewModel.Remove`
+rief bislang nur `ProfileIndex.Forget` und entfernte den Pfad aus
+`GuiSettings.RecentProfiles` — beides betrifft aber nur die *Zusatzpfade*
+aus dem zweiten und dritten Argument von `Collect`, nie die
+Verzeichnis-Enumeration selbst. Lag die Profildatei im zentralen Ordner,
+kam sie beim nächsten `Refresh()` also unweigerlich zurück, nur ohne
+Nutzungsdaten (daher „keine Dateien“, „nie“ und das Abrutschen in der
+Sortierung „Zuletzt benutzt“). Die Behebung fügt eine dritte, vom Katalog
+unabhängige Sperrliste hinzu: `GuiSettings.HiddenProfiles`
+(`src/Obfuskation.Gui/Services/GuiSettings.cs`), Vollpfade, Vergleich wie
+bei `RecentProfiles` immer über `Path.GetFullPath` und
+`StringComparison.Ordinal`. `ProfilesViewModel.Refresh` filtert die
+Ausgabe von `ProfileCatalog.Collect` gegen `GuiSettings.IsHidden`, bevor
+sortiert und angezeigt wird — der Katalog selbst weiß nichts von
+Ausblendungen, das bleibt Sache des Ansichtsmodells, genau wie Sortierung
+und Filter schon vorher. `BrowseAsync` (Schaltfläche „Aus Datei
+wählen…“) ruft `UnhideProfile` auf den gewählten Pfad, sonst wäre ein
+einmal ausgeblendetes Profil auf Dauer unerreichbar. Neu daneben:
+**„Profil löschen…“** (`ProfilesViewModel.DeleteCommand`) löscht die
+Profildatei tatsächlich von der Platte, wahlweise samt Ersetzungstabelle
+und ihrer `.lock`-Datei (`DeleteChoice.ProfileAndMapping`); die Rückfrage
+dafür läuft über `IDialogService.AskDeleteProfileAsync` und sagt
+ausdrücklich, dass mit der Tabelle sämtliche Echtwerte verloren gehen.
+Verweigert wird der Löschvorgang, wenn die Zeile das Profil der laufenden
+Sitzung ist (`IsCurrentSession`) — sonst arbeitete das Hauptfenster
+ungebremst mit einer bereits gelöschten Datei weiter.
 
 ### Das kritische Detail beim Umbenennen
 
@@ -385,6 +416,58 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
   `_closeConfirmed` ein zweites Mal `window.Close()` — der Merker muss vor
   diesem zweiten Aufruf gesetzt sein, sonst entstünde eine Schleife aus
   Abbrechen und erneutem Rückfragen.
+- **Mehrfachauswahl bei „Neu aus Datei…“ (neu in 1.4.0):**
+  `IDialogService.OpenDataFilesAsync` ergänzt `OpenDataFileAsync` um einen
+  Picker mit `AllowMultiple = true`; die Einzelfassung bleibt für „Öffnen…“
+  unverändert bestehen, da dort weiterhin genau eine Datei sinnvoll ist.
+  `ProfileScaffolder.Create` bekommt eine zweite Überladung mit
+  `IEnumerable<string> sampleFilePaths`
+  (`src/Obfuskation.Core/Configuration/ProfileScaffolder.cs`): die
+  Feldnamen aller Dateien werden in Lesereihenfolge vereinigt, ein doppelt
+  auftretender Name (etwa die gemeinsame Schlüsselspalte zweier Tabellen)
+  erscheint nur beim ersten Auftreten. Die Einzelfassung ruft seither diese
+  Überladung mit einem Ein-Element- oder leeren Array — wichtig für
+  Aufrufer: ein Aufruf mit dem Literal `null` als zweitem Argument ist
+  damit mehrdeutig (`string?` und `IEnumerable<string>` passen beide) und
+  braucht einen Cast, siehe `InspectionTests.cs`. `ProfileSession.Create`
+  erhält dieselbe zweite Überladung. `MainViewModel.NewProfileAsync`
+  schlägt den Profilnamen aus der *ersten* gewählten Datei vor, baut das
+  Regelgerüst aus *allen*, trägt nach dem Speichern alle gewählten Dateien
+  über `ProfileIndex.RecordDataFile` ein (damit Schnellwahl und
+  Sammellauf sie sofort kennen) und öffnet zuletzt nur die erste über
+  `LoadDataFileAsync` — die sichtbare Feldliste zeigt also weiterhin nur
+  die Spalten der gerade geöffneten Datei, während `Session.Profile.Fields`
+  bereits alle kennt.
+- **Sammellaeufe (neu in 1.4.0):** `MainViewModel.RunBatchAsync` steht
+  neben dem bestehenden `RunAsync` und treibt `ObfuscateAllCommand` /
+  `DeobfuscateAllCommand`. Die Dateiliste kommt aus `RecentDataFiles`,
+  geprüft über ein frisches `File.Exists` statt über das zwischengespeicherte
+  `RecentFileViewModel.Exists` — Letzteres stammt vom letzten Aufbau der
+  Schnellwahl und würde eine zwischenzeitlich gelöschte Datei nicht
+  erkennen. Die einzige Rückfrage läuft über die neue
+  `IDialogService.AskBatchRunAsync(BatchRunProposal)`
+  (Dateianzahl, Namensmuster, Anzahl der zu überschreibenden Zieldateien);
+  danach folgt keine weitere Unterbrechung. Vor der Rückfrage fallen Dateien
+  heraus, deren Ziel ihr eigener Pfad wäre: `DialogService.SuggestOutputName`
+  hängt einen schon vorhandenen Zusatz bewusst kein zweites Mal an, ein
+  Sammellauf über `kunden.pseudo.csv` schriebe sonst über seine eigene
+  Eingabe. Sie werden in der Abschlussmeldung genannt. Jede Datei wird vollständig
+  gelesen, verarbeitet und erst dann geschrieben — ein Abbruch
+  (`CancellationTokenSource`, wie bei `RunAsync`) wirkt nur *zwischen* zwei
+  Dateien, nie mitten in einer, damit nie eine halbe Ausgabedatei entsteht.
+  Ein Fehler an einer einzelnen Datei (`UnhandledFieldException`,
+  `ConfigurationException`, `MappingConflictException`,
+  `MappingLockedException`, `GenerationException`, `IOException`,
+  `UnauthorizedAccessException`) überspringt nur diese eine Datei; Name und
+  Grund landen in der Abschlussmeldung (`BuildBatchStatusText`), nichts
+  wird still übergangen. Die Einzelberichte fasst `MergeReport` zu einem
+  `RunReport` zusammen: `RowsProcessed` und `NewMappings` werden addiert,
+  `RuleHits` je Schlüssel aufsummiert, `Findings` und `Warnings`
+  aneinandergehängt, `TotalMappings` bleibt der Stand des *letzten* Laufs
+  (die Tabelle wächst monoton, ein Aufsummieren würde sie vervielfachen).
+  `RunReport.Command` steht danach auf `obfuscateAll` beziehungsweise
+  `deobfuscateAll`; `RunResultViewModel.Headline` übersetzt das in
+  „Pseudodateien erzeugt“ / „Klartextdateien erzeugt“.
 - **Themen** liegen unter `src/Obfuskation.Gui/Themes/` (`Colors.axaml`,
   `Controls.axaml`, `Metrics.axaml`); `ThemeService.Apply`
   (`src/Obfuskation.Gui/Services/ThemeService.cs`) setzt nur
@@ -396,8 +479,9 @@ sie sich ohne Fenster prüfen — `tests/Obfuskation.Gui.Tests/MainViewModelTest
 tut das für Profilwahl, Feldregeln und die drei Vorgänge, sowie neu für die
 Rückfrage bei ungespeicherten Änderungen und das Anlegen eines Profils;
 `tests/Obfuskation.Gui.Tests/ProfilesViewModelTests.cs` prüft Sortierung,
-Filter und „Aus Liste entfernen“ der Übersicht, ebenfalls ohne ein echtes
-Fenster.
+Filter, das dauerhafte Ausblenden über „Aus Liste entfernen“ samt
+Rückholen über „Aus Datei wählen…“ sowie „Profil löschen…“ (inklusive der
+Verweigerung beim Sitzungsprofil), ebenfalls ohne ein echtes Fenster.
 
 **`MappingSummary`** (`src/Obfuskation.Gui/Services/MappingSummary.cs`) zieht
 die Logik, die bislang nur `MappingViewModel` kannte — Pfad, Anzahl der

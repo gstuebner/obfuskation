@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.3.0
+version: 1.4.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 07.09.2026
+date: 08.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.3.0 · Stand 7. September 2026
+Fassung 1.4.0 · Stand 8. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -78,14 +78,19 @@ Vorname, Straße, PLZ, Ort, EMail, Telefon, Geburtsdatum und Notiz.
 ### Schritt 1 — Profil aus einer Datei ableiten
 
 `obfuskation-gui` starten und über **Neu aus Datei…** `stammdaten.csv`
-wählen. Es folgt der Anlegen-Dialog: **Name** (vorbelegt aus dem
-Dateinamen, änderbar), **Beschreibung** (frei, optional) und der
-**Ablageort**, der dem Namen live folgt, solange er nicht von Hand
-überschrieben wird. Für den ersten Durchgang reicht es, den Namen `demo`
-einzutragen und mit **Anlegen** zu bestätigen — Einzelheiten zu diesem
-Dialog stehen in Abschnitt 5. Die Oberfläche liest daraufhin die
-Spaltenköpfe und legt für jede eine Regel mit der Behandlung „offen“ an —
-noch ist nichts entschieden.
+wählen. Der Dateidialog erlaubt dabei eine **Mehrfachauswahl**: hängen
+mehrere Dateien über eine gemeinsame Spalte zusammen (Abschnitt 7), lassen
+sie sich auf einmal auswählen — das Regelgerüst entsteht dann aus den
+Feldern aller gewählten Dateien, der Namensvorschlag im folgenden Dialog
+kommt von der ersten. Für den ersten Durchgang reicht eine einzelne Datei.
+Es folgt der Anlegen-Dialog: **Name** (vorbelegt aus dem Dateinamen,
+änderbar), **Beschreibung** (frei, optional) und der **Ablageort**, der dem
+Namen live folgt, solange er nicht von Hand überschrieben wird. Für den
+ersten Durchgang reicht es, den Namen `demo` einzutragen und mit
+**Anlegen** zu bestätigen — Einzelheiten zu diesem Dialog stehen in
+Abschnitt 5. Die Oberfläche liest daraufhin die Spaltenköpfe und legt für
+jede eine Regel mit der Behandlung „offen“ an — noch ist nichts
+entschieden.
 
 ![Nach dem Ableiten aus stammdaten.csv: alle zehn Felder stehen offen, Format, Zeichensatz und Trennzeichen wurden bereits erkannt.](bilder/gui-alle-offen.png)
 *Nach dem Ableiten aus stammdaten.csv: alle zehn Felder stehen offen, Format,
@@ -254,6 +259,27 @@ bezeichnet (Abschnitt 6) und außerdem nahelegte, die geöffnete Datei werde
 überschrieben. Bei einer laufenden großen Datei weichen sie einem
 Fortschrittsbalken samt Zählung und der Schaltfläche **Abbrechen**.
 
+Daneben das Flyout **Alle ▾** mit den Einträgen **Alle Pseudodateien
+erzeugen…** und **Alle Klartextdateien erzeugen…** — der Sammellauf über
+alle dem Profil bekannten, noch vorhandenen Dateien (Abschnitt 7). Anders
+als bei den Einzelläufen erscheint dabei **nur eine einzige Rückfrage**
+für den ganzen Lauf, nicht eine je Datei; sie nennt die Anzahl der Dateien,
+das Namensmuster der Ausgabe und ausdrücklich, wie viele schon vorhandene
+Zieldateien dabei überschrieben würden. **Wichtig:** nach dieser einen
+Bestätigung überschreibt der Sammellauf ohne weitere Rückfrage — vor dem
+Klick lohnt sich deshalb ein Blick auf die genannte Anzahl. Jede Ausgabe
+entsteht neben ihrer Eingabedatei, mit demselben Namenszusatz
+(`.pseudo`/`.klartext`) wie beim Einzellauf. Ein Abbruch währenddessen
+wirkt vor der nächsten Datei: schon geschriebene Dateien bleiben stehen und
+werden in der Abschlussmeldung mitgezählt, eine Datei, die nicht mehr
+existiert oder an der die Verarbeitung scheitert (etwa ein Feld ohne
+Entscheidung), wird übersprungen und in derselben Meldung namentlich
+genannt — nichts davon geht unbemerkt unter. Trägt eine bekannte Datei den
+Zusatz bereits im Namen (`kunden.pseudo.csv` bei **Alle Pseudodateien
+erzeugen…**), bleibt sie außen vor: ihr Ausgabename wäre ihr eigener, der
+Lauf schriebe also über seine eigene Eingabe. Auch das steht in der
+Abschlussmeldung.
+
 ![Fortschritt bei einer großen Datei: Balken, laufende Zählung und die Schaltfläche „Abbrechen“ anstelle der drei Vorgänge.](bilder/gui-fortschritt.png)
 *Fortschritt bei einer großen Datei: Balken, laufende Zählung und die
 Schaltfläche „Abbrechen“ anstelle der drei Vorgänge.*
@@ -381,15 +407,28 @@ wählen…** lässt sich außerdem, wie bisher, ein Profil über einen
 gewöhnlichen Dateidialog öffnen — etwa eines, das (noch) nicht im zentralen
 Ordner liegt.
 
-**Aus Liste entfernen** löscht ausschließlich den Eintrag aus der Übersicht
-— nie die Profildatei selbst. Der Grund für diese Schaltfläche liegt im
-sogenannten Nutzungs-Index (`profil-index.json` im Konfigurationsverzeichnis):
-er merkt sich, welche Datendateien zuletzt unter welchem Profil bearbeitet
-wurden, damit die Übersicht überhaupt etwas zum Anzeigen hat. Dort stehen
-ausschließlich **Pfade**, nie Inhalte oder Werte aus den bearbeiteten
-Dateien — ein Pfad kann aber schon für sich verraten, woran gearbeitet
-wurde. Wer das nicht möchte, entfernt den betreffenden Eintrag einfach über
-diese Schaltfläche; an den Dateien selbst ändert sich dadurch nichts.
+**Aus Liste entfernen** blendet den Eintrag **dauerhaft** aus der Übersicht
+aus — die Profildatei selbst bleibt dabei unangetastet. Der Grund für diese
+Schaltfläche liegt im sogenannten Nutzungs-Index (`profil-index.json` im
+Konfigurationsverzeichnis): er merkt sich, welche Datendateien zuletzt unter
+welchem Profil bearbeitet wurden, damit die Übersicht überhaupt etwas zum
+Anzeigen hat. Dort stehen ausschließlich **Pfade**, nie Inhalte oder Werte
+aus den bearbeiteten Dateien — ein Pfad kann aber schon für sich verraten,
+woran gearbeitet wurde. Wer das nicht möchte, blendet den betreffenden
+Eintrag einfach über diese Schaltfläche aus; an der Datei selbst ändert
+sich dadurch nichts, und der zentrale Profilordner wird bei jedem Aufbau
+der Übersicht weiterhin vollständig durchsucht — ohne dieses dauerhafte
+Ausblenden käme ein entfernter Eintrag darüber sofort zurück, nur ohne
+seine Nutzungsdaten. Über **Aus Datei wählen…** lässt sich ein ausgeblendetes
+Profil jederzeit wieder erreichen.
+
+**Profil löschen…** geht einen Schritt weiter und entfernt die Profildatei
+**endgültig** von der Platte. Eine Rückfrage sagt vorab ausdrücklich, dass
+die zugehörige Ersetzungstabelle sämtliche Echtwerte enthält und ihr
+Verlust den Rückweg zu den Originaldaten unmöglich macht; zur Wahl stehen
+**Nur Profil** und **Profil und Tabelle**. Das gerade im Hauptfenster
+geöffnete Profil lässt sich auf diesem Weg nicht löschen — die laufende
+Sitzung würde sonst mit einer verschwundenen Datei weiterarbeiten.
 
 ### Umbenennen
 
@@ -548,7 +587,12 @@ allen Dateien gleich ersetzt werden, sonst zerfallen die Verknüpfungen.
 **Das geschieht von selbst**, solange alle Dateien mit demselben Profil
 verarbeitet werden: Profil einmal öffnen, dann die Dateien nacheinander
 über **Öffnen…** hereinholen und je **Pseudodatei erzeugen…**. Das Profil
-bleibt dabei geladen.
+bleibt dabei geladen. Wurde das Profil über **Neu aus Datei…** mit
+Mehrfachauswahl aus genau diesen Dateien angelegt (Abschnitt 3), sind sie
+bereits alle bekannt und stehen sofort unter **Zuletzt ▾** bereit. Für den
+ganzen Stapel auf einmal siehe **Alle ▾** in Abschnitt 4: **Alle
+Pseudodateien erzeugen…** verarbeitet dann alle dem Profil bekannten,
+noch vorhandenen Dateien mit einer einzigen Rückfrage.
 
 **Die Reihenfolge, in der die Dateien geöffnet werden, spielt dabei keine
 Rolle.** Der Zusammenhang hängt am Profil und an seiner Ersetzungstabelle,
@@ -608,7 +652,7 @@ der Statuszeile, meist kürzer.
 | „Eingabedatei nicht gefunden: …“ | Der angegebene Pfad existiert nicht | Pfad prüfen |
 | „X Verdachtsfälle. Die Datei nicht weitergeben, bevor sie geklärt sind.“ | `Prüfen` hat Restbestände gefunden | Ursache klären (siehe Lehrbeispiel Abschnitt 6); bei echtem Fund die betroffene Regel ändern, bei einem harmlosen Zufallstreffer (etwa ein Betrag, der zufällig wie eine vergebene Nummer aussieht) das Feld bei Bedarf auf `drop` stellen |
 | „Das Profil „…“ hat ungespeicherte Änderungen. Speichern, bevor fortgefahren wird?“ | Fenster schließen oder Profil wechseln, während noch nicht gespeicherte Regeländerungen offen sind | Eine der drei Schaltflächen wählen: Speichern, Verwerfen oder Abbrechen (Abschnitt 5) |
-| Profilzeile in Fehlerfarbe mit der Fehlermeldung im Klartext (Übersicht) | Die Profildatei ist nicht mehr lesbar — gelöscht, kein gültiges JSON, oder von Hand fehlerhaft bearbeitet | `Öffnen` ist gesperrt; entweder die Datei außerhalb reparieren oder den Eintrag über `Aus Liste entfernen` aus der Übersicht nehmen (löscht nur den Eintrag, nie die Datei) |
+| Profilzeile in Fehlerfarbe mit der Fehlermeldung im Klartext (Übersicht) | Die Profildatei ist nicht mehr lesbar — gelöscht, kein gültiges JSON, oder von Hand fehlerhaft bearbeitet | `Öffnen` ist gesperrt; entweder die Datei außerhalb reparieren oder den Eintrag über `Aus Liste entfernen` dauerhaft ausblenden (rührt die Datei selbst nicht an) |
 | „Es gibt bereits ein Profil an diesem Ort.“ | Beim Anlegen ist der gewählte Name im Ablageort schon vergeben | `Anlegen` bleibt gesperrt; entweder `Stattdessen öffnen` wählen oder einen anderen Namen beziehungsweise Ort setzen |
 
 Eine Eigenheit verdient besondere Aufmerksamkeit:
