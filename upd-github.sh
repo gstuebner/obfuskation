@@ -80,11 +80,30 @@ if [[ "${NO_PUSH}" == "false" ]]; then
     exit 1
   fi
 
+  # Pruefen, ob wir ueberhaupt auf main stehen: weiter unten wird fest
+  # "main" gepusht, das Tag aber auf HEAD gesetzt. Auf einem anderen
+  # Branch zeigte das Tag damit auf einen Stand, der gar nicht
+  # veroeffentlicht wird.
+  CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  if [[ "${CURRENT_BRANCH}" != "main" ]]; then
+    echo "Fehler: Release wird von main erstellt, aktuell ist '${CURRENT_BRANCH}' ausgecheckt." >&2
+    exit 1
+  fi
+
   # Pruefen, ob uncommittete Aenderungen vorliegen
   if [[ -n "$(git status --porcelain)" ]]; then
     echo "Fehler: Das Git-Arbeitsverzeichnis enthaelt uncommittete Aenderungen." >&2
     echo "Bitte erst committen (oder verwerfen), bevor ein Release freigegeben wird:" >&2
     git status -s >&2
+    exit 1
+  fi
+
+  # Pruefen, ob origin vorausgelaufen ist. Ohne das scheitert erst der
+  # Push in Schritt 8 -- nach Tests und vollstaendigem Build fuer zwei
+  # Plattformen.
+  git fetch --quiet origin main
+  if [[ -n "$(git rev-list HEAD..origin/main)" ]]; then
+    echo "Fehler: origin/main enthaelt Commits, die lokal fehlen. Erst 'git pull --rebase'." >&2
     exit 1
   fi
 
@@ -202,6 +221,7 @@ if [[ -n "${NOTES_FILE}" && -f "${NOTES_FILE}" ]]; then
 else
   # Vorgabe-Notizen generieren
   TEMP_NOTES=$(mktemp)
+  trap 'rm -f "${TEMP_NOTES}"' EXIT
   cat <<EOF > "${TEMP_NOTES}"
 ## Release ${VERSION}
 
@@ -215,6 +235,5 @@ EOF
 fi
 
 gh "${GH_ARGS[@]}"
-[[ -n "${TEMP_NOTES:-}" && -f "${TEMP_NOTES:-}" ]] && rm -f "${TEMP_NOTES}"
 
 echo "=== Release ${TAG} erfolgreich auf GitHub veröffentlicht! ==="
