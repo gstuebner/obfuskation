@@ -53,8 +53,31 @@
          (ProfileScaffolder.Create mit mehreren Pfaden). Neu die Sammellaeufe
          "Alle Pseudodateien erzeugen..." und "Alle Klartextdateien
          erzeugen...", mit genau einer Rueckfrage statt einer je Datei;
-         geschrieben wird jeweils neben die Eingabedatei. -->
-    <Version>1.4.0</Version>
+         geschrieben wird jeweils neben die Eingabedatei.
+         1.5.0: Fuenf neue Generatoren. Fuer Datumswerte war 'dateShift'
+         bisher der einzige Weg; sein profilweit konstanter Offset erhaelt
+         Reihenfolge und Abstaende und ist genau deshalb angreifbar, sobald
+         ein einziges Datum des Bestands bekannt ist. Neu daneben
+         'dateRange' (zieht ein Datum, umkehrbar ueber die Ersetzungstabelle;
+         ohne 'from'/'to' bleibt das Kalenderjahr des Originals) und
+         'dateGeneralize' (rundet auf Monat, Quartal oder Jahr, ausdruecklich
+         nicht umkehrbar). 'dateShift' bleibt die Vorgabe als einziger
+         Generator, der Reihenfolge und Abstaende erhaelt. Ausserdem
+         'pattern' (Wert nach Maske, ohne Maske formaterhaltend aus dem
+         Original abgeleitet), 'wordlist' (eigene Werteliste im Profil)
+         und 'partialMask' (haelt einen Teil des Wertes sichtbar): drei
+         Faelle, die bisher alle beim generischen 'token' landeten.
+         Dazu 'defaults.emptyValues', damit faktisch leere Werte ("-",
+         "N/A", reiner Leerraum) nicht laenger ein Pseudonym bekommen;
+         'redact' liest seinen Platzhalter aus einem eigenen Feld statt aus
+         'domain', womit ein eigener Namensraum seinen Platzhalter behalten
+         kann; die MappingConflictException nennt die zum Generator passende
+         Abhilfe statt pauschal 'token'; 'deobfuscate' meldet Werte nicht
+         umkehrbarer Generatoren als "nichtWiederherstellbar" statt als
+         unbekanntes Pseudonym. In der Oberflaeche ein eigener Dialog fuer
+         die neuen Optionen, der seine Zuordnung aus
+         ProfileValidator.OptionOwnership liest. -->
+    <Version>1.5.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,
