@@ -396,4 +396,41 @@ public class RoundtripTests
     private static string Normalize(string json)
         => System.Text.Json.JsonSerializer.Serialize(
             System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json));
+
+    [Fact]
+    public void Hostname_aus_der_Bibliothek_kommt_in_Spalte_und_Freitext_zurueck()
+    {
+        var library = new GeneratorLibrary
+        {
+            Generators = { ["assetTag"] = new GeneratorSettings { Type = "pattern", Pattern = "INV999999" } },
+            TextRules =
+            [
+                new TextRule { Name = "assetTag", Priority = 95, Pattern = @"\bINV\d{6}\b", Generator = "assetTag" },
+            ],
+        };
+
+        using var setup = new TestProfile()
+            .WithField("Zielsystem", FieldAction.Pseudonymize, "assetTag")
+            .WithField("Bemerkung", FieldAction.ScanText);
+        var engine = setup.CreateEngine(library);
+
+        var original = "Zielsystem;Bemerkung\r\nINV123456;Neustart von INV123456 am Montag\r\n";
+        var content = TestProfile.Utf8(original);
+
+        var obfuscated = engine.Obfuscate(content, "hosts.csv", new RunOptions { Strict = true });
+        var text = TestProfile.FromUtf8(obfuscated.Content);
+        var werte = text.Split("\r\n")[1].Split(';');
+
+        // Spalte und Freitext zeigen dasselbe Pseudonym.
+        Assert.Matches("^INV[0-9]{6}$", werte[0]);
+        Assert.Contains(werte[0], werte[1]);
+        Assert.DoesNotContain("INV123456", text);
+
+        var restored = engine.Deobfuscate(obfuscated.Content, "hosts.csv", new RunOptions());
+        Assert.Equal(original, TestProfile.FromUtf8(restored.Content));
+
+        // Zweiter Lauf liefert dasselbe Pseudonym (Namensraum "assetTag").
+        var zweiterLauf = engine.Obfuscate(content, "hosts.csv", new RunOptions { Strict = true });
+        Assert.Equal(text, TestProfile.FromUtf8(zweiterLauf.Content));
+    }
 }

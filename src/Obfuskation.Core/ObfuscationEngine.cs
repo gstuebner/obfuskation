@@ -75,12 +75,26 @@ public sealed record AnalysisResult(InspectedFile File, IReadOnlyList<FieldAnaly
 public sealed class ObfuscationEngine
 {
     private readonly Profile _profile;
+    private readonly GeneratorLibrary _library;
 
-    public ObfuscationEngine(Profile profile)
+    /// <summary>
+    /// Das Profil mit hineingemischten Textregeln der Bibliothek: eine
+    /// Bibliotheksregel gilt genauso wie eine Profilregel, ausser eine
+    /// gleichnamige Profilregel ersetzt sie vollstaendig (siehe
+    /// <see cref="MergeTextRules"/>). Alles, was Textregeln verarbeitet
+    /// (Resolver, ObfuscateTransformer, ScanTransformer, ...) bekommt dieses
+    /// Profil statt <see cref="_profile"/>, damit die Vereinigung an genau
+    /// einer Stelle entsteht.
+    /// </summary>
+    private readonly Profile _effectiveProfile;
+
+    public ObfuscationEngine(Profile profile, GeneratorLibrary? library = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
+        _library = library ?? GeneratorLibrary.Load();
+        _effectiveProfile = MergeTextRules(_profile, _library);
 
-        var issues = ProfileValidator.Validate(profile);
+        var issues = ProfileValidator.Validate(profile, _library);
         var errors = issues.Where(issue => issue.Severity == ValidationSeverity.Error).ToList();
         if (errors.Count > 0)
             throw new ConfigurationException(
@@ -142,7 +156,7 @@ public sealed class ObfuscationEngine
             readOnly: true, allowInsideGitWorkingTree: true);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver);
+        var generators = GeneratorRegistry.Build(_profile, deriver, _library);
         var pseudonymizer = new Pseudonymizer(deriver, generators, store);
 
         return pseudonymizer.Pseudonymize(generatorName, sampleValue, persist: false);
@@ -190,12 +204,12 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver);
+        var generators = GeneratorRegistry.Build(_profile, deriver, _library);
         var pseudonymizer = new Pseudonymizer(deriver, generators, store);
         var resolver = CreateResolver(options);
 
         var transformer = new ObfuscateTransformer(
-            _profile, resolver, pseudonymizer, new TextRuleEngine(), report, persist: !options.DryRun);
+            _effectiveProfile, resolver, pseudonymizer, new TextRuleEngine(), report, persist: !options.DryRun);
 
         var result = RunProcessor(content, inputName, options, transformer, report, progress, cancellationToken);
 
@@ -224,12 +238,12 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver);
+        var generators = GeneratorRegistry.Build(_profile, deriver, _library);
         var pseudonymizer = new Pseudonymizer(deriver, generators, store);
         var reverseMapper = new ReverseTextMapper(store, generators);
         var resolver = CreateResolver(options);
 
-        var transformer = new DeobfuscateTransformer(_profile, resolver, pseudonymizer, reverseMapper, report);
+        var transformer = new DeobfuscateTransformer(_effectiveProfile, resolver, pseudonymizer, reverseMapper, report);
         var result = RunProcessor(content, inputName, options, transformer, report, progress, cancellationToken);
 
         // Generatoren mit eigener Umkehrung (heute nur dateShift) rechnen ohne
@@ -274,7 +288,7 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var resolver = CreateResolver(options);
-        var transformer = new ScanTransformer(_profile, resolver, new TextRuleEngine(), store, report);
+        var transformer = new ScanTransformer(_effectiveProfile, resolver, new TextRuleEngine(), store, report);
 
         // Das Ergebnis wird verworfen: geprueft wird, nicht veraendert.
         RunProcessor(content, inputName, options, transformer, report, progress, cancellationToken);
@@ -288,12 +302,51 @@ public sealed class ObfuscationEngine
     private FieldRuleResolver CreateResolver(RunOptions options)
     {
         if (!options.Strict)
-            return new FieldRuleResolver(_profile);
+            return new FieldRuleResolver(_effectiveProfile);
 
         // Der strenge Modus wirkt nur auf eine Kopie, damit das geladene Profil
         // unveraendert bleibt und die Oberflaeche es weiter anzeigen kann.
-        var strictProfile = CloneWithStrictDefaults(_profile);
+        var strictProfile = CloneWithStrictDefaults(_effectiveProfile);
         return new FieldRuleResolver(strictProfile);
+    }
+
+    /// <summary>
+    /// Fuehrt die Textregeln der Bibliothek und des Profils zusammen: eine
+    /// Bibliotheksregel gilt, ausser eine gleichnamige Profilregel ersetzt sie
+    /// vollstaendig — sie faellt dann ganz weg, statt zusaetzlich zu gelten.
+    /// Prioritaeten bleiben unveraendert, die vorhandene Ueberlappungsaufloesung
+    /// in <see cref="Detection.TextRuleEngine"/> braucht keine Anpassung.
+    ///
+    /// Ohne Bibliotheksregeln wird <paramref name="profile"/> unveraendert
+    /// zurueckgegeben — der haeufige Fall bleibt damit ohne zusaetzliche Kopie.
+    /// </summary>
+    private static Profile MergeTextRules(Profile profile, GeneratorLibrary library)
+    {
+        if (library.TextRules.Count == 0)
+            return profile;
+
+        var profileNames = new HashSet<string>(
+            profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
+
+        var merged = new List<TextRule>(library.TextRules.Count + profile.TextRules.Count);
+        merged.AddRange(library.TextRules.Where(rule => !profileNames.Contains(rule.Name)));
+        merged.AddRange(profile.TextRules);
+
+        // Nur die Textregeln aendern sich; alles andere bleibt dieselbe
+        // Referenz wie im Original, damit z. B. CloneWithStrictDefaults und
+        // die Defaults-Zugriffe der Transformer unveraendert weiterarbeiten.
+        return new Profile
+        {
+            Version = profile.Version,
+            ProfileName = profile.ProfileName,
+            Description = profile.Description,
+            MappingStore = profile.MappingStore,
+            Input = profile.Input,
+            Defaults = profile.Defaults,
+            Fields = profile.Fields,
+            TextRules = merged,
+            Generators = profile.Generators,
+        };
     }
 
     private static Profile CloneWithStrictDefaults(Profile profile) => new()

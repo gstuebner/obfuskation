@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.4.0
+version: 1.6.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 08.09.2026
+date: 09.09.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.4.0 · Stand 8. September 2026
+Fassung 1.6.0 · Stand 9. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -610,7 +610,8 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 | Feld | Typ | Vorgabe | Wirkung |
 |---|---|---|---|
 | `unknownField` | `FieldAction` | `Error` | Behandlung eines Feldes ohne eigene Regel; `Passthrough` erzeugt eine Warnung bei der Profilprüfung |
-| `redactionPlaceholder` | `string` | `"***"` | Platzhalter für `Redact` |
+| `redactionPlaceholder` | `string` | `"***"` | Platzhalter für `Redact`, sofern ein Namensraum keinen eigenen `placeholder` trägt (siehe `GeneratorSettings.Placeholder` unten) |
+| `emptyValues` | `List<string>` | leer | Werte, die nach Trimmen (ohne Rücksicht auf Groß-/Kleinschreibung) zusätzlich zu `""` und reinem Leerraum als faktisch leer gelten, etwa `"-"` oder `"N/A"`. Solche Werte laufen unverändert durch statt ein Pseudonym zu bekommen, das einen im Original gar nicht vorhandenen Wert vortäuschen würde. Gemeinsamer Helfer `ProfileDefaults.IsEffectivelyEmpty`, genutzt von Obfuskation, Prüfung und Rückübersetzung gleichermaßen, damit die drei nicht auseinanderlaufen |
 
 **`FieldRule`**
 
@@ -640,10 +641,122 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 |---|---|---|---|
 | `type` | `string?` | `null` | Zugrundeliegender eingebauter Generator; leer heißt: wie der Schlüssel selbst — ein anderer Wert erzeugt einen eigenen Namensraum auf Basis dieses Typs |
 | `maxDays` | `int` | `400` | Maximaler Betrag der Datumsverschiebung in Tagen (nur `dateShift`) |
-| `formats` | `List<string>?` | `null` | Zusätzlich erkannte Datumsformate (nur `dateShift`), vor den eingebauten Formaten geprüft |
+| `formats` | `List<string>?` | `null` | Zusätzlich erkannte Datumsformate (`dateShift`, `dateRange`, `dateGeneralize`), vor den eingebauten Formaten geprüft |
 | `country` | `string?` | `null` | Ländercode für `iban`/`bic`, falls sich keiner aus dem Originalwert ableiten lässt |
-| `domain` | `string?` | `null` | Domain für `email`; bei `redact` wird dieses Feld zweckentfremdet als Platzhaltertext verwendet |
+| `domain` | `string?` | `null` | Domain für `email` |
+| `from` | `string?` | `null` | Untere Grenze des Zeitraums für `dateRange`, ISO-Datum (`yyyy-MM-dd`); nur zusammen mit `to` wirksam |
+| `to` | `string?` | `null` | Obere Grenze des Zeitraums für `dateRange`; ohne `from`+`to` bleibt das Kalenderjahr des Originals erhalten |
+| `granularity` | `string?` | `null` (wirkt wie `"month"`) | Rundungsstufe für `dateGeneralize`: `month`, `quarter` oder `year` |
+| `pattern` | `string?` | `null` | Zeichenmaske für `pattern`: `A` Großbuchstabe, `a` Kleinbuchstabe, `9` Ziffer, `X` alphanumerisch, `\` escaped das Folgezeichen als wörtlich; ohne Angabe wird die Maske aus dem Original abgeleitet |
+| `values` | `List<string>?` | `null` | Eigene Werteliste für `wordlist`; einzige echte Pflichtoption unter allen Generatoren — ohne sie wirft der Generator eine `GenerationException` |
+| `keepFirst` | `int` | `0` | Anzahl der am Anfang sichtbar bleibenden Zeichen (nur `partialMask`) |
+| `keepLast` | `int` | `0`, wirkt wie `4` solange weder `keepFirst` noch `keepLast` gesetzt ist | Anzahl der am Ende sichtbar bleibenden Zeichen (nur `partialMask`); sobald eine der beiden Seiten gesetzt wird, zählt nur noch das Eingestellte |
+| `maskChar` | `string?` | `null` (wirkt wie `"*"`) | Maskierungszeichen für `partialMask`, muss genau ein Zeichen lang sein |
+| `placeholder` | `string?` | `null` | Eigener Platzhalter, nur für `redact`; ohne Angabe gilt `defaults.redactionPlaceholder`. Getrennt von `domain`, damit ein eigener `redact`-Namensraum einen abweichenden Platzhalter behalten kann, der nicht von der Profilvorgabe überschrieben wird |
 | `prefix` | `string?` | `null` | Kennzeichnung, die jedem erzeugten Pseudonym vorangestellt wird (nur `token`); Muster `^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$`, höchstens 32 Zeichen — geprüft von `ProfileValidator` |
+
+Welche Option zu welchem Generatortyp gehört, steht nicht in verstreutem
+Einzelfallcode, sondern in einer einzigen Tabelle:
+`ProfileValidator.OptionOwnership`
+(`src/Obfuskation.Core/Configuration/ProfileValidator.cs:50`). Sie ist
+öffentlich, damit die Oberfläche dieselbe Zuordnung nutzt, um zu
+entscheiden, welche Optionsfelder sie zu einem gewählten Generator anzeigt
+— zwei getrennt gepflegte Kopien liefen bei jedem neuen Generator
+auseinander. Eine Option, die an einem falschen Basistyp hängt (etwa
+`values` an einem `pattern`-Eintrag), ist ein Validierungsfehler
+(`ValidationSeverity.Error`), kein stillschweigend wirkungsloses Feld.
+
+### Generator-Bibliothek
+
+Fester, persönlicher Ort, unabhängig von Kommandozeile oder Oberfläche:
+
+```
+~/.config/obfuskation/generators.json      # PathHelper.ConfigDirectory
+```
+
+Klasse `GeneratorLibrary`
+(`src/Obfuskation.Core/Configuration/GeneratorLibrary.cs`), dieselben
+Typen wie im Profil — `Dictionary<string, GeneratorSettings> Generators`
+und `List<TextRule> TextRules` —, kein zweites Schema und keine zweite
+Validierung. `GeneratorLibrary.Load(path)` lädt mit denselben
+`JsonSerializerOptions` wie `ProfileStore` (camelCase, Kommentare und
+trailing commas erlaubt): eine fehlende Datei ergibt `GeneratorLibrary.Empty`,
+eine kaputte wirft eine `ConfigurationException` mit Pfad.
+
+**Die Bibliothek wird nie in ein speicherbares `Profile`-Objekt gemischt.**
+Sonst schriebe die Oberfläche beim nächsten Speichern eines Profils die
+Bibliothekseinträge in jede Profildatei hinein — genau das soll die
+Trennung verhindern. Stattdessen wird sie an drei Stellen berücksichtigt,
+mit dem Profil stets als Sieger bei gleichem Schlüssel bzw. Namen:
+
+| Ort | Vorrangregel |
+|---|---|
+| `GeneratorRegistry.Build(profile, deriver, library)` | Eingebaute Generatoren, dann Bibliothekseinträge, dann Profileinträge — das Profil gewinnt bei gleichem Schlüssel |
+| `ObfuscationEngine` (Textregeln, über `TextRuleEngine`) | Bibliotheksregeln plus Profilregeln; bei gleichem `name` gewinnt die Profilregel, die Bibliotheksregel entfällt dann ganz statt zusätzlich zu greifen |
+| `ProfileValidator.Validate(profile, library)` | Ein `generator`-Verweis auf einen Bibliotheksschlüssel gilt als bekannt statt als Fehler; Bibliothekseinträge werden mit derselben Logik wie Profileinträge geprüft (`OptionOwnership`, `ValidatePattern`, Wertevorrat), Befundpfad `library.generators.<key>` bzw. `library.textRules[i]`. Verdeckt ein Profileintrag einen gleichnamigen Bibliothekseintrag, ist das nur `Info`/`Warning`, kein `Error` |
+
+Kommandozeile: `obfuskation library list|path`, gebaut nach demselben
+Muster wie `mapping list|path` (`BuildMappingCommand`,
+`src/Obfuskation.Cli/Program.cs:300`) — mit dem Unterschied, dass `list`
+hier die Muster selbst zeigt, weil die Bibliothek anders als die
+Ersetzungstabelle keine Echtdaten enthält. `--no-library` als globale
+Option unterdrückt das Laden für einen einzelnen Lauf.
+
+Oberfläche: Bibliothekseinträge erscheinen in der Generatorauswahl mit
+Herkunftszusatz, sind in dieser Fassung aber nur lesend — kein Editor dafür,
+gepflegt wird die Datei im Texteditor. Lässt sich die Bibliothek nicht
+laden, erscheint eine Statuszeile mit dem Pfad, und das Programm arbeitet
+ohne sie weiter — eine kaputte Bibliothek darf die Oberfläche nicht
+blockieren.
+
+Ein lauffähiges Beispiel liegt unter `docs/beispiel/bibliothek-beispiel.json`.
+
+**Testumleitung:** Wie beim übrigen Konfigurationszugriff läuft das über
+`XDG_CONFIG_HOME` in `TestUmgebung` — die Bibliothek liegt dadurch
+automatisch im Testverzeichnis. Ein Test, der `GeneratorLibrary.DefaultPath`
+ungebremst auswertet (etwa ohne über eine umgeleitete Umgebung zu laufen),
+würde lokal grün und im nächsten Klon rot laufen — bei neuen Tests darauf
+achten.
+
+### Mustererkennung (`ValueSuggester`)
+
+Klasse `ValueSuggester`
+(`src/Obfuskation.Core/Configuration/ValueSuggester.cs`),
+`Suggest(samplesByField, library)` liefert je Feld höchstens einen
+`ValueSuggestion` (Feldname, Generator, Beleg-Beispielwert, Trefferzahl).
+Verfahren, bewusst streng:
+
+- Kandidatenmuster sind `ProfileScaffolder.DefaultTextRules()` **plus** die
+  Textregeln der Bibliothek — dadurch schlägt die Erkennung auch
+  Bibliotheksmuster wie `assetTag` vor.
+- Ein Muster zählt nur bei **vollständigem** Treffer auf den getrimmten
+  Wert (Regex mit `\A(?:…)\z` umschlossen), nicht bei einem Treffer
+  irgendwo im Wert — ein Teiltreffer ist ein Freitextfall für `scanText`,
+  kein Feldgenerator.
+- Leerwerte gemäß `ProfileDefaults.EmptyValues` bleiben außer Betracht,
+  sofern die Vorgaben des Profils übergeben werden (die Oberfläche tut
+  das). Ohne sie zählen nur `""` und reiner Leerraum als leer — beim
+  Gerüstbau ist das richtig, weil ein frisches Profil noch keine eigenen
+  Leerwerte kennt.
+- Vorgeschlagen wird nur, wenn **alle** verbleibenden Beispielwerte passen
+  und es mindestens zwei davon gibt. Bei mehreren passenden Mustern gewinnt
+  die höhere `Priority`.
+- Dasselbe 5-Sekunden-Timeout und `RegexOptions.CultureInvariant` wie in
+  `TextRuleEngine` — dieselbe Hilfsmethode wird wiederverwendet, nicht neu
+  gebaut.
+
+**Vorrang gegenüber dem Namensraten:** `ProfileScaffolder.Suggest(fieldName)`
+bleibt unverändert bestehen, aber überall dort, wo ein Vorschlag entsteht,
+gilt jetzt: **ein Wertetreffer schlägt Namensraten**, weil ein passender
+Wert die härtere Aussage ist als ein bloßes Namensfragment. Findet sich
+weder ein Wertetreffer noch ein Namensfragment, bleibt es beim bisherigen
+Verhalten (eigener `token`-Namensraum mit Kennzeichnung).
+
+Genutzt von `obfuskation init --from` (dieselbe Reihenfolge für die
+Kommentare — die Aktion bleibt `error`, nur der Vorschlagstext wird besser
+und nennt den Beleg-Beispielwert) und vom Dialog »Muster erkennen…« in der
+Oberfläche (Anwenderdokumentation, Kapitel 10), der zusätzlich nur Felder
+vorbelegt, die noch auf `error` stehen.
 
 ## 10. Rückgabewerte der CLI
 

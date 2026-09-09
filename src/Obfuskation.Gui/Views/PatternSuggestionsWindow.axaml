@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="480"
+        x:Class="Obfuskation.Gui.Views.PatternSuggestionsWindow"
+        x:DataType="vm:PatternSuggestionsViewModel"
+        Title="Muster erkennen"
+        Width="640" MinWidth="520" MaxHeight="640" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,Auto" Margin="16">
+
+    <Border Grid.Row="0" Classes="card">
+      <StackPanel Spacing="12">
+
+        <TextBlock Classes="muted" TextWrapping="Wrap"
+                   Text="Beispielwerte, die vollständig auf ein bekanntes Muster passen — aus den eingebauten Mustern und der Generator-Bibliothek. Vorbelegt sind nur Felder, die noch auf „offen“ stehen; eine bereits getroffene Entscheidung bleibt unangetastet, bis das Häkchen ausdrücklich gesetzt wird."/>
+
+        <!-- Ohne Vorschlaege: der Moment, in dem sichtbar wird, dass eigene
+             Muster in die Generator-Bibliothek gehoeren. -->
+        <StackPanel Spacing="6" IsVisible="{Binding !HasSuggestions}">
+          <TextBlock Classes="warning" FontWeight="SemiBold"
+                     Text="Kein Feld passt vollständig auf ein bekanntes Muster."/>
+          <TextBlock Classes="small muted" TextWrapping="Wrap"
+                     Text="{Binding LibraryPath, StringFormat='Ein hauseigenes Muster gehört in die Generator-Bibliothek unter {0} — sie wird bei jedem Profil automatisch mitgeprüft.'}"/>
+        </StackPanel>
+
+        <ScrollViewer MaxHeight="420" IsVisible="{Binding HasSuggestions}">
+          <ItemsControl ItemsSource="{Binding Items}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PatternSuggestionItemViewModel">
+                <Border Classes="card card-raised" Padding="10" Margin="0,0,0,6">
+                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                    <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" VerticalAlignment="Top"/>
+                    <StackPanel Grid.Column="1" Spacing="2">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding FieldName}" FontWeight="SemiBold"/>
+                        <TextBlock Text="{Binding ActionSummary}" Classes="accent small"
+                                   VerticalAlignment="Center"/>
+                      </StackPanel>
+                      <TextBlock Classes="muted small" TextWrapping="Wrap"
+                                 Text="{Binding Evidence, StringFormat='weil z. B. „{0}“ passt'}"/>
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+
+      </StackPanel>
+    </Border>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                Spacing="8" Margin="0,12,0,0">
+      <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
+      <Button Content="Übernehmen" Classes="primary" Command="{Binding ApplyCommand}"
+              IsVisible="{Binding HasSuggestions}"/>
+    </StackPanel>
+
+  </Grid>
+</Window>

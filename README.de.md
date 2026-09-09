@@ -276,7 +276,8 @@ Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
 
   "defaults": {
     "unknownField": "error",        // error | pseudonymize | passthrough
-    "redactionPlaceholder": "***"
+    "redactionPlaceholder": "***",
+    "emptyValues": ["-", "N/A"]     // getrimmt, ohne Ruecksicht auf Gross-/Kleinschreibung; solche Werte laufen unveraendert durch, ohne Pseudonym
   },
 
   // Gilt fuer CSV-Spalten und JSON-Eigenschaften.
@@ -295,8 +296,9 @@ Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
   ],
 
   "generators": {
-    "dateShift": { "maxDays": 400, "formats": ["dd.MM.yyyy"] },
-    "email":     { "domain": "example.invalid" }
+    "dateShift":       { "maxDays": 400, "formats": ["dd.MM.yyyy"] },
+    "email":           { "domain": "example.invalid" },
+    "interneNotiz":    { "type": "redact", "placeholder": "[entfernt]" }  // eigener Platzhalter, unabhaengig von defaults.redactionPlaceholder
   }
 }
 ```
@@ -327,9 +329,14 @@ Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
 | `phone` | Ziffern ersetzt, Gliederung des Originals erhalten |
 | `numericId` | Stellenzahl erhalten, führende Nullen bleiben |
 | `dateShift` | alle Daten um denselben Betrag verschoben — Reihenfolge und Abstände bleiben |
+| `dateRange` | zufälliges Datum aus einem Zeitraum (`from`/`to`); ohne Angabe bleibt das Kalenderjahr des Originals erhalten |
+| `dateGeneralize` | auf Monats-, Quartals- oder Jahresanfang gerundet — **nicht umkehrbar** |
+| `pattern` | Wert nach Zeichenmaske (`A`/`a`/`9`/`X`/`\`), ohne Maske formaterhaltend aus dem Original abgeleitet |
+| `wordlist` | deterministische Wahl aus einer eigenen Werteliste (`values`) |
+| `partialMask` | behält `keepFirst`/`keepLast` Zeichen sichtbar, Rest maskiert — **nicht umkehrbar** |
 | `street`, `city`, `postalCode` | Anschriftsbestandteile aus Wortlisten |
 | `token` | generisch `TOK_A1B2C3D4`, optional mit vorangestellter Kennzeichnung |
-| `redact` | fest `***` |
+| `redact` | fest `***`, oder ein eigener `placeholder` für diesen Namensraum |
 
 ### Lesbare Tokens: Präfix
 
@@ -354,6 +361,57 @@ würde das zerstören. `init` schlägt für Spalten ohne passenden Generator
 automatisch einen solchen Namensraum vor, und in der Oberfläche lässt sich
 das Präfix über das Feld „Kennzeichnung" an der Regel setzen. Details und
 Fallstricke: [Anwenderdokumentation](docs/anwenderdokumentation.md).
+
+---
+
+## Eigene Muster (Generator-Bibliothek)
+
+Hauseigene Muster — interne Inventarnummern, Ticketnummern, eigene Kennungen —
+gehören nicht in ein Profil, das irgendwann in einem geteilten Repository
+landen könnte, und sollen nicht in jedem neuen Profil erneut abgetippt
+werden. Eine **Generator-Bibliothek** an einem festen, persönlichen Ort löst
+beides: sie fließt in jedes Profil ein, wird aber nie in eine Profildatei
+zurückgeschrieben.
+
+```
+~/.config/obfuskation/generators.json
+```
+
+```jsonc
+{
+  "version": 1,
+  "generators": {
+    "assetTag": { "type": "pattern", "pattern": "INV999999" }
+  },
+  "textRules": [
+    { "name": "assetTag", "priority": 95, "pattern": "\\bINV\\d{6}\\b", "generator": "assetTag" }
+  ]
+}
+```
+
+Dieselben Typen wie im Profil (`generators`, `textRules`) — kein zweites
+Schema, keine zweite Prüfung. **Das Profil gewinnt immer gegen die
+Bibliothek** bei gleichem Schlüssel: ein eigener `generators`-Eintrag im
+Profil verdeckt einen gleichnamigen Bibliothekseintrag, und eine
+gleichnamige Profil-Textregel ersetzt die Bibliotheksregel vollständig,
+statt zusätzlich zu greifen. So lässt sich eine gemeinsame Bibliothek
+gefahrlos aufbauen — wer an einem Profil konkreter sein muss, kann das
+jederzeit.
+
+**Die Datei ist privat und gehört nicht in dieses Repository.** Sie enthält
+typischerweise unternehmensinterne Namensschemata, die nicht sichtbar werden
+dürfen, nur weil ein Profil, das sich darauf bezieht, öffentlich ist.
+
+`obfuskation library list` zeigt die eingetragenen Schlüssel, ihren
+Basistyp und die Namen der Textregeln — Muster eingeschlossen: anders als
+die Ersetzungstabelle enthält die Bibliothek keine Echtdaten, nur die Form
+davon, es gibt also nichts zu schützen. `obfuskation library path` zeigt den
+Ablageort. `--no-library` lässt einen Lauf ohne die Bibliothek laufen, für
+die Fehlersuche oder für ein Ergebnis, das unabhängig von der lokalen
+Konfiguration des Rechners reproduzierbar bleibt. In der Oberfläche
+erscheinen Bibliothekseinträge in der Generatorauswahl neben den
+profileigenen, mit Herkunftshinweis; in dieser Fassung sind sie dort nur
+lesbar — bearbeitet wird die Datei direkt.
 
 ---
 
@@ -400,10 +458,11 @@ obfuskation deobfuscate [<datei>] [-o <ziel>] [--json]
 obfuskation scan <datei> [--json]
 obfuskation mapping list|path
 obfuskation profile list [--sort name|used|changed] [--json]
+obfuskation library list|path
 ```
 
 Gemeinsame Optionen: `--config <pfad-oder-profilname>`, `--format csv|json|text`,
-`--allow-unsafe-store`.
+`--allow-unsafe-store`, `--no-library`.
 
 `--config` nimmt statt eines Pfades auch einen bloßen Profilnamen entgegen —
 `--config demo` löst, sofern keine wörtliche Datei namens `demo` existiert,
@@ -421,6 +480,10 @@ Zeitpunkten der letzten Benutzung und Änderung.
 - `--json` — Bericht als JSON auf die Standardausgabe. Erfordert `-o`, sonst
   vermengten sich Bericht und Nutzdaten. Der Bericht enthält **nur Zähler und
   Feldnamen, niemals Werte** und darf deshalb protokolliert werden.
+- `--no-library` — läuft ohne die Generator-Bibliothek
+  (`~/.config/obfuskation/generators.json`); nützlich zur Fehlersuche oder
+  für einen von der lokalen Konfiguration unabhängigen, reproduzierbaren
+  Lauf.
 - `deobfuscate` ohne Dateiangabe liest von der Standardeingabe.
 
 ### Rückgabewerte

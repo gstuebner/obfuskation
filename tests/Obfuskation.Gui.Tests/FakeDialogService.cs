@@ -34,6 +34,12 @@ internal sealed class FakeDialogService : IDialogService
 
     public BatchRunProposal? LastBatchRunProposal { get; private set; }
 
+    /// <summary>Vorgabe ist Abbruch (<c>null</c>) -- ein Test setzt sie, wenn "Übernehmen" erwartet ist.</summary>
+    public IReadOnlyList<PatternSuggestionAcceptance>? PatternSuggestionsResult { get; set; }
+
+    /// <summary>Das zuletzt erzeugte Ansichtsmodell, damit ein Test die Vorbelegung pruefen kann.</summary>
+    public PatternSuggestionsViewModel? LastPatternSuggestionsViewModel { get; private set; }
+
     public Task<string?> OpenDataFileAsync(string? startDirectory = null) => Task.FromResult(DataFileToOpen);
 
     public Task<IReadOnlyList<string>> OpenDataFilesAsync(string? startDirectory = null)
@@ -64,4 +70,11 @@ internal sealed class FakeDialogService : IDialogService
     }
 
     public Task<ProfileSummary?> ShowProfilesAsync(ProfilesViewModel viewModel) => Task.FromResult(ProfilesResult);
+
+    public Task<IReadOnlyList<PatternSuggestionAcceptance>?> ShowPatternSuggestionsAsync(
+        PatternSuggestionsViewModel viewModel)
+    {
+        LastPatternSuggestionsViewModel = viewModel;
+        return Task.FromResult(PatternSuggestionsResult);
+    }
 }

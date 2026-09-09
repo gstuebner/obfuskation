@@ -15,6 +15,7 @@ namespace Obfuskation.Gui.ViewModels;
 public sealed class TextRulesViewModel : ObservableObject
 {
     private readonly Profile _profile;
+    private readonly GeneratorLibrary _library;
     private readonly Action _onChanged;
     private readonly TextRuleEngine _engine = new();
 
@@ -26,18 +27,30 @@ public sealed class TextRulesViewModel : ObservableObject
 
     private string _matchSummary = "";
 
-    public TextRulesViewModel(Profile profile, Action onChanged)
+    public TextRulesViewModel(Profile profile, GeneratorLibrary library, Action onChanged)
     {
         _profile = profile;
+        _library = library;
         _onChanged = onChanged;
 
         foreach (var rule in profile.TextRules)
-            Rules.Add(new TextRuleViewModel(profile, rule, OnRuleChanged));
+            Rules.Add(new TextRuleViewModel(profile, library, rule, OnRuleChanged));
+
+        // Bibliotheksregeln nur lesend anhaengen -- gepflegt wird die Datei im
+        // Texteditor (siehe GeneratorLibrary). Eine gleichnamige Profilregel
+        // ersetzt eine Bibliotheksregel vollstaendig, statt zusaetzlich zu
+        // gelten (dieselbe Regel wie ObfuscationEngine.MergeTextRules); sie
+        // erscheint dann nicht doppelt.
+        var profilnamen = new HashSet<string>(
+            profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var rule in library.TextRules.Where(rule => !profilnamen.Contains(rule.Name)))
+            Rules.Add(new TextRuleViewModel(profile, library, rule, OnRuleChanged, isLibraryRule: true));
 
         AddCommand = new RelayCommand(Add);
-        RemoveCommand = new RelayCommand(Remove, () => _selected is not null);
+        RemoveCommand = new RelayCommand(Remove, () => _selected is { IsLibraryRule: false });
 
-        Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(profile));
+        Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(profile, library));
 
         // Erst jetzt: der Setter meldet dem Entfernen-Befehl seine
         // Verfuegbarkeit, den es vorher noch nicht gab.
@@ -97,7 +110,7 @@ public sealed class TextRulesViewModel : ObservableObject
 
         _profile.TextRules.Add(rule);
 
-        var viewModel = new TextRuleViewModel(_profile, rule, OnRuleChanged);
+        var viewModel = new TextRuleViewModel(_profile, _library, rule, OnRuleChanged);
         Rules.Add(viewModel);
         Selected = viewModel;
 
@@ -137,12 +150,23 @@ public sealed class TextRulesViewModel : ObservableObject
     /// Wendet alle Regeln auf den Erprobungstext an und zeigt, was greift.
     /// Verwendet dieselbe Aufloesung ueberlappender Treffer wie der echte Lauf,
     /// damit hier nichts anderes herauskommt als dort.
+    ///
+    /// Geprueft werden Profil- und Bibliotheksregeln zusammen -- dieselbe
+    /// Vereinigung wie <c>ObfuscationEngine.MergeTextRules</c>: eine
+    /// Bibliotheksregel gilt, ausser eine gleichnamige Profilregel ersetzt sie
+    /// vollstaendig. Das Erprobungsfeld soll pruefen koennen, was ein echter
+    /// Lauf tatsaechlich findet, nicht nur den Ausschnitt im Profil.
     /// </summary>
     private void Evaluate()
     {
         Matches.Clear();
 
-        var brauchbare = _profile.TextRules
+        var profilnamen = new HashSet<string>(
+            _profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
+
+        var brauchbare = _library.TextRules
+            .Where(rule => !profilnamen.Contains(rule.Name))
+            .Concat(_profile.TextRules)
             .Where(rule => !string.IsNullOrWhiteSpace(rule.Pattern))
             .ToList();
 
@@ -183,27 +207,44 @@ public sealed class TextRulesViewModel : ObservableObject
     }
 }
 
-/// <summary>Eine einzelne Textregel im Formular.</summary>
+/// <summary>
+/// Eine einzelne Textregel im Formular.
+///
+/// Eine Bibliotheksregel (<see cref="IsLibraryRule"/>) ist nur lesend: die
+/// Setter tun dann nichts. Gepflegt wird die Bibliotheksdatei im Texteditor,
+/// nicht hier -- siehe <see cref="GeneratorLibrary"/>.
+/// </summary>
 public sealed class TextRuleViewModel : ObservableObject
 {
     private readonly Action _onChanged;
     private readonly Profile _profile;
+    private readonly GeneratorLibrary _library;
 
-    public TextRuleViewModel(Profile profile, TextRule rule, Action onChanged)
+    public TextRuleViewModel(
+        Profile profile, GeneratorLibrary library, TextRule rule, Action onChanged, bool isLibraryRule = false)
     {
         _profile = profile;
+        _library = library;
         Rule = rule;
         _onChanged = onChanged;
+        IsLibraryRule = isLibraryRule;
     }
 
     public TextRule Rule { get; }
+
+    /// <summary>
+    /// Ob diese Regel aus der Generator-Bibliothek stammt statt aus dem
+    /// Profil -- steuert, ob das Formular sie bearbeitbar zeigt und ob sie
+    /// sich entfernen laesst.
+    /// </summary>
+    public bool IsLibraryRule { get; }
 
     public string Name
     {
         get => Rule.Name;
         set
         {
-            if (Rule.Name == value)
+            if (IsLibraryRule || Rule.Name == value)
                 return;
             Rule.Name = value;
             OnPropertyChanged();
@@ -216,7 +257,7 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.Pattern;
         set
         {
-            if (Rule.Pattern == value)
+            if (IsLibraryRule || Rule.Pattern == value)
                 return;
             Rule.Pattern = value;
             OnPropertyChanged();
@@ -226,10 +267,10 @@ public sealed class TextRuleViewModel : ObservableObject
 
     public GeneratorOption? Generator
     {
-        get => GeneratorOption.Find(_profile, Rule.Generator);
+        get => GeneratorOption.Find(_profile, Rule.Generator, _library);
         set
         {
-            if (value is null || Rule.Generator == value.Name)
+            if (IsLibraryRule || value is null || Rule.Generator == value.Name)
                 return;
             Rule.Generator = value.Name;
             OnPropertyChanged();
@@ -242,7 +283,7 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.Priority;
         set
         {
-            if (Rule.Priority == value)
+            if (IsLibraryRule || Rule.Priority == value)
                 return;
             Rule.Priority = value;
             OnPropertyChanged();
@@ -255,7 +296,7 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.IgnoreCase;
         set
         {
-            if (Rule.IgnoreCase == value)
+            if (IsLibraryRule || Rule.IgnoreCase == value)
                 return;
             Rule.IgnoreCase = value;
             OnPropertyChanged();
@@ -263,7 +304,9 @@ public sealed class TextRuleViewModel : ObservableObject
         }
     }
 
-    public string Display => $"{Rule.Name}  ·  {Rule.Priority}";
+    public string Display => IsLibraryRule
+        ? $"{Rule.Name}  ·  Bibliothek"
+        : $"{Rule.Name}  ·  {Rule.Priority}";
 }
 
 /// <param name="Rule">Regel, die gegriffen hat.</param>

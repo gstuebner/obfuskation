@@ -216,6 +216,17 @@ public sealed class DialogService : IDialogService
         return viewModel.ChosenProfile;
     }
 
+    public async Task<IReadOnlyList<PatternSuggestionAcceptance>?> ShowPatternSuggestionsAsync(
+        PatternSuggestionsViewModel viewModel)
+    {
+        var window = new PatternSuggestionsWindow { DataContext = viewModel };
+        viewModel.CloseRequested += () => window.Close();
+
+        await window.ShowDialog(_owner);
+
+        return viewModel.Confirmed ? viewModel.Accepted : null;
+    }
+
     /// <summary>
     /// Vorschlag fuer den Namen der Ausgabedatei. Der Zusatz macht auf einen
     /// Blick klar, welche der beiden Dateien das Pseudonymisat ist — die

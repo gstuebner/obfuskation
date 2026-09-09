@@ -370,4 +370,44 @@ public class ScanAndConfigTests
         Assert.Contains("\"pseudonymize\"", inhalt);
         Assert.DoesNotContain("\"Pseudonymize\"", inhalt);
     }
+
+    [Fact]
+    public void Ein_Bibliotheksverweis_ist_kein_unbekannter_Generator()
+    {
+        var library = new GeneratorLibrary
+        {
+            Generators = { ["assetTag"] = new GeneratorSettings { Type = "pattern", Pattern = "INV999999" } },
+        };
+        var profile = new Profile { ProfileName = "test" };
+        profile.Fields.Add(new FieldRule
+        {
+            Match = "Zielsystem", MatchType = FieldMatchType.Exact,
+            Action = FieldAction.Pseudonymize, Generator = "assetTag",
+        });
+
+        var befunde = ProfileValidator.Validate(profile, library);
+
+        Assert.DoesNotContain(befunde, i => i.Severity == ValidationSeverity.Error);
+    }
+
+    [Fact]
+    public void Eine_fremde_Option_an_einem_Bibliothekseintrag_wird_gemeldet()
+    {
+        var library = new GeneratorLibrary
+        {
+            Generators =
+            {
+                ["assetTag"] = new GeneratorSettings
+                {
+                    Type = "pattern", Pattern = "INV999999", Values = ["a", "b"],
+                },
+            },
+        };
+        var profile = new Profile { ProfileName = "test" };
+
+        var befunde = ProfileValidator.Validate(profile, library);
+
+        Assert.Contains(befunde, i =>
+            i.Path == "library.generators.assetTag.values" && i.Severity == ValidationSeverity.Error);
+    }
 }

@@ -2,6 +2,7 @@ using System.CommandLine;
 using Obfuskation.Cli;
 using Obfuskation.Core;
 using Obfuskation.Core.Configuration;
+using Obfuskation.Core.Generation;
 using Obfuskation.Core.Mapping;
 
 // Gemeinsame Optionen. Sie werden mehreren Unterbefehlen zugeordnet, damit
@@ -42,6 +43,13 @@ var allowUnsafeStoreOption = new Option<bool>("--allow-unsafe-store")
     Description = "Ersetzungstabelle auch in einem Git-Arbeitsverzeichnis ablegen (nicht empfohlen)",
 };
 
+var noLibraryOption = new Option<bool>("--no-library")
+{
+    Description = "Ohne die Generator-Bibliothek arbeiten (siehe 'obfuskation library path'); " +
+                  "fuer Fehlersuche und reproduzierbare Laeufe",
+    Recursive = true,
+};
+
 var rootCommand = new RootCommand(
     "Tauscht Echtdaten in CSV-, JSON- und Textdateien gegen Pseudodaten aus und kann " +
     "den Austausch wieder rueckgaengig machen." + Environment.NewLine +
@@ -54,6 +62,11 @@ rootCommand.Subcommands.Add(BuildDeobfuscateCommand());
 rootCommand.Subcommands.Add(BuildScanCommand());
 rootCommand.Subcommands.Add(BuildMappingCommand());
 rootCommand.Subcommands.Add(BuildProfileCommand());
+rootCommand.Subcommands.Add(BuildLibraryCommand());
+
+// Recursive gilt fuer alle Unterbefehle, ohne dass jeder sie einzeln
+// eintragen muss — siehe System.CommandLine, Option.Recursive.
+rootCommand.Options.Add(noLibraryOption);
 
 // Fassung und Ersteller stehen unter jeder Hilfe, wie in allen Programmen.
 ProgramInfo.AddHelpFooter(rootCommand);
@@ -120,7 +133,8 @@ Command BuildInitCommand()
             return ExitCodes.Failure;
         }
 
-        var profile = ProfileScaffolder.Create(profileName, from, description);
+        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
+        var profile = ProfileScaffolder.Create(profileName, from, description, library);
         ProfileStore.Save(profile, target);
 
         ConsoleOutput.WriteInfo($"{fullTarget} angelegt (Profil '{profileName}').");
@@ -171,7 +185,8 @@ Command BuildObfuscateCommand()
         var dryRun = parseResult.GetValue(dryRunOption);
 
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var engine = new ObfuscationEngine(profile);
+        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
+        var engine = new ObfuscationEngine(profile, library);
 
         var options = new RunOptions
         {
@@ -222,7 +237,8 @@ Command BuildDeobfuscateCommand()
         var json = parseResult.GetValue(jsonOption);
 
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var engine = new ObfuscationEngine(profile);
+        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
+        var engine = new ObfuscationEngine(profile, library);
 
         var options = new RunOptions
         {
@@ -266,7 +282,8 @@ Command BuildScanCommand()
         var json = parseResult.GetValue(jsonOption);
 
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var engine = new ObfuscationEngine(profile);
+        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
+        var engine = new ObfuscationEngine(profile, library);
 
         var options = new RunOptions
         {
@@ -313,7 +330,8 @@ Command BuildMappingCommand()
     listCommand.SetAction(parseResult => CommandContext.Run(() =>
     {
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var engine = new ObfuscationEngine(profile);
+        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
+        var engine = new ObfuscationEngine(profile, library);
         var path = engine.ResolveMappingStorePath();
 
         if (!File.Exists(path))
@@ -345,7 +363,8 @@ Command BuildMappingCommand()
     pathCommand.SetAction(parseResult => CommandContext.Run(() =>
     {
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        Console.Out.WriteLine(new ObfuscationEngine(profile).ResolveMappingStorePath());
+        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
+        Console.Out.WriteLine(new ObfuscationEngine(profile, library).ResolveMappingStorePath());
         return ExitCodes.Success;
     }));
 
@@ -395,6 +414,63 @@ Command BuildProfileCommand()
     }));
 
     command.Subcommands.Add(listCommand);
+    return command;
+}
+
+Command BuildLibraryCommand()
+{
+    var command = new Command("library",
+        "Auskunft ueber die Generator-Bibliothek -- hauseigene Muster ausserhalb jedes Profils " +
+        "(siehe 'library path' fuer den Ablageort).");
+
+    var listCommand = new Command("list",
+        "Zeigt die Generatoren und Textregeln der Bibliothek samt ihren Mustern. Anders als bei " +
+        "'mapping list' stehen hier keine Echtdaten, sondern nur Konfiguration -- die Muster " +
+        "gehoeren deshalb mit in die Ausgabe.");
+    listCommand.SetAction(_ => CommandContext.Run(() =>
+    {
+        var library = GeneratorLibrary.Load();
+
+        ConsoleOutput.WriteInfo($"Bibliothek: {GeneratorLibrary.DefaultPath}");
+
+        if (library.IsEmpty)
+        {
+            ConsoleOutput.WriteInfo("Keine Eintraege.");
+            return ExitCodes.Success;
+        }
+
+        if (library.Generators.Count > 0)
+        {
+            ConsoleOutput.WriteInfo("Generatoren:");
+            foreach (var (key, settings) in library.Generators.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+            {
+                var baseName = string.IsNullOrWhiteSpace(settings.Type) ? key : settings.Type;
+                ConsoleOutput.WriteInfo($"  {key} ({GeneratorDescriptions.Label(baseName)})");
+                if (!string.IsNullOrEmpty(settings.Pattern))
+                    ConsoleOutput.WriteInfo($"    Muster: {settings.Pattern}");
+            }
+        }
+
+        if (library.TextRules.Count > 0)
+        {
+            ConsoleOutput.WriteInfo("Textregeln:");
+            foreach (var rule in library.TextRules.OrderBy(r => r.Name, StringComparer.Ordinal))
+                ConsoleOutput.WriteInfo(
+                    $"  {rule.Name} (Prio {rule.Priority}, Generator '{rule.Generator}'): {rule.Pattern}");
+        }
+
+        return ExitCodes.Success;
+    }));
+
+    var pathCommand = new Command("path", "Gibt den Pfad der Generator-Bibliothek aus.");
+    pathCommand.SetAction(_ => CommandContext.Run(() =>
+    {
+        Console.Out.WriteLine(GeneratorLibrary.DefaultPath);
+        return ExitCodes.Success;
+    }));
+
+    command.Subcommands.Add(listCommand);
+    command.Subcommands.Add(pathCommand);
     return command;
 }
 

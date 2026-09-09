@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.4.0
+version: 1.6.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 08.09.2026
+date: 09.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.4.0 · Stand 8. September 2026
+Fassung 1.6.0 · Stand 9. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -212,7 +212,9 @@ bliebe sonst unerreichbar.
 **Feldliste mit Statuspunkten.** Links jedes Feld der geöffneten Datei mit
 einem Punkt davor: gefüllt und türkis heißt *entschieden*, ein roter,
 hohler Kreis heißt *offen*. Solange auch nur ein Feld offen ist, bricht
-jeder Lauf ab (Abschnitt 3, Schritt 2).
+jeder Lauf ab (Abschnitt 3, Schritt 2). Daneben steht die Schaltfläche
+**»Muster erkennen…«**, die für offene Felder anhand der tatsächlichen
+Werte einen passenden Generator vorschlägt (Kapitel 10).
 
 **Mehrfachauswahl.** Breite Tabellen haben oft ganze Gruppen gleichartiger
 Spalten. Sie lassen sich zusammen wählen — Strg-Klick für einzelne Felder,
@@ -504,9 +506,14 @@ Generatoren stehen zur Auswahl, sobald ein Feld auf „ersetzen“ steht:
 | `phone` | Ziffern ersetzt, Gliederung des Originals erhalten |
 | `numericId` | Stellenzahl erhalten, führende Nullen bleiben |
 | `dateShift` | alle Daten um denselben Betrag verschoben — Reihenfolge und Abstände bleiben |
+| `dateRange` | zufälliges Datum aus einem Zeitraum; ohne Angabe bleibt das Kalenderjahr des Originals erhalten |
+| `dateGeneralize` | auf Monats-, Quartals- oder Jahresanfang gerundet — **nicht umkehrbar** |
+| `pattern` | Wert nach Zeichenmaske, ohne Angabe formaterhaltend aus dem Original abgeleitet — Einzelheiten in Kapitel 10 |
+| `wordlist` | Wert aus einer eigenen Werteliste |
+| `partialMask` | teilweise maskiert, Anfang und Ende bleiben sichtbar — **nicht umkehrbar** |
 | `street`, `city`, `postalCode` | Anschriftsbestandteile aus Wortlisten |
 | `token` | generisch `TOK_A1B2C3D4` |
-| `redact` | fest `***` |
+| `redact` | fest `***`, oder ein eigener Platzhalter für diesen Namensraum |
 
 ### Lesbare Tokens: Präfix
 
@@ -677,7 +684,7 @@ Eine Eigenheit verdient besondere Aufmerksamkeit:
 Wer Abläufe automatisieren will, findet auf der Kommandozeile dieselbe
 Bibliothek unter einer anderen Hülle — Oberfläche und Kommandozeile liefern
 nachweislich dasselbe Ergebnis (siehe `entwicklerdokumentation.md`,
-Abschnitt „Überblick“). Sechs Befehle:
+Abschnitt „Überblick“). Sieben Befehle:
 
 ```
 obfuskation init [--profile <name>] [--from <datei>] [--description <text>]
@@ -687,6 +694,7 @@ obfuskation deobfuscate [<datei>] [-o <ziel>] [--json]
 obfuskation scan <datei> [--json]
 obfuskation mapping list|path
 obfuskation profile list [--sort name|used|changed] [--json]
+obfuskation library list|path
 ```
 
 **`--config` nimmt jetzt auch einen bloßen Profilnamen entgegen**, nicht
@@ -712,6 +720,15 @@ Begriff „zuletzt in der Oberfläche geöffnet“ nicht, nur den plattform- und
 programmübergreifenden Nutzungs-Index. `--sort` wählt die Sortierung
 (Vorgabe: nach Namen), `--json` liefert dieselbe Liste maschinenlesbar auf
 der Standardausgabe.
+
+**`obfuskation library list`** zeigt die Schlüssel der
+Generator-Bibliothek, ihren Basistyp und die Namen ihrer Textregeln,
+Muster eingeschlossen — anders als bei der Ersetzungstabelle sind das keine
+Echtdaten, nur Konfiguration. **`obfuskation library path`** zeigt den
+Ablageort. Die Option **`--no-library`** lässt einen Lauf ohne die
+Bibliothek arbeiten, etwa zur Fehlersuche oder für ein Ergebnis, das
+unabhängig von der lokalen Konfiguration des Rechners reproduzierbar
+bleibt. Einzelheiten und das Inventarnummer-Rezept in Kapitel 10.
 
 **`obfuskation init --central`** legt das Regelgerüst nicht mehr als
 `obfuskation.json` im aktuellen Verzeichnis an, sondern direkt am zentralen
@@ -744,6 +761,126 @@ cat antwort-der-ki.txt | obfuskation deobfuscate --config profil-demo.json
 
 Vollständige Beschreibung der Befehle, Optionen und Rückgabewerte in
 `entwicklerdokumentation.md`, Abschnitt „Rückgabewerte der CLI“.
+
+---
+
+## 10. Eigene Muster (Generator-Bibliothek)
+
+Wer in einem festen Umfeld arbeitet, hat oft wiederkehrende hauseigene
+Muster: interne Inventarnummern, Ticketnummern, eigene Kennungen. Diese Muster
+gehören weder in ein Profil, das eventuell weitergegeben wird, noch sollen
+sie in jedem neuen Profil erneut eingetippt werden. Dafür gibt es die
+**Generator-Bibliothek**, eine Datei am festen, persönlichen Ort
+`~/.config/obfuskation/generators.json`. Sie fließt beim Start automatisch
+in jedes Profil ein, wird aber **nie** in eine Profildatei
+zurückgeschrieben — eine Änderung an der Bibliothek betrifft also nie den
+Inhalt eines Profils.
+
+### Was eine Maske ist
+
+Der Generator `pattern` erzeugt Werte nach einer **Zeichenmaske**: `A` steht
+für einen Großbuchstaben, `a` für einen Kleinbuchstaben, `9` für eine
+Ziffer, `X` für ein beliebiges alphanumerisches Zeichen, und `\` schützt das
+folgende Zeichen davor, als Platzhalter gelesen zu werden — es bleibt dann
+wörtlich stehen. Alles andere in der Maske bleibt ohnehin wörtlich stehen.
+Ohne gesetzte Maske leitet der Generator sie selbst aus dem Original ab
+(Ziffer → `9`, Großbuchstabe → `A`, Kleinbuchstabe → `a`, Rest wörtlich) —
+dann ist er ein allgemeiner, formaterhaltender Ersatz etwa für Vertrags-,
+Beleg- oder Auftragsnummern, ohne dass dafür eine eigene Maske nötig wäre.
+
+### Rezept: ein eigener Namensraum für einen hauseigenen Inventarnummern
+
+Am Beispiel eines internen Hostnamens der Form `INV123456` (drei feste
+Buchstaben, sechs Ziffern), der sowohl in einer eigenen Spalte als auch im
+Fließtext vorkommen kann:
+
+1. **Bibliotheksdatei anlegen oder öffnen** unter
+   `~/.config/obfuskation/generators.json` (mit einem beliebigen
+   Texteditor — ein eigener Editor in der Oberfläche ist für diese Fassung
+   nicht vorgesehen).
+2. **Generator und Textregel eintragen:**
+
+   ```jsonc
+   {
+     "version": 1,
+     "generators": {
+       "assetTag": { "type": "pattern", "pattern": "INV999999" }
+     },
+     "textRules": [
+       { "name": "assetTag", "priority": 95, "pattern": "\\bINV\\d{6}\\b", "generator": "assetTag" }
+     ]
+   }
+   ```
+
+   Ein lauffähiges (aber inhaltlich harmloses) Beispiel derselben Form liegt
+   unter `docs/beispiel/bibliothek-beispiel.json` — Inhalt anpassen und nach
+   `~/.config/obfuskation/generators.json` kopieren.
+3. **Spalte zuweisen:** Ein Feld wie `Zielsystem` auf „ersetzen“ mit dem
+   Generator `assetTag` stellen. In der Generatorauswahl erscheint er mit
+   dem Zusatz „— aus der Bibliothek", damit erkennbar bleibt, dass er nicht
+   im Profil selbst steht.
+4. **Freitext zuweisen:** Ein Feld wie `Bemerkung`, das denselben Inventarnummern
+   auch im Fließtext enthalten kann, auf „Freitext durchsuchen" stellen. Die
+   Bibliotheksregel `assetTag` wirkt dort automatisch mit, ohne dass sie im
+   Profil aufgeführt werden müsste.
+5. **Ergebnis:** Spalte und Freitext liefern für denselben Klartext dasselbe
+   Pseudonym (gleicher Namensraum `assetTag`), weil beide auf denselben
+   Bibliothekseintrag zurückgreifen. `Prüfen` meldet nichts, und
+   `Klartextdatei erzeugen…` stellt den ursprünglichen Inventarnummern an beiden
+   Stellen wieder her.
+
+### Der Knopf »Muster erkennen…«
+
+Neben der Feldliste im Hauptfenster steht die Schaltfläche **»Muster
+erkennen…«**. Sie öffnet einen Dialog, der die tatsächlichen Beispielwerte
+jedes Feldes gegen die bekannten Muster prüft — die eingebauten
+Standardmuster **und** alle Muster aus der Generator-Bibliothek. Findet sich
+für ein Feld ein Muster, das auf **alle** vorliegenden Beispielwerte passt,
+erscheint eine Zeile mit Feldname, vorgeschlagenem Generator und dem
+Beispielwert, der den Vorschlag belegt, dazu ein Häkchen.
+
+**Vorbelegt sind ausschließlich Felder, die noch auf „offen" stehen.** Ein
+bereits entschiedenes Feld wird nie ohne ausdrückliches Zutun überschrieben
+— das zugehörige Häkchen ist dafür von vornherein leer. **»Übernehmen«**
+setzt bei den angehakten Zeilen die Aktion auf „ersetzen" und den
+vorgeschlagenen Generator; das Profil gilt danach als ungespeichert
+verändert, wie nach jeder anderen Regeländerung auch.
+
+Findet der Dialog keinen einzigen Vorschlag, sagt er das ausdrücklich und
+verweist auf die Generator-Bibliothek — das ist typischerweise der Moment,
+in dem auffällt, dass ein hauseigenes Muster dort noch fehlt.
+
+### Fallstricke
+
+- **Buchstaben `A`, `a`, `X`, `9` im wörtlichen Teil einer Maske müssen mit
+  `\` geschützt werden.** Ohne den Schutz werden sie als Platzhalter
+  gelesen statt als das Zeichen, das tatsächlich dastehen soll — aus der
+  Maske `INV999999` wird `FW` also nur deshalb wörtlich übernommen, weil
+  keiner der beiden Buchstaben ein Maskenzeichen ist; eine Maske wie
+  `AW999999` bräuchte dagegen `\A W999999`, wenn das `A` wörtlich ein `A`
+  bleiben soll.
+- **Eine feste Maske schaut sich den Originalwert nicht an.** Wechseln
+  Länge oder Aufbau der Werte (mal sechs, mal sieben Ziffern), passt eine
+  einzelne Maske nicht auf alle Fälle — dafür braucht es mehrere
+  Namensräume (mehrere Bibliothekseinträge mit je eigener Maske und eigener
+  Textregel), nicht eine Maske, die versucht, beides abzudecken.
+- **Eine nachträglich geänderte Maske entwertet bestehende
+  Tabelleneinträge nicht.** Bereits vergebene Pseudonyme bleiben in der
+  Ersetzungstabelle stehen und lassen sich weiterhin zurückübersetzen — ab
+  dem Zeitpunkt der Änderung erzeugt der Generator aber Werte in der neuen
+  Form. Der Bestand liest sich danach gemischt, ähnlich wie beim
+  nachträglichen Setzen eines Präfix (Kapitel 6).
+- **Die Bibliotheksdatei bleibt privat und gehört nicht ins Repository
+  eines Projekts.** Sie kann unternehmensinterne Namensschemata enthalten,
+  die außerhalb des eigenen Hauses nichts zu suchen haben — genau wie die
+  Ersetzungstabelle, nur dass hier keine Echtdaten, sondern das Wissen um
+  interne Namenskonventionen geschützt wird.
+- **Vorrang:** Ein gleichnamiger Eintrag im Profil selbst gewinnt immer
+  gegen die Bibliothek — nützlich, um für ein einzelnes Profil bewusst
+  abzuweichen. Eine gleichnamige Textregel im Profil ersetzt die
+  Bibliotheksregel vollständig, statt zusätzlich zu greifen.
+- `--no-library` auf der Kommandozeile läuft ohne die Bibliothek, `library
+  list` zeigt ihren Inhalt, `library path` ihren Ablageort (Kapitel 9).
 
 ---
 

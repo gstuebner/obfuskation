@@ -58,6 +58,15 @@ public interface IDialogService
     /// geschlossen wurde.
     /// </summary>
     Task<ProfileSummary?> ShowProfilesAsync(ProfilesViewModel viewModel);
+
+    /// <summary>
+    /// Der Dialog "Muster erkennen…": zeigt wertbasierte Generatorvorschlaege
+    /// fuer die Felder der offenen Datei (<paramref name="viewModel"/> traegt
+    /// sie bereits). Liefert die beim Bestaetigen angehakten Vorschlaege, oder
+    /// <c>null</c> bei Abbruch.
+    /// </summary>
+    Task<IReadOnlyList<PatternSuggestionAcceptance>?> ShowPatternSuggestionsAsync(
+        PatternSuggestionsViewModel viewModel);
 }
 
 /// <summary>Antwort auf die Rueckfrage vorm Loeschen eines Profils.</summary>
@@ -113,3 +122,8 @@ public sealed record DeleteProposal(string Name, string ProfilePath, string Mapp
 /// muss die Rueckfrage ausdruecklich nennen.
 /// </param>
 public sealed record BatchRunProposal(int FileCount, string Marker, int OverwriteCount);
+
+/// <summary>Ein beim "Muster erkennen…"-Dialog angehakter Vorschlag.</summary>
+/// <param name="FieldName">Das Feld, auf das der Vorschlag zutrifft.</param>
+/// <param name="Generator">Der vorgeschlagene Generator, der uebernommen werden soll.</param>
+public sealed record PatternSuggestionAcceptance(string FieldName, string Generator);

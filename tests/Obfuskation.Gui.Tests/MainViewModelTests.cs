@@ -414,6 +414,70 @@ public class MainViewModelTests : IDisposable
         Assert.Empty(modell.Session.Profile.TextRules);
     }
 
+    // ------------------------------------------------- Mustererkennung
+
+    private string SchreibeCsvMitMustern()
+    {
+        var pfad = Path.Combine(_verzeichnis, "muster.csv");
+        File.WriteAllText(pfad,
+            "Kundennummer;E-Mail;Telefon\n"
+            + "4711;max@beispiel.de;+49 30 12345678\n"
+            + "4712;erika@beispiel.de;+49 40 87654321\n",
+            new UTF8Encoding(false));
+        return pfad;
+    }
+
+    [Fact]
+    public async Task Muster_erkennen_belegt_nur_offene_Felder_vor_und_markiert_das_Profil_als_veraendert()
+    {
+        var profil = SchreibeProfil();
+        var csv = SchreibeCsvMitMustern();
+
+        var dialoge = new FakeDialogService();
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv);
+
+        // "Telefon" wird vorab entschieden -- sein Vorschlag darf danach nicht
+        // mehr vorbelegt sein, auch wenn der Wert weiter auf das Muster passt.
+        modell.Fields.Single(f => f.FieldName == "Telefon").Action = FieldAction.Passthrough;
+
+        await AusfuehrenUndWartenAsync(modell.ShowPatternSuggestionsCommand);
+
+        var dialog = dialoge.LastPatternSuggestionsViewModel;
+        Assert.NotNull(dialog);
+        Assert.True(dialog!.HasSuggestions);
+
+        var emailVorschlag = dialog.Items.Single(i => i.FieldName == "E-Mail");
+        Assert.Equal("email", emailVorschlag.Generator);
+        Assert.True(emailVorschlag.IsChecked, "ein noch offenes Feld muss vorbelegt sein");
+
+        var telefonVorschlag = dialog.Items.Single(i => i.FieldName == "Telefon");
+        Assert.False(telefonVorschlag.IsChecked, "ein bereits entschiedenes Feld darf nicht vorbelegt sein");
+
+        // Jetzt tatsaechlich uebernehmen -- nur fuer "E-Mail".
+        dialoge.PatternSuggestionsResult = new[] { new PatternSuggestionAcceptance("E-Mail", "email") };
+        await AusfuehrenUndWartenAsync(modell.ShowPatternSuggestionsCommand);
+
+        var emailFeld = modell.Fields.Single(f => f.FieldName == "E-Mail");
+        Assert.Equal(FieldAction.Pseudonymize, emailFeld.Action);
+        Assert.Equal("email", emailFeld.Generator);
+
+        Assert.True(modell.Session!.HasUnsavedChanges);
+        Assert.EndsWith("*", modell.ProfileTitle);
+    }
+
+    [Fact]
+    public async Task Ohne_offene_Datei_liefert_Muster_erkennen_keinen_Dialog()
+    {
+        var profil = SchreibeProfil();
+
+        var dialoge = new FakeDialogService();
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        Assert.False(modell.ShowPatternSuggestionsCommand.CanExecute(null));
+    }
+
     [Fact]
     public async Task Die_Tabellenauskunft_nennt_Pfad_und_Rechte()
     {

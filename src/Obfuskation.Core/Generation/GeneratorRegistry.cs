@@ -44,41 +44,57 @@ public sealed class GeneratorRegistry
 
     /// <summary>
     /// Baut die Generatoren fuer ein Profil auf und wendet die Einstellungen an.
+    /// Reihenfolge bei gleichem Schluessel: eingebaute Generatoren, dann die
+    /// Generator-Bibliothek, dann das Profil — das Profil gewinnt immer.
     /// </summary>
-    public static GeneratorRegistry Build(Profile profile, SeedDeriver deriver)
+    public static GeneratorRegistry Build(Profile profile, SeedDeriver deriver, GeneratorLibrary? library = null)
     {
+        library ??= GeneratorLibrary.Load();
+
         var byName = new Dictionary<string, IPseudonymGenerator>(StringComparer.OrdinalIgnoreCase);
         foreach (var generator in CreateDefaults())
             byName[generator.Name] = generator;
 
+        // Bibliothekseintraege zuerst, das Profil ueberschreibt bei gleichem
+        // Schluessel — siehe GeneratorLibrary. "Origin" fliesst nur in die
+        // Fehlermeldung ein, die Zusammenfuehrung selbst braucht sie nicht.
+        var effective = new Dictionary<string, (GeneratorSettings Settings, string Origin)>(
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (key, settings) in library.Generators)
+            effective[key] = (settings, $"Bibliothek: {key}");
+
+        foreach (var (key, settings) in profile.Generators)
+            effective[key] = (settings, $"generators.{key}");
+
         // Ein Eintrag unter neuem Schluessel mit "type" erzeugt eine zweite,
         // eigenstaendig konfigurierte Auspraegung eines eingebauten Generators.
-        foreach (var (key, settings) in profile.Generators)
+        foreach (var (key, entry) in effective)
         {
-            var baseName = string.IsNullOrWhiteSpace(settings.Type) ? key : settings.Type;
+            var baseName = string.IsNullOrWhiteSpace(entry.Settings.Type) ? key : entry.Settings.Type;
 
-            if (!byName.TryGetValue(baseName, out _))
+            if (!byName.ContainsKey(baseName))
                 throw new ConfigurationException(
-                    $"Unbekannter Generatortyp '{baseName}' in generators.{key}. " +
+                    $"Unbekannter Generatortyp '{baseName}' in {entry.Origin}. " +
                     $"Verfügbar: {string.Join(", ", KnownNames)}");
 
             var instance = CreateDefaults().First(
                 g => string.Equals(g.Name, baseName, StringComparison.OrdinalIgnoreCase));
-            instance.Configure(settings);
+            instance.Configure(entry.Settings);
             byName[key] = instance;
         }
 
-        // Der Platzhalter von "redact" kommt aus den Profilvorgaben -- ausser
-        // der Namensraum hat unter generators.<key>.placeholder einen eigenen
-        // gesetzt; der bleibt dann unangetastet stehen, statt gleich wieder
-        // ueberschrieben zu werden.
+        // Der Platzhalter von "redact" kommt aus den Profilvorgaben — ausser
+        // der Namensraum hat unter generators.<key>.placeholder (oder dem
+        // gleichwertigen Bibliothekseintrag) einen eigenen gesetzt; der bleibt
+        // dann unangetastet stehen, statt gleich wieder ueberschrieben zu werden.
         foreach (var (key, generator) in byName)
         {
             if (generator is not RedactGenerator redactor)
                 continue;
 
-            var hasOwnPlaceholder = profile.Generators.TryGetValue(key, out var settings)
-                && !string.IsNullOrEmpty(settings.Placeholder);
+            var hasOwnPlaceholder = effective.TryGetValue(key, out var entry)
+                && !string.IsNullOrEmpty(entry.Settings.Placeholder);
 
             if (!hasOwnPlaceholder)
                 redactor.SetPlaceholder(profile.Defaults.RedactionPlaceholder);

@@ -206,6 +206,85 @@ public class EquivalenceTests : IDisposable
         Assert.Matches(@"^\d{3},\d{2}$", ersteZeile[3]);
     }
 
+    /// <summary>
+    /// Ein Profil, das ein Feld ueber einen Bibliothekseintrag ersetzt statt
+    /// ueber einen eigenen Namensraum -- der Inventarnummer-Fall aus dem Plan: die
+    /// Bibliothek traegt "assetTag" (Basistyp <c>pattern</c>), das Profil
+    /// kennt den Schluessel selbst nicht.
+    /// </summary>
+    private Profile ErzeugeProfilMitBibliotheksverweis()
+    {
+        var profil = new Profile
+        {
+            ProfileName = "gleichlauf-bibliothek",
+            MappingStore = Path.Combine(_verzeichnis, "mapping-bibliothek.json"),
+            Fields =
+            [
+                new FieldRule { Match = "Kundennummer", Action = FieldAction.Pseudonymize, Generator = "assetTag" },
+                new FieldRule
+                {
+                    Match = "Kundenname", Action = FieldAction.Pseudonymize, Generator = "personName",
+                },
+                new FieldRule { Match = "IBAN", Action = FieldAction.Pseudonymize, Generator = "iban" },
+                new FieldRule { Match = "Betrag", Action = FieldAction.Passthrough },
+            ],
+        };
+
+        ProfileStore.Save(profil, Path.Combine(_verzeichnis, "profil-bibliothek.json"));
+        return profil;
+    }
+
+    /// <summary>
+    /// Wird bewusst als Objekt statt als Datei unter <see cref="GeneratorLibrary.DefaultPath"/>
+    /// erzeugt und explizit durchgereicht -- so bleibt der Test unabhaengig
+    /// vom (fuer den ganzen Testlauf gemeinsamen) <c>XDG_CONFIG_HOME</c> und
+    /// kann keinen anderen Test beeinflussen.
+    /// </summary>
+    private static GeneratorLibrary ErzeugeBibliothek() => new()
+    {
+        Generators = { ["assetTag"] = new GeneratorSettings { Type = "pattern", Pattern = "INV999999" } },
+        TextRules =
+        {
+            new TextRule { Name = "assetTag", Priority = 95, Pattern = @"\bINV\d{6}\b", Generator = "assetTag" },
+        },
+    };
+
+    [Fact]
+    public async Task Die_Oberflaeche_liefert_dasselbe_wie_ein_unmittelbarer_Lauf_mit_gesetzter_Bibliothek()
+    {
+        var profil = ErzeugeProfilMitBibliotheksverweis();
+        var bibliothek = ErzeugeBibliothek();
+
+        var eingabe = new UTF8Encoding(false).GetBytes(
+            "Kundennummer;Kundenname;IBAN;Betrag\n"
+            + "INV123456;Max Mustermann;DE02120300000000202051;1234,56\n"
+            + "INV654321;Erika Musterfrau;DE02500105170137075030;-89,90\n");
+
+        // Der Weg, den auch das Kommandozeilenprogramm nimmt -- diesmal mit
+        // gesetzter Bibliothek.
+        var ueberEngine = new ObfuscationEngine(profil, bibliothek)
+            .Obfuscate(eingabe, "kunden.csv", new RunOptions { Strict = true });
+
+        var csvPfad = Path.Combine(_verzeichnis, "kunden.csv");
+        await File.WriteAllBytesAsync(csvPfad, eingabe);
+
+        // Der Weg der Oberflaeche: dieselbe Bibliothek wird -- wie beim echten
+        // Programmstart -- an die Sitzung durchgereicht statt neu geladen.
+        var sitzung = ProfileSession.Load(Path.Combine(_verzeichnis, "profil-bibliothek.json"), bibliothek);
+        var ueberOberflaeche = sitzung.Engine.Obfuscate(
+            await File.ReadAllBytesAsync(csvPfad), csvPfad, new RunOptions { Strict = true });
+
+        Assert.Equal(
+            Encoding.UTF8.GetString(ueberEngine.Content),
+            Encoding.UTF8.GetString(ueberOberflaeche.Content));
+
+        // Der Bibliotheksgenerator muss auch tatsaechlich gegriffen haben --
+        // sonst pruefte der Vergleich oben nur zwei gleich falsche Ergebnisse
+        // gegeneinander.
+        var ersteZeile = Encoding.UTF8.GetString(ueberOberflaeche.Content).Split('\n')[1].Split(';');
+        Assert.Matches(@"^INV\d{6}$", ersteZeile[0]);
+    }
+
     [Fact]
     public async Task Die_Pruefung_der_Oberflaeche_findet_die_Echtwerte_wieder()
     {

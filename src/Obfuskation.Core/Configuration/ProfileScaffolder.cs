@@ -64,10 +64,11 @@ public static class ProfileScaffolder
         ("kommentar", "scanText"),
     ];
 
-    public static Profile Create(string profileName, string? sampleFilePath, string? description = null)
+    public static Profile Create(
+        string profileName, string? sampleFilePath, string? description = null, GeneratorLibrary? library = null)
         => Create(profileName,
             string.IsNullOrWhiteSpace(sampleFilePath) ? Array.Empty<string>() : new[] { sampleFilePath },
-            description);
+            description, library);
 
     /// <summary>
     /// Wie die Einzelfassung, aber aus mehreren zusammengehoerenden Dateien auf
@@ -76,9 +77,18 @@ public static class ProfileScaffolder
     /// Name (etwa die gemeinsame Schluesselspalte zweier Tabellen) erscheint
     /// nur bei seinem ersten Auftreten -- sonst bekaeme er zwei widerspruechliche
     /// Vorschlaege.
+    ///
+    /// Ohne <paramref name="library"/> gilt <see cref="GeneratorLibrary.Load"/>.
+    /// Wertetreffer aus <see cref="ValueSuggester"/> schlagen dabei das
+    /// Namensraten aus <see cref="Suggest"/>: ein passender Beispielwert ist
+    /// die haertere Aussage als ein Feldnamensfragment.
     /// </summary>
-    public static Profile Create(string profileName, IEnumerable<string> sampleFilePaths, string? description = null)
+    public static Profile Create(
+        string profileName, IEnumerable<string> sampleFilePaths, string? description = null,
+        GeneratorLibrary? library = null)
     {
+        library ??= GeneratorLibrary.Load();
+
         var profile = new Profile
         {
             ProfileName = profileName,
@@ -94,18 +104,48 @@ public static class ProfileScaffolder
             if (string.IsNullOrWhiteSpace(pfad))
                 continue;
 
-            foreach (var fieldName in ReadFieldNames(pfad))
+            var expanded = PathHelper.ExpandHome(pfad);
+            if (!File.Exists(expanded))
+                throw new FileNotFoundException($"Datei nicht gefunden: {expanded}", expanded);
+
+            var content = File.ReadAllBytes(expanded);
+            var inspected = FieldInspector.Inspect(content, pfad);
+
+            // Je Datei einmal bestimmt, nicht je Feld.
+            var samples = FieldSampler.Sample(content, pfad);
+            var vorschlaege = ValueSuggester.Suggest(samples, library)
+                .ToDictionary(v => v.FieldName, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var fieldName in inspected.FieldNames)
             {
-                if (gesehen.Add(fieldName))
-                    profile.Fields.Add(CreateRule(profile, fieldName));
+                if (!gesehen.Add(fieldName))
+                    continue;
+
+                vorschlaege.TryGetValue(fieldName, out var vorschlag);
+                profile.Fields.Add(CreateRule(profile, fieldName, vorschlag));
             }
         }
 
         return profile;
     }
 
-    private static FieldRule CreateRule(Profile profile, string fieldName)
+    private static FieldRule CreateRule(Profile profile, string fieldName, ValueSuggestion? valueSuggestion)
     {
+        if (valueSuggestion is not null)
+        {
+            return new FieldRule
+            {
+                Match = fieldName,
+                MatchType = FieldMatchType.Exact,
+                Action = FieldAction.Error,
+                Generator = valueSuggestion.Generator,
+                Comment = $"Vorschlag: pseudonymize mit '{valueSuggestion.Generator}' -- " +
+                          $"{valueSuggestion.MatchedSamples} von {valueSuggestion.TotalSamples} Beispielwerten " +
+                          $"passen, etwa '{valueSuggestion.Evidence}'. Zum Uebernehmen action auf " +
+                          "pseudonymize setzen.",
+            };
+        }
+
         var suggestion = Suggest(fieldName);
 
         if (suggestion == "scanText")

@@ -184,7 +184,16 @@
       <!-- Feldliste -->
       <Border Grid.Column="0" Classes="card" Margin="0">
         <Grid RowDefinitions="Auto,*">
-          <TextBlock Grid.Row="0" Text="Felder" Classes="card-title"/>
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="Felder" Classes="card-title" VerticalAlignment="Center"/>
+
+            <!-- Wertbasierte Vorschlaege (Feature: Mustererkennung), aus den
+                 eingebauten Mustern und der Generator-Bibliothek. Nur
+                 sinnvoll, wenn ueberhaupt Felder da sind. -->
+            <Button Grid.Column="1" Content="Muster erkennen…" Classes="flat"
+                    Command="{Binding ShowPatternSuggestionsCommand}"
+                    ToolTip.Tip="Beispielwerte gegen bekannte Muster prüfen und passende Generatoren vorschlagen"/>
+          </Grid>
 
           <TextBlock Grid.Row="1" Text="{Binding EmptyHint}" Classes="muted"
                      IsVisible="{Binding ShowEmptyHint}"

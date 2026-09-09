@@ -173,7 +173,8 @@ Both produce numeric IDs of the same format, but draw from separate pools. In th
 
   "defaults": {
     "unknownField": "error",        // error | pseudonymize | passthrough
-    "redactionPlaceholder": "***"
+    "redactionPlaceholder": "***",
+    "emptyValues": ["-", "N/A"]     // trimmed, case-insensitive; such values pass through unchanged, never get a pseudonym
   },
 
   // Applies to CSV columns and JSON properties.
@@ -192,8 +193,9 @@ Both produce numeric IDs of the same format, but draw from separate pools. In th
   ],
 
   "generators": {
-    "dateShift": { "maxDays": 400, "formats": ["dd.MM.yyyy"] },
-    "email":     { "domain": "example.invalid" }
+    "dateShift":    { "maxDays": 400, "formats": ["dd.MM.yyyy"] },
+    "email":        { "domain": "example.invalid" },
+    "internalNote": { "type": "redact", "placeholder": "[removed]" }  // own placeholder, independent of defaults.redactionPlaceholder
   }
 }
 ```
@@ -223,9 +225,14 @@ Both produce numeric IDs of the same format, but draw from separate pools. In th
 | `phone` | Digits replaced, original formatting preserved |
 | `numericId` | Digit count preserved, leading zeros retained |
 | `dateShift` | All dates shifted by the same offset — sequence and intervals preserved |
+| `dateRange` | Random date drawn from a period (`from`/`to`); without them, the original's calendar year is kept |
+| `dateGeneralize` | Rounded to the start of month, quarter, or year — **not reversible** |
+| `pattern` | Value built from a character mask (`A`/`a`/`9`/`X`/`\`), or format-preserving from the original if no mask is set |
+| `wordlist` | Deterministic pick from a custom value list (`values`) |
+| `partialMask` | Keeps `keepFirst`/`keepLast` characters visible, masks the rest — **not reversible** |
 | `street`, `city`, `postalCode` | Address components from wordlists |
 | `token` | Generic `TOK_A1B2C3D4`, optionally with a prefix in front |
-| `redact` | Fixed `***` |
+| `redact` | Fixed `***`, or a custom `placeholder` for that namespace |
 
 ### Readable tokens: prefix
 
@@ -250,6 +257,56 @@ that. `init` automatically proposes such a namespace for columns without a
 matching generator, and the GUI lets you set the prefix on a rule's
 "Kennzeichnung" field. Details and pitfalls (German):
 [user documentation](docs/anwenderdokumentation.md).
+
+---
+
+## Custom Patterns (Generator Library)
+
+Organization-specific patterns — internal assetTags, ticket numbers,
+in-house IDs — don't belong in a profile that might end up in a shared
+repository, and retyping them into every new profile invites drift. A
+**generator library** at a fixed, per-user location solves both: it is
+merged into every profile at runtime and is never written back into a
+profile file.
+
+```
+~/.config/obfuskation/generators.json
+```
+
+```jsonc
+{
+  "version": 1,
+  "generators": {
+    "assetTag": { "type": "pattern", "pattern": "INV999999" }
+  },
+  "textRules": [
+    { "name": "assetTag", "priority": 95, "pattern": "\\bINV\\d{6}\\b", "generator": "assetTag" }
+  ]
+}
+```
+
+Same shapes as in a profile (`generators`, `textRules`) — no second schema,
+no second validation. **A profile always wins over the library** for the
+same key: a profile's own `generators` entry shadows a library entry of the
+same name, and a profile text rule of the same `name` replaces the
+library's rule outright rather than running alongside it. That makes it
+safe to build up a shared library over time without ever risking a silent,
+unwanted override — whoever edits a specific profile can always be more
+specific than the library.
+
+**The file is private and does not belong in this repository.** It
+typically holds organization-internal naming conventions that must not
+become visible just because a profile referencing them is public.
+
+`obfuskation library list` shows the configured keys, their base type, and
+their text rule names — patterns included: unlike the mapping table, the
+library holds no real data, only the shape of it, so there's nothing to
+protect by hiding it. `obfuskation library path` prints the file's
+location. `--no-library` runs without the library, for troubleshooting or
+to reproduce a result independent of the local machine's configuration. In
+the GUI, library-sourced generators appear in the generator dropdown
+alongside the profile's own, marked with their origin; they are read-only
+there in this release — edit the file directly.
 
 ---
 
@@ -283,15 +340,19 @@ obfuskation deobfuscate [<file>] [-o <dest>] [--json]
 obfuskation scan <file> [--json]
 obfuskation mapping list|path
 obfuskation profile list [--sort name|used|changed] [--json]
+obfuskation library list|path
 ```
 
-Common options: `--config <path-or-profile-name>`, `--format csv|json|text`, `--allow-unsafe-store`.
+Common options: `--config <path-or-profile-name>`, `--format csv|json|text`, `--allow-unsafe-store`, `--no-library`.
 
 `--config` also accepts a plain profile name instead of a path — `--config demo` resolves to `~/.config/obfuskation/profile/demo.json` if no literal file named `demo` exists, the same central location the GUI uses. `init --central` writes there directly instead of `obfuskation.json` in the current directory, and `profile list` shows every profile the tool knows about — the central folder plus everything remembered in the usage index — with name, file count, last-used and last-modified timestamps.
 
 - `--strict` — Fields without an explicit rule cause execution to abort, regardless of profile defaults.
 - `--dry-run` — Writes neither output files nor table entries, but produces the full report.
 - `--json` — Output report as JSON to stdout. Requires `-o`, otherwise report and data mix. The report contains **only counts and field names, never values**, and can safely be logged.
+- `--no-library` — Runs without the generator library
+  (`~/.config/obfuskation/generators.json`); useful for troubleshooting or a
+  reproducible run independent of the local machine's configuration.
 - `deobfuscate` without file argument reads from standard input (`stdin`).
 
 ### Exit Codes

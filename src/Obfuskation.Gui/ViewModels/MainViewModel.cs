@@ -16,6 +16,7 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly GuiSettings _settings;
     private readonly Func<IDialogService> _dialogs;
+    private readonly GeneratorLibrary _library;
 
     private ProfileSession? _session;
     private string? _dataFilePath;
@@ -39,6 +40,21 @@ public sealed class MainViewModel : ObservableObject
         _settings = settings;
         _dialogs = dialogs;
 
+        // Einmal beim Start, nicht bei jedem Kern-Aufruf: alle Aufrufe (Engine,
+        // Validierung, Geruesterzeugung) reichen dieselbe Bibliothek durch,
+        // statt die Datei jedesmal erneut zu lesen. Eine kaputte Datei darf
+        // die Oberflaeche nicht blockieren -- die Statuszeile nennt den Pfad
+        // (siehe GeneratorLibrary.Load), und es geht ohne Bibliothek weiter.
+        try
+        {
+            _library = GeneratorLibrary.Load();
+        }
+        catch (ConfigurationException ex)
+        {
+            _library = GeneratorLibrary.Empty;
+            _statusText = ex.Message;
+        }
+
         ShowProfilesCommand = new AsyncRelayCommand(ShowProfilesAsync);
         NewProfileCommand = new AsyncRelayCommand(NewProfileAsync);
         SaveProfileCommand = new AsyncRelayCommand(SaveProfileAsync, () => _session is not null);
@@ -50,6 +66,9 @@ public sealed class MainViewModel : ObservableObject
 
         ObfuscateAllCommand = new AsyncRelayCommand(() => RunBatchAsync(obfuscate: true), CanRunBatch);
         DeobfuscateAllCommand = new AsyncRelayCommand(() => RunBatchAsync(obfuscate: false), CanRunBatch);
+
+        ShowPatternSuggestionsCommand = new AsyncRelayCommand(
+            ShowPatternSuggestionsAsync, () => _session is not null && Fields.Count > 0);
 
         CancelCommand = new RelayCommand(Cancel, () => _isBusy);
         ToggleThemeCommand = new RelayCommand(ToggleTheme);
@@ -81,6 +100,7 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand ScanCommand { get; }
     public AsyncRelayCommand ObfuscateAllCommand { get; }
     public AsyncRelayCommand DeobfuscateAllCommand { get; }
+    public AsyncRelayCommand ShowPatternSuggestionsCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand ToggleThemeCommand { get; }
     public RelayCommand ShowTextRulesCommand { get; }
@@ -98,7 +118,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Das Ansichtsmodell der Textregeln zum laufenden Profil.</summary>
     public TextRulesViewModel? CreateTextRulesViewModel()
-        => _session is null ? null : new TextRulesViewModel(_session.Profile, OnTextRulesChanged);
+        => _session is null ? null : new TextRulesViewModel(_session.Profile, _library, OnTextRulesChanged);
 
     /// <summary>
     /// Das Ansichtsmodell des Optionsdialogs fuer das fuehrende gewaehlte
@@ -478,7 +498,7 @@ public sealed class MainViewModel : ObservableObject
         {
             await GuardedAsync(() =>
             {
-                LoadProfile(ProfileSession.Load(pfad));
+                LoadProfile(ProfileSession.Load(pfad, _library));
                 StatusText = $"Profil geladen: {pfad}";
                 return Task.CompletedTask;
             });
@@ -538,7 +558,7 @@ public sealed class MainViewModel : ObservableObject
 
         await GuardedAsync(() =>
         {
-            LoadProfile(ProfileSession.Load(gewaehlt.Path));
+            LoadProfile(ProfileSession.Load(gewaehlt.Path, _library));
             StatusText = $"Profil geladen: {gewaehlt.Name}";
             return Task.CompletedTask;
         });
@@ -557,7 +577,7 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            LoadProfile(ProfileSession.Load(newPath));
+            LoadProfile(ProfileSession.Load(newPath, _library));
             StatusText = "Das offene Profil wurde umbenannt.";
         }
         catch (Exception ex) when (ex is ConfigurationException or IOException or UnauthorizedAccessException)
@@ -590,14 +610,14 @@ public sealed class MainViewModel : ObservableObject
         {
             if (antwort.OpenExisting)
             {
-                LoadProfile(ProfileSession.Load(antwort.TargetPath));
+                LoadProfile(ProfileSession.Load(antwort.TargetPath, _library));
                 StatusText = $"Profil geladen: {Path.GetFileName(antwort.TargetPath)}";
             }
             else
             {
                 // OK legt das Profil sofort an und speichert es: erst damit hat
                 // es einen Pfad und erscheint in Index und Uebersicht.
-                var session = ProfileSession.Create(antwort.Name, beispiele, antwort.Description);
+                var session = ProfileSession.Create(antwort.Name, beispiele, antwort.Description, _library);
                 session.Save(antwort.TargetPath);
                 LoadProfile(session);
 
@@ -683,10 +703,11 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// Baut die Auswahlliste der Generatoren aus dem Profil neu auf: die
-    /// eingebauten und die im Profil selbst angelegten eigenen Namensraeume.
-    /// Eigene Methode statt Inline-Code, weil sie an zwei Stellen noetig ist
-    /// -- beim Laden und jedesmal, wenn sich ueber das Praefix-Feld ein neuer
-    /// Namensraum ergibt.
+    /// eingebauten, die im Profil selbst angelegten eigenen Namensraeume, und
+    /// die der Generator-Bibliothek (mit Herkunftszusatz, siehe
+    /// <see cref="GeneratorOption.For"/>). Eigene Methode statt Inline-Code,
+    /// weil sie an zwei Stellen noetig ist -- beim Laden und jedesmal, wenn
+    /// sich ueber das Praefix-Feld ein neuer Namensraum ergibt.
     ///
     /// Gleicht die Liste ab, statt sie mit <c>Clear()</c> zu leeren und neu zu
     /// befuellen: <c>Clear()</c> loest ein Reset aus, und waehrend die Liste
@@ -701,7 +722,7 @@ public sealed class MainViewModel : ObservableObject
     {
         var ziel = _session is null
             ? Array.Empty<GeneratorOption>()
-            : GeneratorOption.For(_session.Profile);
+            : GeneratorOption.For(_session.Profile, _library);
 
         for (var i = 0; i < ziel.Count; i++)
         {
@@ -883,7 +904,7 @@ public sealed class MainViewModel : ObservableObject
             beispiele.TryGetValue(feld.FieldName, out var beispiel);
 
             Fields.Add(new FieldRuleViewModel(
-                _session.Profile, feld, beispiel, OnFieldRuleChanged));
+                _session.Profile, _library, feld, beispiel, OnFieldRuleChanged));
         }
 
         SelectedField = Fields.FirstOrDefault(f => !f.IsDecided) ?? Fields.FirstOrDefault();
@@ -1361,6 +1382,89 @@ public sealed class MainViewModel : ObservableObject
         }
     }
 
+    // ------------------------------------------------------ Mustererkennung
+
+    /// <summary>
+    /// Baut das Ansichtsmodell fuer den Dialog "Muster erkennen…": ein
+    /// Vorschlag je Feld, dessen Beispielwerte vollstaendig auf ein bekanntes
+    /// Muster passen (eingebaute Muster und die Textregeln der
+    /// Generator-Bibliothek, siehe <see cref="ValueSuggester"/>).
+    ///
+    /// Vorbelegt (Haekchen gesetzt) ist nur ein Feld, das im aktuellen Stand
+    /// noch auf "offen" (<see cref="FieldAction.Error"/>) steht -- ein bereits
+    /// entschiedenes Feld wird nie ohne ausdrueckliches Zutun ueberschrieben.
+    /// </summary>
+    private PatternSuggestionsViewModel? CreatePatternSuggestionsViewModel()
+    {
+        if (_session is null || _dataContent is null)
+            return null;
+
+        var beispiele = FieldSampler.Sample(_dataContent, _dataFilePath, _session.Profile.Input);
+        var vorschlaege = ValueSuggester.Suggest(beispiele, _library, _session.Profile.Defaults);
+
+        var items = vorschlaege
+            .Select(vorschlag =>
+            {
+                var feld = Fields.FirstOrDefault(f =>
+                    string.Equals(f.FieldName, vorschlag.FieldName, StringComparison.OrdinalIgnoreCase));
+                var vorbelegt = feld is not null && !feld.IsDecided;
+                return new PatternSuggestionItemViewModel(vorschlag, vorbelegt);
+            })
+            .ToList();
+
+        return new PatternSuggestionsViewModel(items, GeneratorLibrary.DefaultPath);
+    }
+
+    private async Task ShowPatternSuggestionsAsync()
+    {
+        if (CreatePatternSuggestionsViewModel() is not { } viewModel)
+            return;
+
+        var akzeptiert = await _dialogs().ShowPatternSuggestionsAsync(viewModel);
+        if (akzeptiert is null || akzeptiert.Count == 0)
+            return;
+
+        ApplyPatternSuggestions(akzeptiert);
+    }
+
+    /// <summary>
+    /// Uebernimmt die angehakten Vorschlaege: Aktion auf "ersetzen" und den
+    /// vorgeschlagenen Generator, ueber den vorhandenen Weg der einzelnen
+    /// Feldregel -- das markiert das Profil wie jede andere Aenderung als
+    /// ungespeichert veraendert.
+    ///
+    /// Wie <see cref="ApplyToSelection"/> gebuendelt in einer Massenzuweisung,
+    /// damit die Nacharbeit (Profilpruefung, Vorschau, Zaehler) einmal am Ende
+    /// laeuft statt einmal je uebernommenem Vorschlag.
+    /// </summary>
+    private void ApplyPatternSuggestions(IReadOnlyList<PatternSuggestionAcceptance> akzeptiert)
+    {
+        _bulkUpdate = true;
+        try
+        {
+            foreach (var eintrag in akzeptiert)
+            {
+                var feld = Fields.FirstOrDefault(f =>
+                    string.Equals(f.FieldName, eintrag.FieldName, StringComparison.OrdinalIgnoreCase));
+                if (feld is null)
+                    continue;
+
+                feld.Action = FieldAction.Pseudonymize;
+                feld.Generator = eintrag.Generator;
+            }
+        }
+        finally
+        {
+            _bulkUpdate = false;
+        }
+
+        OnFieldRuleChanged();
+
+        StatusText = akzeptiert.Count == 1
+            ? "1 Feld aus der Mustererkennung übernommen."
+            : $"{akzeptiert.Count} Felder aus der Mustererkennung übernommen.";
+    }
+
     // -------------------------------------------------------------- Ansicht
 
     private void ToggleTheme()
@@ -1402,5 +1506,6 @@ public sealed class MainViewModel : ObservableObject
         ScanCommand.RaiseCanExecuteChanged();
         ObfuscateAllCommand.RaiseCanExecuteChanged();
         DeobfuscateAllCommand.RaiseCanExecuteChanged();
+        ShowPatternSuggestionsCommand.RaiseCanExecuteChanged();
     }
 }

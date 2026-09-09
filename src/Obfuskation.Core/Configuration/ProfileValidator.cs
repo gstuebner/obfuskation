@@ -8,6 +8,14 @@ namespace Obfuskation.Core.Configuration;
 /// Prueft ein Profil auf Widersprueche. Liefert eine Liste einzelner Befunde
 /// statt einer Sammelmeldung, damit die Oberflaeche jeden Hinweis am
 /// zugehoerigen Eingabefeld anzeigen kann.
+///
+/// Seit der Generator-Bibliothek (<see cref="GeneratorLibrary"/>) prueft diese
+/// Klasse zwei Quellen: das Profil selbst und die Bibliothek, die neben jedem
+/// Profil in dieselbe Generatorenmenge einfliesst. Ein Verweis auf einen
+/// Bibliothekseintrag gilt als bekannt; ein fehlerhafter Bibliothekseintrag
+/// wird mit demselben Massstab gemeldet wie ein fehlerhafter Profileintrag,
+/// nur unter dem Pfad <c>library.generators.&lt;key&gt;</c> bzw.
+/// <c>library.textRules[i]</c>.
 /// </summary>
 public static class ProfileValidator
 {
@@ -61,8 +69,9 @@ public static class ProfileValidator
         ("maskChar", "partialMask"),
     ];
 
-    public static IReadOnlyList<ValidationIssue> Validate(Profile profile)
+    public static IReadOnlyList<ValidationIssue> Validate(Profile profile, GeneratorLibrary? library = null)
     {
+        library ??= GeneratorLibrary.Load();
         var issues = new List<ValidationIssue>();
 
         if (profile.Version > Profile.CurrentVersion)
@@ -78,9 +87,9 @@ public static class ProfileValidator
                 "Der Profilname darf nicht leer sein; er bestimmt die Ablage der Ersetzungstabelle."));
         }
 
-        ValidateGenerators(profile, issues);
-        ValidateTextRules(profile, issues);
-        ValidateFields(profile, issues);
+        ValidateGenerators(profile, library, issues);
+        ValidateTextRules(profile, library, issues);
+        ValidateFields(profile, library, issues);
 
         if (profile.Fields.Count == 0 && profile.TextRules.Count == 0)
         {
@@ -98,69 +107,89 @@ public static class ProfileValidator
         return issues;
     }
 
-    private static void ValidateGenerators(Profile profile, List<ValidationIssue> issues)
+    private static void ValidateGenerators(Profile profile, GeneratorLibrary library, List<ValidationIssue> issues)
     {
+        foreach (var (key, settings) in library.Generators)
+            ValidateGeneratorEntry("library.generators", key, settings, issues);
+
         foreach (var (key, settings) in profile.Generators)
         {
-            var baseName = string.IsNullOrWhiteSpace(settings.Type) ? key : settings.Type;
+            ValidateGeneratorEntry("generators", key, settings, issues);
 
-            if (!GeneratorRegistry.KnownNames.Contains(baseName, StringComparer.OrdinalIgnoreCase))
+            // Ein gleichnamiger Profileintrag gewinnt (siehe
+            // GeneratorRegistry.Build) — das ist gewollt moeglich, aber ein
+            // wortlos ueberschriebener Bibliothekseintrag ist eine leichte
+            // Ueberraschung wert.
+            if (library.Generators.ContainsKey(key))
             {
-                issues.Add(new ValidationIssue($"generators.{key}.type", ValidationSeverity.Error,
-                    $"Unbekannter Generatortyp '{baseName}'. Verfügbar: " +
-                    string.Join(", ", GeneratorRegistry.KnownNames)));
+                issues.Add(new ValidationIssue($"generators.{key}", ValidationSeverity.Warning,
+                    $"'{key}' überschreibt den gleichnamigen Eintrag aus der Generator-Bibliothek für " +
+                    "dieses Profil; die Bibliotheksfassung greift hier nicht."));
             }
-
-            if (settings.MaxDays < 0)
-            {
-                issues.Add(new ValidationIssue($"generators.{key}.maxDays", ValidationSeverity.Error,
-                    "maxDays darf nicht negativ sein."));
-            }
-
-            ValidateOptionOwnership(key, baseName, settings, issues);
-
-            if (string.Equals(baseName, "token", StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrEmpty(settings.Prefix))
-            {
-                if (!PrefixPattern.IsMatch(settings.Prefix))
-                {
-                    issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
-                        $"Das Präfix '{settings.Prefix}' ist ungültig. Erlaubt sind Buchstaben, " +
-                        "Ziffern, '_' und '-', abgeschlossen mit '~' oder '_' " +
-                        "(Muster: ^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$)."));
-                }
-
-                // Unabhaengig vom Zeichenvorrat geprueft: das Praefix steht in
-                // jedem einzelnen Wert der Spalte, laenger macht die Pseudodatei
-                // unleserlicher, statt sie lesbar zu machen.
-                if (settings.Prefix.Length > 32)
-                {
-                    issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
-                        "Das Präfix darf höchstens 32 Zeichen lang sein."));
-                }
-            }
-
-            if (string.Equals(baseName, "dateRange", StringComparison.OrdinalIgnoreCase))
-                ValidateDateRange(key, settings, issues);
-
-            if (string.Equals(baseName, "dateGeneralize", StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrWhiteSpace(settings.Granularity)
-                && !AllowedGranularities.Contains(settings.Granularity, StringComparer.OrdinalIgnoreCase))
-            {
-                issues.Add(new ValidationIssue($"generators.{key}.granularity", ValidationSeverity.Error,
-                    $"'{settings.Granularity}' ist keine gültige Granularität. Erlaubt: " +
-                    string.Join(", ", AllowedGranularities) + "."));
-            }
-
-            if (string.Equals(baseName, "pattern", StringComparison.OrdinalIgnoreCase))
-                ValidatePattern(key, settings, issues);
-
-            if (string.Equals(baseName, "wordlist", StringComparison.OrdinalIgnoreCase))
-                ValidateWordlist(key, settings, issues);
-
-            if (string.Equals(baseName, "partialMask", StringComparison.OrdinalIgnoreCase))
-                ValidatePartialMask(key, settings, issues);
         }
+    }
+
+    private static void ValidateGeneratorEntry(
+        string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        var baseName = string.IsNullOrWhiteSpace(settings.Type) ? key : settings.Type;
+
+        if (!GeneratorRegistry.KnownNames.Contains(baseName, StringComparer.OrdinalIgnoreCase))
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.type", ValidationSeverity.Error,
+                $"Unbekannter Generatortyp '{baseName}'. Verfügbar: " +
+                string.Join(", ", GeneratorRegistry.KnownNames)));
+        }
+
+        if (settings.MaxDays < 0)
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.maxDays", ValidationSeverity.Error,
+                "maxDays darf nicht negativ sein."));
+        }
+
+        ValidateOptionOwnership(pathPrefix, key, baseName, settings, issues);
+
+        if (string.Equals(baseName, "token", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrEmpty(settings.Prefix))
+        {
+            if (!PrefixPattern.IsMatch(settings.Prefix))
+            {
+                issues.Add(new ValidationIssue($"{pathPrefix}.{key}.prefix", ValidationSeverity.Error,
+                    $"Das Präfix '{settings.Prefix}' ist ungültig. Erlaubt sind Buchstaben, " +
+                    "Ziffern, '_' und '-', abgeschlossen mit '~' oder '_' " +
+                    "(Muster: ^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$)."));
+            }
+
+            // Unabhaengig vom Zeichenvorrat geprueft: das Praefix steht in
+            // jedem einzelnen Wert der Spalte, laenger macht die Pseudodatei
+            // unleserlicher, statt sie lesbar zu machen.
+            if (settings.Prefix.Length > 32)
+            {
+                issues.Add(new ValidationIssue($"{pathPrefix}.{key}.prefix", ValidationSeverity.Error,
+                    "Das Präfix darf höchstens 32 Zeichen lang sein."));
+            }
+        }
+
+        if (string.Equals(baseName, "dateRange", StringComparison.OrdinalIgnoreCase))
+            ValidateDateRange(pathPrefix, key, settings, issues);
+
+        if (string.Equals(baseName, "dateGeneralize", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(settings.Granularity)
+            && !AllowedGranularities.Contains(settings.Granularity, StringComparer.OrdinalIgnoreCase))
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.granularity", ValidationSeverity.Error,
+                $"'{settings.Granularity}' ist keine gültige Granularität. Erlaubt: " +
+                string.Join(", ", AllowedGranularities) + "."));
+        }
+
+        if (string.Equals(baseName, "pattern", StringComparison.OrdinalIgnoreCase))
+            ValidatePattern(pathPrefix, key, settings, issues);
+
+        if (string.Equals(baseName, "wordlist", StringComparison.OrdinalIgnoreCase))
+            ValidateWordlist(pathPrefix, key, settings, issues);
+
+        if (string.Equals(baseName, "partialMask", StringComparison.OrdinalIgnoreCase))
+            ValidatePartialMask(pathPrefix, key, settings, issues);
     }
 
     /// <summary>
@@ -169,7 +198,7 @@ public static class ProfileValidator
     /// gedacht ist, hat dort keine Wirkung und ist ein Konfigurationsfehler.
     /// </summary>
     private static void ValidateOptionOwnership(
-        string key, string baseName, GeneratorSettings settings, List<ValidationIssue> issues)
+        string pathPrefix, string key, string baseName, GeneratorSettings settings, List<ValidationIssue> issues)
     {
         foreach (var (option, allowedBaseType) in OptionOwnership)
         {
@@ -185,14 +214,14 @@ public static class ProfileValidator
                 // gueltige IBAN, eine Zahlenkennung mit erhaltener Stellenzahl,
                 // ein verschobenes Datum) — ein vorangestelltes Praefix zerstoert
                 // genau das und macht z. B. aus einer IBAN keine IBAN mehr.
-                issues.Add(new ValidationIssue($"generators.{key}.prefix", ValidationSeverity.Error,
+                issues.Add(new ValidationIssue($"{pathPrefix}.{key}.prefix", ValidationSeverity.Error,
                     $"'prefix' gilt nur für den Generatortyp 'token'. Generator '{key}' erzeugt Werte " +
                     $"vom Typ '{baseName}', die ihr eigenes Format tragen; ein Präfix würde dieses " +
                     "Format zerstören."));
                 continue;
             }
 
-            issues.Add(new ValidationIssue($"generators.{key}.{option}", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.{option}", ValidationSeverity.Error,
                 $"'{option}' gilt nur für den Generatortyp '{allowedBaseType}'. Generator '{key}' " +
                 $"erzeugt Werte vom Typ '{baseName}' und wertet '{option}' nicht aus."));
         }
@@ -213,7 +242,8 @@ public static class ProfileValidator
         _ => false,
     };
 
-    private static void ValidateDateRange(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    private static void ValidateDateRange(
+        string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
     {
         if (string.IsNullOrWhiteSpace(settings.From) && string.IsNullOrWhiteSpace(settings.To))
             return; // Ohne Angabe gilt das Kalenderjahr des Originals, siehe DateRangeGenerator.
@@ -225,23 +255,24 @@ public static class ProfileValidator
 
         if (!fromOk || !toOk)
         {
-            issues.Add(new ValidationIssue($"generators.{key}.from", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.from", ValidationSeverity.Error,
                 "'from' und 'to' müssen beide als ISO-Datum gesetzt sein (z. B. '1950-01-01')."));
             return;
         }
 
         if (from > to)
         {
-            issues.Add(new ValidationIssue($"generators.{key}.from", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.from", ValidationSeverity.Error,
                 "'from' darf nicht nach 'to' liegen."));
         }
     }
 
-    private static void ValidatePattern(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    private static void ValidatePattern(
+        string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
     {
         if (settings.Pattern is { Length: 0 })
         {
-            issues.Add(new ValidationIssue($"generators.{key}.pattern", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.pattern", ValidationSeverity.Error,
                 "Die Maske darf nicht leer sein. Nicht gesetzt ist erlaubt -- dann wird sie aus dem " +
                 "Original abgeleitet."));
             return;
@@ -253,7 +284,7 @@ public static class ProfileValidator
         var pool = PatternValuePool(mask);
         if (pool < MinimumPatternValuePool)
         {
-            issues.Add(new ValidationIssue($"generators.{key}.pattern", ValidationSeverity.Warning,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.pattern", ValidationSeverity.Warning,
                 $"Die Maske '{mask}' lässt nur {pool} verschiedene Werte zu. Bei vielen Klartexten kann " +
                 "der Generator keinen freien Wert mehr finden und der Lauf mit einer " +
                 "MappingConflictException abbrechen; eine längere Maske schafft mehr Spielraum."));
@@ -293,53 +324,63 @@ public static class ProfileValidator
         return pool;
     }
 
-    private static void ValidateWordlist(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    private static void ValidateWordlist(
+        string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
     {
         if (settings.Values is not { Count: > 0 })
         {
-            issues.Add(new ValidationIssue($"generators.{key}.values", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.values", ValidationSeverity.Error,
                 $"Generator '{key}' vom Typ 'wordlist' braucht mindestens einen Wert unter 'values'."));
             return;
         }
 
         if (settings.Values.Count < MinimumWordlistValues)
         {
-            issues.Add(new ValidationIssue($"generators.{key}.values", ValidationSeverity.Warning,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.values", ValidationSeverity.Warning,
                 $"Nur {settings.Values.Count} Werte unter 'values'. Bei vielen Klartexten kann der " +
                 "Generator keinen freien Wert mehr finden und der Lauf mit einer " +
                 "MappingConflictException abbrechen; mehr Werte schaffen mehr Spielraum."));
         }
     }
 
-    private static void ValidatePartialMask(string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    private static void ValidatePartialMask(
+        string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
     {
         if (settings.KeepFirst < 0)
         {
-            issues.Add(new ValidationIssue($"generators.{key}.keepFirst", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.keepFirst", ValidationSeverity.Error,
                 "'keepFirst' darf nicht negativ sein."));
         }
 
         if (settings.KeepLast < 0)
         {
-            issues.Add(new ValidationIssue($"generators.{key}.keepLast", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.keepLast", ValidationSeverity.Error,
                 "'keepLast' darf nicht negativ sein."));
         }
 
         if (settings.MaskChar is { Length: not 1 })
         {
-            issues.Add(new ValidationIssue($"generators.{key}.maskChar", ValidationSeverity.Error,
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.maskChar", ValidationSeverity.Error,
                 "'maskChar' muss genau ein Zeichen lang sein."));
         }
     }
 
-    private static void ValidateTextRules(Profile profile, List<ValidationIssue> issues)
+    private static void ValidateTextRules(Profile profile, GeneratorLibrary library, List<ValidationIssue> issues)
+    {
+        ValidateTextRuleList(library.TextRules, "library.textRules", profile, library, issues);
+        ValidateTextRuleList(profile.TextRules, "textRules", profile, library, issues);
+    }
+
+    private static void ValidateTextRuleList(
+        IReadOnlyList<TextRule> rules, string pathPrefix, Profile profile, GeneratorLibrary library,
+        List<ValidationIssue> issues)
     {
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        for (var index = 0; index < profile.TextRules.Count; index++)
+        for (var index = 0; index < rules.Count; index++)
         {
-            var rule = profile.TextRules[index];
-            var path = $"textRules[{index}]";
+            var rule = rules[index];
+            var path = $"{pathPrefix}[{index}]";
 
             if (string.IsNullOrWhiteSpace(rule.Name))
             {
@@ -370,7 +411,7 @@ public static class ProfileValidator
                 }
             }
 
-            ValidateGeneratorReference(profile, rule.Generator, $"{path}.generator", issues);
+            ValidateGeneratorReference(profile, library, rule.Generator, $"{path}.generator", issues);
 
             if (rule.CaptureGroup < 0)
             {
@@ -380,10 +421,11 @@ public static class ProfileValidator
         }
     }
 
-    private static void ValidateFields(Profile profile, List<ValidationIssue> issues)
+    private static void ValidateFields(Profile profile, GeneratorLibrary library, List<ValidationIssue> issues)
     {
         var textRuleNames = new HashSet<string>(
-            profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
+            library.TextRules.Select(rule => rule.Name).Concat(profile.TextRules.Select(rule => rule.Name)),
+            StringComparer.OrdinalIgnoreCase);
 
         for (var index = 0; index < profile.Fields.Count; index++)
         {
@@ -418,7 +460,7 @@ public static class ProfileValidator
                     }
                     else
                     {
-                        ValidateGeneratorReference(profile, rule.Generator, $"{path}.generator", issues);
+                        ValidateGeneratorReference(profile, library, rule.Generator, $"{path}.generator", issues);
                     }
                     break;
 
@@ -434,7 +476,7 @@ public static class ProfileValidator
                             }
                         }
                     }
-                    else if (profile.TextRules.Count == 0)
+                    else if (profile.TextRules.Count == 0 && library.TextRules.Count == 0)
                     {
                         issues.Add(new ValidationIssue($"{path}.textRules", ValidationSeverity.Warning,
                             "'scanText' ohne hinterlegte Textregeln bewirkt nichts."));
@@ -451,13 +493,14 @@ public static class ProfileValidator
     }
 
     private static void ValidateGeneratorReference(
-        Profile profile, string? generatorName, string path, List<ValidationIssue> issues)
+        Profile profile, GeneratorLibrary library, string? generatorName, string path, List<ValidationIssue> issues)
     {
         if (string.IsNullOrWhiteSpace(generatorName))
             return;
 
         var known = GeneratorRegistry.KnownNames.Contains(generatorName, StringComparer.OrdinalIgnoreCase)
-                    || profile.Generators.ContainsKey(generatorName);
+                    || profile.Generators.ContainsKey(generatorName)
+                    || library.Generators.ContainsKey(generatorName);
 
         if (!known)
         {

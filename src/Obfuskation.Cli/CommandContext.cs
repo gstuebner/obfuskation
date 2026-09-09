@@ -63,6 +63,15 @@ public static class CommandContext
         => value.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) < 0
            && !value.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Laedt die Generator-Bibliothek, oder eine leere, wenn <c>--no-library</c>
+    /// gesetzt ist. Zentral, damit jeder Unterbefehl dieselbe Bibliothek gleich
+    /// behandelt — sonst brechen die Aequivalenztests zwischen Oberflaeche und
+    /// Kommandozeile.
+    /// </summary>
+    public static GeneratorLibrary LoadLibrary(bool noLibrary)
+        => noLibrary ? GeneratorLibrary.Empty : GeneratorLibrary.Load();
+
     public static byte[] ReadInput(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || path == "-")

@@ -76,8 +76,25 @@
          umkehrbarer Generatoren als "nichtWiederherstellbar" statt als
          unbekanntes Pseudonym. In der Oberflaeche ein eigener Dialog fuer
          die neuen Optionen, der seine Zuordnung aus
-         ProfileValidator.OptionOwnership liest. -->
-    <Version>1.5.0</Version>
+         ProfileValidator.OptionOwnership liest.
+         1.6.0: Generator-Bibliothek. Hauseigene Muster, etwa ein Inventarnummer
+         der Form INV123456, sind Betriebswissen und haben in einer Profildatei
+         nichts verloren, die geteilt oder eingecheckt wird. Sie liegen
+         deshalb in einer eigenen, privaten Datei
+         (~/.config/obfuskation/generators.json, GeneratorLibrary) und
+         fliessen zur Laufzeit in jedes Profil ein, ohne je hineingeschrieben
+         zu werden; bei gleichem Namen gewinnt immer das Profil. Neu dazu der
+         Befehl 'library list|path' und eine Option, die einen Lauf ohne die
+         Bibliothek erzwingt. Zweitens die wertbasierte Mustererkennung
+         (ValueSuggester): bisher raten Vorschlaege allein am Feldnamen, jetzt
+         zaehlt zuerst, ob die Beispielwerte vollstaendig auf ein bekanntes
+         Muster passen, eingebautes oder eigenes aus der Bibliothek. In der
+         Oberflaeche als Knopf "Muster erkennen...", auf der Kommandozeile in
+         den Kommentaren von 'init'. Drittens der Nachzug der Dokumentation:
+         die fuenf Generatoren aus 1.5.0 standen in keiner Doku, und die
+         Entwicklerdokumentation behauptete noch, 'redact' zweckentfremde
+         'domain' als Platzhalter. -->
+    <Version>1.6.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,
