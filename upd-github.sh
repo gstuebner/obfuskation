@@ -9,7 +9,8 @@
 #   4. ./build-release.sh aufrufen (linux-x64 und win-x64)
 #   5. Auslieferungsordner zusammenstellen (Programme, Doku, Desktop-Integration)
 #   6. Release-Archive schnueren (.tar.gz fuer Linux, .zip fuer Windows)
-#   7. SHA256SUMS.txt generieren
+#   7. SHA256SUMS.txt generieren und die Auslieferungsordner wieder entfernen,
+#      deren Inhalt jetzt in den Archiven steckt (behaltbar mit --behalten)
 #   8. Git-Branch und Versionstag pushen
 #   9. GitHub-Release via 'gh release create' samt Assets hochladen
 
@@ -23,6 +24,7 @@ DRAFT="false"
 NO_PUSH="false"
 NOTES_FILE=""
 CUSTOM_TITLE=""
+BEHALTEN="false"
 
 usage() {
   cat <<'EOF'
@@ -37,6 +39,7 @@ Optionen:
   --no-push          Nur lokal bauen und paketieren, kein git push / gh release
   --notes-file <f>   Markdown-Datei mit Release-Hinweisen
   --title <text>     Abweichender Release-Titel (Vorgabe: "<Version> — Release")
+  --behalten         Die Auslieferungsverzeichnisse nach dem Packen stehen lassen
   -h, --help         Diese Hilfe
 EOF
 }
@@ -48,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --no-push)    NO_PUSH="true"; shift ;;
     --notes-file) NOTES_FILE="${2:?--notes-file braucht einen Dateipfad}"; shift 2 ;;
     --title)      CUSTOM_TITLE="${2:?--title braucht einen Text}"; shift 2 ;;
+    --behalten)   BEHALTEN="true"; shift ;;
     -h|--help)    usage; exit 0 ;;
     *) echo "Unbekannte Option: $1" >&2; echo "Hilfe: $0 --help" >&2; exit 1 ;;
   esac
@@ -188,6 +192,19 @@ esac
 echo "--> Berechne SHA256-Pruefsummen..."
 (cd "${PAKETE_DIR}" && sha256sum "${LINUX_TAR}" "${WIN_ZIP}" > SHA256SUMS.txt)
 cat "${PAKETE_DIR}/SHA256SUMS.txt"
+
+# Die beiden Verzeichnisse sind eine Zwischenstufe: ihr Inhalt steckt jetzt in
+# den Archiven. Blieben sie liegen, sammelte sich unter publish/ mit jedem
+# Release ein weiteres Paar von rund 60 MB an, das niemand je wieder anfasst.
+# Mit --behalten bleiben sie stehen, um ein Paket vor dem Hochladen von Hand
+# durchzusehen.
+if [[ "${BEHALTEN}" == "true" ]]; then
+  echo "--> Auslieferungsverzeichnisse bleiben stehen (--behalten aktiv):"
+  echo "    ${LINUX_DIR}"
+  echo "    ${WIN_DIR}"
+else
+  rm -rf "${LINUX_DIR}" "${WIN_DIR}"
+fi
 
 if [[ "${NO_PUSH}" == "true" ]]; then
   echo "=== Erfolgreich lokal gebaut und gepackt (--no-push aktiv) ==="
