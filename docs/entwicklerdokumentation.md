@@ -635,6 +635,15 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 | `captureGroup` | `int` | `0` | Gruppennummer, deren Inhalt ersetzt wird; `0` = gesamter Treffer |
 | `ignoreCase` | `bool` | `false` | Groß-/Kleinschreibung beim Musterabgleich ignorieren |
 
+**`FieldNameRule`** — nur in der Erweiterungsdatei (`ExtensionLibrary.FieldRules`), nicht im Profil selbst
+
+| Feld | Typ | Vorgabe | Wirkung |
+|---|---|---|---|
+| `pattern` | `string` | `""` | Regulärer Ausdruck für den **ganzen** Feldnamen; `FieldNameSuggester` umschließt ihn mit `\A(?:…)\z`, ein Teiltreffer zählt also nicht |
+| `generator` | `string` | `""` | Generatorname — eingebaut, aus `ExtensionLibrary.Generators`, oder der Sonderwert `scanText` für ein Freitextfeld |
+| `ignoreCase` | `bool` | `true` | Anders als bei `TextRule.IgnoreCase` standardmäßig aktiv: Spaltennamen unterscheiden sich in der Schreibweise ständig, und das frühere eingebaute Namensraten war ebenfalls unabhängig davon |
+| `comment` | `string?` | `null` | Freitext für den Menschen |
+
 **`GeneratorSettings`**
 
 | Feld | Typ | Vorgabe | Wirkung |
@@ -666,69 +675,120 @@ auseinander. Eine Option, die an einem falschen Basistyp hängt (etwa
 `values` an einem `pattern`-Eintrag), ist ein Validierungsfehler
 (`ValidationSeverity.Error`), kein stillschweigend wirkungsloses Feld.
 
-### Generator-Bibliothek
+### Erweiterungsdatei
 
-Fester, persönlicher Ort, unabhängig von Kommandozeile oder Oberfläche:
+Zwei feste Fundorte, unabhängig von Kommandozeile oder Oberfläche, geprüft
+in dieser Reihenfolge — die zuerst gefundene Datei gilt vollständig, es
+wird nichts zusammengemischt:
 
 ```
-~/.config/obfuskation/generators.json      # PathHelper.ConfigDirectory
+<Verzeichnis der Programmdatei>/obfuskation.json   # ExtensionOrigin.ProgramDirectory
+~/.config/obfuskation/obfuskation.json             # ExtensionOrigin.ConfigDirectory, PathHelper.ConfigDirectory
 ```
 
-Klasse `GeneratorLibrary`
-(`src/Obfuskation.Core/Configuration/GeneratorLibrary.cs`), dieselben
+`ExtensionLibrary.ResolvePath(programDirectory = null)`
+(`src/Obfuskation.Core/Configuration/ExtensionLibrary.cs`) liefert beides:
+den Pfad, der gelten würde (`null`, wenn keiner der beiden Orte eine Datei
+hergibt), und alle geprüften Orte samt Befund
+(`ExtensionCandidate(Path, Origin, Exists, SkippedAsProfile)`) — Grundlage
+für `extensions path` und `extensions list`, die beide begründen sollen,
+was sie zeigen, statt ein Ergebnis unerklärt hinzustellen.
+
+**Bewusst `Environment.ProcessPath`, nicht `AppContext.BaseDirectory`:** bei
+der Einzeldatei-Veröffentlichung (`PublishSingleFile`, siehe
+`build-release.sh`) zeigt Letzteres in das Auspackverzeichnis unter `/tmp`
+und wäre damit für „neben der Programmdatei" nutzlos.
+`programDirectory` lässt sich ausdrücklich übergeben — ausschließlich für
+Tests gedacht, die nicht den echten Pfad des Testläufers ansprechen
+dürfen.
+
+**Abgrenzung zur Profildatei:** Die Projektdatei heißt seit dieser Fassung
+`obfuskation-projekt.json` (`ProfileStore.DefaultFileName`); der
+unqualifizierte, frühere Name `obfuskation.json`
+(`ProfileStore.LegacyFileName`) bleibt als Profil lesbar, sofern er wie
+eines aussieht. Beide Rollen können also denselben Dateinamen tragen, etwa
+bei einer tragbaren Ablage, in der Programmdatei und Datenbestand im
+selben Ordner liegen. Aufgelöst wird das am Inhalt, mit einem Helfer, den
+es schon vorher gab — `ProfileStore.LooksLikeProfile(path)` prüft, ob eine
+Datei `profileName` oder `fields` trägt. `ExtensionLibrary.ResolvePath`
+prüft an jedem Fundort zusätzlich diese Methode: trifft sie zu, liegt dort
+eine Projektdatei, keine Erweiterungsdatei, der Kandidat wird als
+`SkippedAsProfile` markiert und der nächste Ort geprüft. Umgekehrt prüft
+`ProfileStore.Discover` dieselbe Methode, um eine gefundene
+`LegacyFileName` nicht ungeprüft als Profil zu übernehmen — sie könnte an
+derselben Stelle auch die Erweiterungsdatei sein, die weder `profileName`
+noch `fields` trägt; ohne diese Prüfung bliebe die Suche an ihr hängen,
+statt eine Ebene höher nach einem tatsächlichen Profil weiterzusuchen. Ein
+einziger Helfer für beide Richtungen, damit sie nicht auseinanderlaufen.
+
+Klasse `ExtensionLibrary`
+(`src/Obfuskation.Core/Configuration/ExtensionLibrary.cs`), dieselben
 Typen wie im Profil — `Dictionary<string, GeneratorSettings> Generators`
-und `List<TextRule> TextRules` —, kein zweites Schema und keine zweite
-Validierung. `GeneratorLibrary.Load(path)` lädt mit denselben
+und `List<TextRule> TextRules` —, dazu neu `List<FieldNameRule> FieldRules`
+(siehe Schematabelle oben); kein zweites Schema und keine zweite
+Validierung. `ExtensionLibrary.Load(path)` lädt mit denselben
 `JsonSerializerOptions` wie `ProfileStore` (camelCase, Kommentare und
-trailing commas erlaubt): eine fehlende Datei ergibt `GeneratorLibrary.Empty`,
+trailing commas erlaubt): eine fehlende Datei ergibt `ExtensionLibrary.Empty`,
 eine kaputte wirft eine `ConfigurationException` mit Pfad.
 
-**Die Bibliothek wird nie in ein speicherbares `Profile`-Objekt gemischt.**
-Sonst schriebe die Oberfläche beim nächsten Speichern eines Profils die
-Bibliothekseinträge in jede Profildatei hinein — genau das soll die
-Trennung verhindern. Stattdessen wird sie an drei Stellen berücksichtigt,
-mit dem Profil stets als Sieger bei gleichem Schlüssel bzw. Namen:
+**Die Erweiterungsdatei wird nie in ein speicherbares `Profile`-Objekt
+gemischt.** Sonst schriebe die Oberfläche beim nächsten Speichern eines
+Profils die Erweiterungseinträge in jede Profildatei hinein — genau das
+soll die Trennung verhindern. Stattdessen wird sie an vier Stellen
+berücksichtigt, mit dem Profil stets als Sieger bei gleichem Schlüssel bzw.
+Namen:
 
 | Ort | Vorrangregel |
 |---|---|
-| `GeneratorRegistry.Build(profile, deriver, library)` | Eingebaute Generatoren, dann Bibliothekseinträge, dann Profileinträge — das Profil gewinnt bei gleichem Schlüssel |
-| `ObfuscationEngine` (Textregeln, über `TextRuleEngine`) | Bibliotheksregeln plus Profilregeln; bei gleichem `name` gewinnt die Profilregel, die Bibliotheksregel entfällt dann ganz statt zusätzlich zu greifen |
-| `ProfileValidator.Validate(profile, library)` | Ein `generator`-Verweis auf einen Bibliotheksschlüssel gilt als bekannt statt als Fehler; Bibliothekseinträge werden mit derselben Logik wie Profileinträge geprüft (`OptionOwnership`, `ValidatePattern`, Wertevorrat), Befundpfad `library.generators.<key>` bzw. `library.textRules[i]`. Verdeckt ein Profileintrag einen gleichnamigen Bibliothekseintrag, ist das nur `Info`/`Warning`, kein `Error` |
+| `GeneratorRegistry.Build(profile, deriver, extensions)` | Eingebaute Generatoren, dann Erweiterungseinträge, dann Profileinträge — das Profil gewinnt bei gleichem Schlüssel |
+| `ObfuscationEngine` (Textregeln, über `TextRuleEngine`) | Erweiterungsregeln plus Profilregeln; bei gleichem `name` gewinnt die Profilregel, die Erweiterungsregel entfällt dann ganz statt zusätzlich zu greifen |
+| `ProfileValidator.Validate(profile, extensions)` | Ein `generator`-Verweis auf einen Erweiterungsschlüssel gilt als bekannt statt als Fehler; Erweiterungseinträge werden mit derselben Logik wie Profileinträge geprüft (`OptionOwnership`, `ValidatePattern`, Wertevorrat), Befundpfad `extensions.generators.<key>` bzw. `extensions.textRules[i]` bzw. `extensions.fieldRules[i]`. Verdeckt ein Profileintrag einen gleichnamigen Erweiterungseintrag, ist das nur `Info`/`Warning`, kein `Error` |
+| `FieldNameSuggester.Suggest(fieldName, extensions)` | Spaltenmuster (`FieldRules`) fließen nur hier ein, nicht in `GeneratorRegistry` oder `ObfuscationEngine` — reines Vorschlagswesen, siehe unten |
 
-Kommandozeile: `obfuskation library list|path`, gebaut nach demselben
+Kommandozeile: `obfuskation extensions list|path`, gebaut nach demselben
 Muster wie `mapping list|path` (`BuildMappingCommand`,
-`src/Obfuskation.Cli/Program.cs:300`) — mit dem Unterschied, dass `list`
-hier die Muster selbst zeigt, weil die Bibliothek anders als die
-Ersetzungstabelle keine Echtdaten enthält. `--no-library` als globale
-Option unterdrückt das Laden für einen einzelnen Lauf.
+`src/Obfuskation.Cli/Program.cs`) — mit dem Unterschied, dass `list` hier
+die Muster selbst zeigt, weil die Erweiterungsdatei anders als die
+Ersetzungstabelle keine Echtdaten enthält, und zusätzlich nennt, welcher
+der beiden Fundorte greift. `path` nennt bei Fehlschlag beide geprüften
+Orte, und bei jedem Ort, an dem eine Datei liegt, aber `SkippedAsProfile`
+zutrifft, dass dort statt einer Erweiterung ein Profil übergangen wurde.
+`--no-extensions` als globale Option unterdrückt das Laden für einen
+einzelnen Lauf.
 
-Oberfläche: Bibliothekseinträge erscheinen in der Generatorauswahl mit
+Oberfläche: Erweiterungseinträge erscheinen in der Generatorauswahl mit
 Herkunftszusatz, sind in dieser Fassung aber nur lesend — kein Editor dafür,
-gepflegt wird die Datei im Texteditor. Lässt sich die Bibliothek nicht
-laden, erscheint eine Statuszeile mit dem Pfad, und das Programm arbeitet
-ohne sie weiter — eine kaputte Bibliothek darf die Oberfläche nicht
-blockieren.
+gepflegt wird die Datei im Texteditor. Lässt sich die Erweiterungsdatei
+nicht laden, erscheint eine Statuszeile mit dem Pfad, und das Programm
+arbeitet ohne sie weiter — eine kaputte Erweiterungsdatei darf die
+Oberfläche nicht blockieren.
 
-Ein lauffähiges Beispiel liegt unter `docs/beispiel/bibliothek-beispiel.json`.
+Ein lauffähiges Beispiel liegt unter
+`docs/beispiel/obfuskation-erweiterung-beispiel.json` — es bildet zugleich
+das bis 1.5.0 fest einkompilierte Namensraten als `fieldRules` nach (siehe
+unten).
 
 **Testumleitung:** Wie beim übrigen Konfigurationszugriff läuft das über
-`XDG_CONFIG_HOME` in `TestUmgebung` — die Bibliothek liegt dadurch
-automatisch im Testverzeichnis. Ein Test, der `GeneratorLibrary.DefaultPath`
-ungebremst auswertet (etwa ohne über eine umgeleitete Umgebung zu laufen),
-würde lokal grün und im nächsten Klon rot laufen — bei neuen Tests darauf
-achten.
+`XDG_CONFIG_HOME` in `TestUmgebung` für den Fundort im Konfigurationsordner
+— die Erweiterungsdatei liegt dadurch automatisch im Testverzeichnis. Für
+den Fundort „neben der Programmdatei" wird der Pfad im Test ausdrücklich
+über den `programDirectory`-Parameter von `ResolvePath` übergeben, **nie**
+aus `Environment.ProcessPath` des Testläufers abgeleitet — sonst würde ein
+Test lokal grün und im nächsten Klon (anderer Pfad des Testläufers) rot
+laufen, oder schlimmer, unbemerkt gegen eine echte Datei neben `dotnet`
+selbst greifen.
 
 ### Mustererkennung (`ValueSuggester`)
 
 Klasse `ValueSuggester`
 (`src/Obfuskation.Core/Configuration/ValueSuggester.cs`),
-`Suggest(samplesByField, library)` liefert je Feld höchstens einen
+`Suggest(samplesByField, extensions)` liefert je Feld höchstens einen
 `ValueSuggestion` (Feldname, Generator, Beleg-Beispielwert, Trefferzahl).
 Verfahren, bewusst streng:
 
 - Kandidatenmuster sind `ProfileScaffolder.DefaultTextRules()` **plus** die
-  Textregeln der Bibliothek — dadurch schlägt die Erkennung auch
-  Bibliotheksmuster wie `assetTag` vor.
+  Textregeln der Erweiterungsdatei — dadurch schlägt die Erkennung auch
+  Erweiterungsmuster wie `assetTag` vor.
 - Ein Muster zählt nur bei **vollständigem** Treffer auf den getrimmten
   Wert (Regex mit `\A(?:…)\z` umschlossen), nicht bei einem Treffer
   irgendwo im Wert — ein Teiltreffer ist ein Freitextfall für `scanText`,
@@ -745,18 +805,53 @@ Verfahren, bewusst streng:
   `TextRuleEngine` — dieselbe Hilfsmethode wird wiederverwendet, nicht neu
   gebaut.
 
-**Vorrang gegenüber dem Namensraten:** `ProfileScaffolder.Suggest(fieldName)`
-bleibt unverändert bestehen, aber überall dort, wo ein Vorschlag entsteht,
-gilt jetzt: **ein Wertetreffer schlägt Namensraten**, weil ein passender
-Wert die härtere Aussage ist als ein bloßes Namensfragment. Findet sich
-weder ein Wertetreffer noch ein Namensfragment, bleibt es beim bisherigen
-Verhalten (eigener `token`-Namensraum mit Kennzeichnung).
+### Spaltennamen-Vorschlag (`FieldNameSuggester`)
 
-Genutzt von `obfuskation init --from` (dieselbe Reihenfolge für die
-Kommentare — die Aktion bleibt `error`, nur der Vorschlagstext wird besser
-und nennt den Beleg-Beispielwert) und vom Dialog »Muster erkennen…« in der
-Oberfläche (Anwenderdokumentation, Kapitel 10), der zusätzlich nur Felder
-vorbelegt, die noch auf `error` stehen.
+Klasse `FieldNameSuggester`
+(`src/Obfuskation.Core/Configuration/FieldNameSuggester.cs`),
+`Suggest(fieldName, extensions = null)` liefert einen Generatornamen,
+`"scanText"`, oder `null`. Sie ersetzt das frühere, fest einkompilierte
+`ProfileScaffolder.Hints`-Array (dreißig Paare aus Namensfragment und
+Generator, per `Contains()` geprüft) durch die `FieldRules` der
+Erweiterungsdatei — **ersatzlos**, wenn keine Erweiterungsdatei vorliegt
+oder sie keine `fieldRules` trägt: dann liefert `Suggest` immer `null`, das
+Programm rät nicht mehr am Spaltennamen. Das ist eine bewusste
+Verhaltensänderung gegenüber 1.5.0.
+
+Verfahren:
+
+- Jedes `FieldNameRule.Pattern` wird über `TextRuleEngine.Compile` mit
+  `\A(?:{Pattern})\z` umschlossen übersetzt — voller Treffer auf den
+  Feldnamen, kein Teiltreffer; genau das behebt den Fehler der früheren
+  Liste, in der `"ort"` mitten in `Sortiment` traf. Dieselben Optionen und
+  dasselbe 5-Sekunden-Zeitlimit wie bei `TextRuleEngine` und
+  `ValueSuggester` — keine eigene Regex-Kompilierung.
+- Die erste passende Regel gewinnt, Reihenfolge in der Datei entscheidet.
+- Ein ungültiges Muster wirft hier nichts — das ist Sache von
+  `ProfileValidator`. `FieldNameSuggester` überspringt einen solchen
+  Kandidaten stillschweigend: ein Vorschlag ist eine Erleichterung, kein
+  Prüfschritt.
+- Übersetzte Muster werden je `ExtensionLibrary`-Instanz in einer
+  `ConditionalWeakTable` zwischengespeichert (typischerweise einmal pro
+  Lauf geladen und für mehrere Felder wiederverwendet) — kein erneutes
+  Übersetzen bei jedem einzelnen Feldnamen.
+
+**Vorrang gegenüber dem Wertetreffer:** überall dort, wo ein Vorschlag
+entsteht, gilt: **ein Wertetreffer (`ValueSuggester`) schlägt eine
+Spaltennamenregel**, weil ein passender Wert die härtere Aussage ist als
+ein bloßer Namenstreffer. Findet sich weder ein Wertetreffer noch eine
+passende `fieldRules`-Regel, bleibt es beim bisherigen Verhalten (eigener
+`token`-Namensraum mit Kennzeichnung). Die volle Reihenfolge:
+Wertetreffer → Spaltennamenregel aus der Erweiterungsdatei → eigener
+`token`-Namensraum.
+
+Genutzt von `ProfileScaffolder.CreateRule` über `obfuskation init --from`
+(dieselbe Reihenfolge für die Kommentare — die Aktion bleibt `error`, nur
+der Vorschlagstext wird besser und nennt bei einem Wertetreffer den
+Beleg-Beispielwert, bei einem Namenstreffer die getroffene Regel) und von
+`src/Obfuskation.Gui/ViewModels/FieldRuleViewModel.cs` sowie vom Dialog
+»Muster erkennen…« in der Oberfläche (Anwenderdokumentation, Kapitel 10),
+der zusätzlich nur Felder vorbelegt, die noch auf `error` stehen.
 
 ## 10. Rückgabewerte der CLI
 
@@ -803,10 +898,11 @@ selbst, nicht in `ProfileCatalog` — dieselbe Aufgabenteilung wie zwischen
 
 `obfuskation init` kennt zwei neue Optionen: `--description <text>` setzt
 `Profile.Description`, `--central` schreibt nach
-`PathHelper.DefaultProfilePath(profileName)` statt nach `obfuskation.json`
-im aktuellen Verzeichnis — eine ausdrücklich angegebene `--config` gewinnt
-in jedem Fall. Die Ausgabe nennt seither immer den vollständigen,
-aufgelösten Zielpfad statt eines möglicherweise relativen.
+`PathHelper.DefaultProfilePath(profileName)` statt nach
+`ProfileStore.DefaultFileName` (`obfuskation-projekt.json`) im aktuellen
+Verzeichnis — eine ausdrücklich angegebene `--config` gewinnt in jedem
+Fall. Die Ausgabe nennt seither immer den vollständigen, aufgelösten
+Zielpfad statt eines möglicherweise relativen.
 
 ### Fassung und Ersteller in der Hilfe
 

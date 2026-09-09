@@ -44,7 +44,7 @@ public sealed class PatternSuggestionItemViewModel : ObservableObject
 /// Der Dialog "Muster erkennen": zeigt, welche Felder der offenen Datei
 /// vollstaendig auf ein bekanntes Muster passen -- die eingebauten Muster aus
 /// <see cref="ProfileScaffolder.DefaultTextRules"/> und die Textregeln der
-/// Generator-Bibliothek (siehe <see cref="ValueSuggester"/>) -- und uebernimmt
+/// Erweiterungsdatei (siehe <see cref="ValueSuggester"/>) -- und uebernimmt
 /// die angehakten auf Wunsch.
 ///
 /// Traegt bewusst keine Fensterreferenz -- wie <see cref="NewProfileViewModel"/>
@@ -54,10 +54,10 @@ public sealed class PatternSuggestionItemViewModel : ObservableObject
 public sealed class PatternSuggestionsViewModel : ObservableObject
 {
     public PatternSuggestionsViewModel(
-        IReadOnlyList<PatternSuggestionItemViewModel> items, string libraryPath)
+        IReadOnlyList<PatternSuggestionItemViewModel> items, string extensionPath)
     {
         Items = new ObservableCollection<PatternSuggestionItemViewModel>(items);
-        LibraryPath = libraryPath;
+        ExtensionPath = extensionPath;
 
         ApplyCommand = new RelayCommand(Apply);
         CancelCommand = new RelayCommand(() => CloseRequested?.Invoke());
@@ -68,10 +68,10 @@ public sealed class PatternSuggestionsViewModel : ObservableObject
     public bool HasSuggestions => Items.Count > 0;
 
     /// <summary>
-    /// Pfad der Bibliotheksdatei, fuer den Hinweis ohne Vorschlaege -- das ist
+    /// Pfad der Erweiterungsdatei, fuer den Hinweis ohne Vorschlaege -- das ist
     /// der Moment, in dem sichtbar wird, dass eigene Muster dort hingehoeren.
     /// </summary>
-    public string LibraryPath { get; }
+    public string ExtensionPath { get; }
 
     public RelayCommand ApplyCommand { get; }
     public RelayCommand CancelCommand { get; }

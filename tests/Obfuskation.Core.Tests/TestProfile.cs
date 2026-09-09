@@ -48,8 +48,8 @@ public sealed class TestProfile : IDisposable
 
     public ObfuscationEngine CreateEngine() => new(Profile);
 
-    /// <summary>Wie <see cref="CreateEngine()"/>, aber mit einer eigenen Generator-Bibliothek.</summary>
-    public ObfuscationEngine CreateEngine(GeneratorLibrary library) => new(Profile, library);
+    /// <summary>Wie <see cref="CreateEngine()"/>, aber mit einer eigenen Erweiterungsdatei.</summary>
+    public ObfuscationEngine CreateEngine(ExtensionLibrary extensions) => new(Profile, extensions);
 
     /// <summary>Fuegt eine Feldregel hinzu.</summary>
     public TestProfile WithField(string match, FieldAction action, string? generator = null)

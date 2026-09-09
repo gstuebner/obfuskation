@@ -16,7 +16,8 @@ public sealed class MainViewModel : ObservableObject
 {
     private readonly GuiSettings _settings;
     private readonly Func<IDialogService> _dialogs;
-    private readonly GeneratorLibrary _library;
+    private readonly ExtensionLibrary _extensions;
+    private readonly string _extensionPath;
 
     private ProfileSession? _session;
     private string? _dataFilePath;
@@ -41,17 +42,26 @@ public sealed class MainViewModel : ObservableObject
         _dialogs = dialogs;
 
         // Einmal beim Start, nicht bei jedem Kern-Aufruf: alle Aufrufe (Engine,
-        // Validierung, Geruesterzeugung) reichen dieselbe Bibliothek durch,
+        // Validierung, Geruesterzeugung) reichen dieselbe Erweiterung durch,
         // statt die Datei jedesmal erneut zu lesen. Eine kaputte Datei darf
         // die Oberflaeche nicht blockieren -- die Statuszeile nennt den Pfad
-        // (siehe GeneratorLibrary.Load), und es geht ohne Bibliothek weiter.
+        // (siehe ExtensionLibrary.Load), und es geht ohne Erweiterung weiter.
+        //
+        // Der Fundort (siehe ExtensionLibrary.ResolvePath) wird gleich mit
+        // aufgeloest: fuer den Hinweistext im Dialog "Muster erkennen…" bei
+        // fehlenden Vorschlaegen, der den Ablageort einer eigenen Erweiterung
+        // nennen soll, auch wenn (noch) keine Datei dort liegt.
         try
         {
-            _library = GeneratorLibrary.Load();
+            var fundort = ExtensionLibrary.ResolvePath();
+            _extensionPath = fundort.Path
+                ?? fundort.Candidates.First(c => c.Origin == ExtensionOrigin.ConfigDirectory).Path;
+            _extensions = ExtensionLibrary.Load(fundort.Path);
         }
         catch (ConfigurationException ex)
         {
-            _library = GeneratorLibrary.Empty;
+            _extensions = ExtensionLibrary.Empty;
+            _extensionPath = Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName);
             _statusText = ex.Message;
         }
 
@@ -118,7 +128,7 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>Das Ansichtsmodell der Textregeln zum laufenden Profil.</summary>
     public TextRulesViewModel? CreateTextRulesViewModel()
-        => _session is null ? null : new TextRulesViewModel(_session.Profile, _library, OnTextRulesChanged);
+        => _session is null ? null : new TextRulesViewModel(_session.Profile, _extensions, OnTextRulesChanged);
 
     /// <summary>
     /// Das Ansichtsmodell des Optionsdialogs fuer das fuehrende gewaehlte
@@ -485,8 +495,10 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// Zustand beim Start herstellen: ein ausdruecklich genanntes Profil, sonst
-    /// eine <c>obfuskation.json</c> im aktuellen Verzeichnis (wie es die
-    /// Kommandozeile auch tut), sonst das zuletzt benutzte Profil.
+    /// eine <see cref="ProfileStore.DefaultFileName"/> (oder eine alte
+    /// <see cref="ProfileStore.LegacyFileName"/> mit Profilinhalt) im aktuellen
+    /// Verzeichnis (wie es die Kommandozeile auch tut, siehe
+    /// <see cref="ProfileStore.Discover"/>), sonst das zuletzt benutzte Profil.
     /// </summary>
     public async Task InitializeAsync(string? profilePath, string? dataPath)
     {
@@ -498,7 +510,7 @@ public sealed class MainViewModel : ObservableObject
         {
             await GuardedAsync(() =>
             {
-                LoadProfile(ProfileSession.Load(pfad, _library));
+                LoadProfile(ProfileSession.Load(pfad, _extensions));
                 StatusText = $"Profil geladen: {pfad}";
                 return Task.CompletedTask;
             });
@@ -558,7 +570,7 @@ public sealed class MainViewModel : ObservableObject
 
         await GuardedAsync(() =>
         {
-            LoadProfile(ProfileSession.Load(gewaehlt.Path, _library));
+            LoadProfile(ProfileSession.Load(gewaehlt.Path, _extensions));
             StatusText = $"Profil geladen: {gewaehlt.Name}";
             return Task.CompletedTask;
         });
@@ -577,7 +589,7 @@ public sealed class MainViewModel : ObservableObject
 
         try
         {
-            LoadProfile(ProfileSession.Load(newPath, _library));
+            LoadProfile(ProfileSession.Load(newPath, _extensions));
             StatusText = "Das offene Profil wurde umbenannt.";
         }
         catch (Exception ex) when (ex is ConfigurationException or IOException or UnauthorizedAccessException)
@@ -610,14 +622,14 @@ public sealed class MainViewModel : ObservableObject
         {
             if (antwort.OpenExisting)
             {
-                LoadProfile(ProfileSession.Load(antwort.TargetPath, _library));
+                LoadProfile(ProfileSession.Load(antwort.TargetPath, _extensions));
                 StatusText = $"Profil geladen: {Path.GetFileName(antwort.TargetPath)}";
             }
             else
             {
                 // OK legt das Profil sofort an und speichert es: erst damit hat
                 // es einen Pfad und erscheint in Index und Uebersicht.
-                var session = ProfileSession.Create(antwort.Name, beispiele, antwort.Description, _library);
+                var session = ProfileSession.Create(antwort.Name, beispiele, antwort.Description, _extensions);
                 session.Save(antwort.TargetPath);
                 LoadProfile(session);
 
@@ -704,7 +716,7 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>
     /// Baut die Auswahlliste der Generatoren aus dem Profil neu auf: die
     /// eingebauten, die im Profil selbst angelegten eigenen Namensraeume, und
-    /// die der Generator-Bibliothek (mit Herkunftszusatz, siehe
+    /// die der Erweiterungsdatei (mit Herkunftszusatz, siehe
     /// <see cref="GeneratorOption.For"/>). Eigene Methode statt Inline-Code,
     /// weil sie an zwei Stellen noetig ist -- beim Laden und jedesmal, wenn
     /// sich ueber das Praefix-Feld ein neuer Namensraum ergibt.
@@ -722,7 +734,7 @@ public sealed class MainViewModel : ObservableObject
     {
         var ziel = _session is null
             ? Array.Empty<GeneratorOption>()
-            : GeneratorOption.For(_session.Profile, _library);
+            : GeneratorOption.For(_session.Profile, _extensions);
 
         for (var i = 0; i < ziel.Count; i++)
         {
@@ -904,7 +916,7 @@ public sealed class MainViewModel : ObservableObject
             beispiele.TryGetValue(feld.FieldName, out var beispiel);
 
             Fields.Add(new FieldRuleViewModel(
-                _session.Profile, _library, feld, beispiel, OnFieldRuleChanged));
+                _session.Profile, _extensions, feld, beispiel, OnFieldRuleChanged));
         }
 
         SelectedField = Fields.FirstOrDefault(f => !f.IsDecided) ?? Fields.FirstOrDefault();
@@ -1388,7 +1400,7 @@ public sealed class MainViewModel : ObservableObject
     /// Baut das Ansichtsmodell fuer den Dialog "Muster erkennen…": ein
     /// Vorschlag je Feld, dessen Beispielwerte vollstaendig auf ein bekanntes
     /// Muster passen (eingebaute Muster und die Textregeln der
-    /// Generator-Bibliothek, siehe <see cref="ValueSuggester"/>).
+    /// Erweiterungsdatei, siehe <see cref="ValueSuggester"/>).
     ///
     /// Vorbelegt (Haekchen gesetzt) ist nur ein Feld, das im aktuellen Stand
     /// noch auf "offen" (<see cref="FieldAction.Error"/>) steht -- ein bereits
@@ -1400,7 +1412,7 @@ public sealed class MainViewModel : ObservableObject
             return null;
 
         var beispiele = FieldSampler.Sample(_dataContent, _dataFilePath, _session.Profile.Input);
-        var vorschlaege = ValueSuggester.Suggest(beispiele, _library, _session.Profile.Defaults);
+        var vorschlaege = ValueSuggester.Suggest(beispiele, _extensions, _session.Profile.Defaults);
 
         var items = vorschlaege
             .Select(vorschlag =>
@@ -1412,7 +1424,7 @@ public sealed class MainViewModel : ObservableObject
             })
             .ToList();
 
-        return new PatternSuggestionsViewModel(items, GeneratorLibrary.DefaultPath);
+        return new PatternSuggestionsViewModel(items, _extensionPath);
     }
 
     private async Task ShowPatternSuggestionsAsync()

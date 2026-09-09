@@ -205,15 +205,22 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Der_Generator_wird_aus_dem_Feldnamen_vorgeschlagen()
+    public async Task Ohne_Erweiterungsdatei_bekommt_ein_Feld_keinen_Namensvorschlag_mehr()
     {
+        // Vor der Umstellung auf FieldNameSuggester leitete ein fest
+        // einkompiliertes Fragment ("iban" in "IBAN") den Generator aus dem
+        // Feldnamen ab. Der Testlauf zeigt ueber XDG_CONFIG_HOME auf ein
+        // eigenes, leeres Verzeichnis (siehe TestUmgebung) -- ohne
+        // Erweiterungsdatei dort gibt es dieses Raten nicht mehr:
+        // SuggestGenerator faellt wie jedes andere namentlich nicht
+        // getroffene Feld auf das eingebaute "token" zurueck.
         var profil = SchreibeProfil();
         var modell = Erzeugen();
         await modell.InitializeAsync(profil, SchreibeCsv());
 
         modell.Fields.Single(f => f.FieldName == "IBAN").Action = FieldAction.Pseudonymize;
 
-        Assert.Equal("iban", modell.Fields.Single(f => f.FieldName == "IBAN").Generator);
+        Assert.Equal("token", modell.Fields.Single(f => f.FieldName == "IBAN").Generator);
     }
 
     [Fact]

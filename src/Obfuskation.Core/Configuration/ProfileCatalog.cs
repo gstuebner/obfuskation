@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 namespace Obfuskation.Core.Configuration;
 
 /// <summary>Eine Zeile der Profiluebersicht.</summary>
@@ -88,7 +86,7 @@ public static class ProfileCatalog
                     "Datei nicht gefunden.");
             }
 
-            if (!LooksLikeProfile(path))
+            if (!ProfileStore.LooksLikeProfile(path))
                 return null;
 
             var profile = ProfileStore.Load(path);
@@ -108,34 +106,6 @@ public static class ProfileCatalog
                 File.Exists(path) ? File.GetLastWriteTimeUtc(path) : DateTimeOffset.MinValue,
                 usage?.LastUsedUtc, files,
                 Error: ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// Siebt fremde JSON-Dateien im zentralen Ordner aus, bevor ueberhaupt
-    /// <see cref="ProfileStore.Load"/> versucht wird: ein versehentlich
-    /// abgelegtes JSON soll keine Geisterzeile in der Uebersicht erzeugen.
-    /// </summary>
-    private static bool LooksLikeProfile(string path)
-    {
-        try
-        {
-            using var stream = File.OpenRead(path);
-            using var document = JsonDocument.Parse(stream);
-            return document.RootElement.ValueKind == JsonValueKind.Object &&
-                   (document.RootElement.TryGetProperty("profileName", out _) ||
-                    document.RootElement.TryGetProperty("fields", out _));
-        }
-        catch (JsonException)
-        {
-            // Kaputtes JSON laesst sich hier nicht beurteilen -- durchlassen,
-            // ProfileStore.Load wirft gleich noch einmal und liefert dann den
-            // Fehlereintrag mit brauchbarer Meldung.
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
         }
     }
 }

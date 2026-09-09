@@ -77,21 +77,37 @@
          unbekanntes Pseudonym. In der Oberflaeche ein eigener Dialog fuer
          die neuen Optionen, der seine Zuordnung aus
          ProfileValidator.OptionOwnership liest.
-         1.6.0: Generator-Bibliothek. Hauseigene Muster, etwa ein Inventarnummer
-         der Form INV123456, sind Betriebswissen und haben in einer Profildatei
+         1.6.0: Erweiterungsdatei. Hauseigene Muster, etwa ein Inventarnummer der
+         Form INV123456, sind Betriebswissen und haben in einer Profildatei
          nichts verloren, die geteilt oder eingecheckt wird. Sie liegen
-         deshalb in einer eigenen, privaten Datei
-         (~/.config/obfuskation/generators.json, GeneratorLibrary) und
-         fliessen zur Laufzeit in jedes Profil ein, ohne je hineingeschrieben
-         zu werden; bei gleichem Namen gewinnt immer das Profil. Neu dazu der
-         Befehl 'library list|path' und eine Option, die einen Lauf ohne die
-         Bibliothek erzwingt. Zweitens die wertbasierte Mustererkennung
-         (ValueSuggester): bisher raten Vorschlaege allein am Feldnamen, jetzt
-         zaehlt zuerst, ob die Beispielwerte vollstaendig auf ein bekanntes
-         Muster passen, eingebautes oder eigenes aus der Bibliothek. In der
+         deshalb in einer eigenen, privaten Datei namens obfuskation.json,
+         gesucht zuerst neben der Programmdatei, sonst unter
+         ~/.config/obfuskation (Klasse ExtensionLibrary, vormals
+         GeneratorLibrary), und fliessen zur Laufzeit in jedes Profil ein,
+         ohne je hineingeschrieben zu werden; bei gleichem Namen gewinnt
+         immer das Profil. Neu dazu der Befehl 'extensions list' bzw. 'path'
+         (vormals 'library') und die Option 'no extensions' (vormals
+         'no library'), die einen Lauf ohne die Erweiterungsdatei erzwingt.
+         Zweitens die wertbasierte Mustererkennung (ValueSuggester): zaehlt
+         zuerst, ob die Beispielwerte vollstaendig auf ein bekanntes Muster
+         passen, eingebautes oder eigenes aus der Erweiterungsdatei. In der
          Oberflaeche als Knopf "Muster erkennen...", auf der Kommandozeile in
-         den Kommentaren von 'init'. Drittens der Nachzug der Dokumentation:
-         die fuenf Generatoren aus 1.5.0 standen in keiner Doku, und die
+         den Kommentaren von 'init'. Drittens neu der Abschnitt fieldRules in
+         der Erweiterungsdatei (Klasse FieldNameSuggester): Regeln auf den
+         ganzen Spaltennamen, erste passende Regel gewinnt, Sonderwert
+         scanText fuer Freitextfelder. Das bis einschliesslich 1.5.0 fest
+         einkompilierte Raten an dreissig Namensfragmenten
+         (ProfileScaffolder.Hints) ist dabei ersatzlos entfallen: ohne
+         Erweiterungsdatei raet das Programm nicht mehr am Spaltennamen.
+         Ersatz ist docs/beispiel/obfuskation-erweiterung-beispiel.json, das
+         die alte Liste als fieldRules enthaelt. Vorschlagsreihenfolge damit:
+         Wertetreffer, dann Spaltennamenregel aus der Erweiterungsdatei,
+         sonst eigener token-Namensraum. Viertens die Profildatei umbenannt
+         auf obfuskation-projekt.json (ProfileStore.DefaultFileName); eine
+         vorhandene obfuskation.json mit Profilinhalt bleibt lesbar
+         (LegacyFileName, LooksLikeProfile unterscheidet die beiden Rollen
+         am Inhalt). Fuenftens der Nachzug der Dokumentation: die fuenf
+         Generatoren aus 1.5.0 standen in keiner Doku, und die
          Entwicklerdokumentation behauptete noch, 'redact' zweckentfremde
          'domain' als Platzhalter. -->
     <Version>1.6.0</Version>

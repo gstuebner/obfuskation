@@ -16,7 +16,7 @@ namespace Obfuskation.Gui.ViewModels;
 public sealed class FieldRuleViewModel : ObservableObject
 {
     private readonly Profile _profile;
-    private readonly GeneratorLibrary _library;
+    private readonly ExtensionLibrary _extensions;
     private readonly Action _onChanged;
 
     private FieldRule? _rule;
@@ -27,11 +27,11 @@ public sealed class FieldRuleViewModel : ObservableObject
     private bool _previewIsExample;
 
     public FieldRuleViewModel(
-        Profile profile, GeneratorLibrary library, FieldAnalysis analysis,
+        Profile profile, ExtensionLibrary extensions, FieldAnalysis analysis,
         IReadOnlyList<string>? sampleValues, Action onChanged)
     {
         _profile = profile;
-        _library = library;
+        _extensions = extensions;
         _onChanged = onChanged;
 
         FieldName = analysis.FieldName;
@@ -185,13 +185,13 @@ public sealed class FieldRuleViewModel : ObservableObject
 
     /// <summary>
     /// Der Basistyp des aktuellen Generators: bei einem eigenen Namensraum
-    /// (im Profil oder in der Bibliothek) dessen <c>Type</c> (oder, falls
+    /// (im Profil oder in der Erweiterung) dessen <c>Type</c> (oder, falls
     /// leer, der Schluessel selbst), sonst der eingebaute Name unmittelbar.
     ///
     /// Das Profil gewinnt bei gleichem Schluessel -- dieselbe Reihenfolge wie
     /// bei <see cref="Core.Generation.GeneratorRegistry.Build"/>. Ohne diesen
-    /// Blick in die Bibliothek wuerde ein Feld, dessen Regel auf einen
-    /// Bibliothekseintrag wie "assetTag" (Basistyp <c>pattern</c>) zeigt, hier
+    /// Blick in die Erweiterung wuerde ein Feld, dessen Regel auf einen
+    /// Erweiterungseintrag wie "assetTag" (Basistyp <c>pattern</c>) zeigt, hier
     /// faelschlich "assetTag" selbst als Basistyp erhalten, und die
     /// Optionsanzeige (etwa die Maske) faende ihn nie.
     /// </summary>
@@ -205,8 +205,8 @@ public sealed class FieldRuleViewModel : ObservableObject
             if (_profile.Generators.TryGetValue(_generator, out var settings))
                 return string.IsNullOrWhiteSpace(settings.Type) ? _generator : settings.Type;
 
-            if (_library.Generators.TryGetValue(_generator, out var bibliotheksSettings))
-                return string.IsNullOrWhiteSpace(bibliotheksSettings.Type) ? _generator : bibliotheksSettings.Type;
+            if (_extensions.Generators.TryGetValue(_generator, out var erweiterungsSettings))
+                return string.IsNullOrWhiteSpace(erweiterungsSettings.Type) ? _generator : erweiterungsSettings.Type;
 
             return _generator;
         }
@@ -537,7 +537,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// <summary>Der gewaehlte Generator als Listeneintrag mit Erklaerung.</summary>
     public GeneratorOption? SelectedGenerator
     {
-        get => GeneratorOption.Find(_profile, _generator, _library);
+        get => GeneratorOption.Find(_profile, _generator, _extensions);
         set => Generator = value?.Name;
     }
 
@@ -627,12 +627,15 @@ public sealed class FieldRuleViewModel : ObservableObject
             && string.Equals(rule.Match, fieldName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Ein Generator, der zum Feldnamen passt. Nutzt dieselbe Zuordnung wie
-    /// <c>init</c>, damit Oberflaeche und Kommandozeile dasselbe vorschlagen.
+    /// Ein Generator, der zum Feldnamen passt. Nutzt denselben
+    /// <see cref="FieldNameSuggester"/> wie <c>init</c>, damit Oberflaeche und
+    /// Kommandozeile dasselbe vorschlagen -- aus den Spaltenmustern der
+    /// Erweiterungsdatei. Ohne Erweiterungsdatei (oder ohne dort hinterlegte
+    /// Spaltenmuster) gibt es keinen Vorschlag, und es bleibt beim Ausweichwert.
     /// </summary>
     private string SuggestGenerator()
     {
-        var vorschlag = ProfileScaffolder.Suggest(FieldName);
+        var vorschlag = FieldNameSuggester.Suggest(FieldName, _extensions);
 
         // "scanText" ist eine Behandlung, kein Generator — als Vorschlag fuer
         // ein Auswahlfeld voller Generatoren taugt es nicht.
@@ -653,8 +656,8 @@ public sealed record GeneratorOption(string Name, string Description)
 
     /// <summary>
     /// Die Generatoren eines Profils: die eingebauten, die im Profil selbst
-    /// angelegten, und -- sofern eine <paramref name="library"/> uebergeben
-    /// wird -- die der Generator-Bibliothek, die das Profil nicht selbst
+    /// angelegten, und -- sofern eine <paramref name="extensions"/> uebergeben
+    /// wird -- die der Erweiterungsdatei, die das Profil nicht selbst
     /// ueberschreibt.
     ///
     /// Die eigenen sind wichtiger, als es aussieht: ein Eintrag unter
@@ -663,14 +666,14 @@ public sealed record GeneratorOption(string Name, string Description)
     /// etwa Personennummer 4711 und Belegnummer 4711, die sonst dasselbe
     /// Pseudonym bekaemen und eine Verbindung vortaeuschten, die es nie gab.
     ///
-    /// Bibliothekseintraege erscheinen mit einem Herkunftszusatz ("aus der
-    /// Bibliothek") statt "eigener Namensraum" -- sie sind nicht Teil dieses
+    /// Erweiterungseintraege erscheinen mit einem Herkunftszusatz ("aus der
+    /// Erweiterung") statt "eigener Namensraum" -- sie sind nicht Teil dieses
     /// Profils, sondern werden nur zur Laufzeit hineingemischt (siehe
-    /// <see cref="GeneratorLibrary"/>). Ueberschreibt das Profil einen
-    /// Bibliothekseintrag mit gleichem Schluessel, gewinnt der Profileintrag —
+    /// <see cref="ExtensionLibrary"/>). Ueberschreibt das Profil einen
+    /// Erweiterungseintrag mit gleichem Schluessel, gewinnt der Profileintrag —
     /// dieselbe Reihenfolge wie in <see cref="Core.Generation.GeneratorRegistry.Build"/>.
     /// </summary>
-    public static IReadOnlyList<GeneratorOption> For(Profile profile, GeneratorLibrary? library = null)
+    public static IReadOnlyList<GeneratorOption> For(Profile profile, ExtensionLibrary? extensions = null)
     {
         var eigene = profile.Generators.Keys
             .Where(name => !Core.Generation.GeneratorRegistry.KnownNames
@@ -684,19 +687,19 @@ public sealed record GeneratorOption(string Name, string Description)
                 return new GeneratorOption(name, erklaerung);
             });
 
-        var bibliothek = (library?.Generators.Keys ?? Enumerable.Empty<string>())
+        var erweiterung = (extensions?.Generators.Keys ?? Enumerable.Empty<string>())
             .Where(name => !profile.Generators.ContainsKey(name)
                 && !Core.Generation.GeneratorRegistry.KnownNames.Contains(name, StringComparer.OrdinalIgnoreCase))
             .Select(name =>
             {
-                var grundlage = library!.Generators[name].Type;
+                var grundlage = extensions!.Generators[name].Type;
                 var erklaerung = string.IsNullOrWhiteSpace(grundlage)
-                    ? "aus der Bibliothek"
-                    : $"aus der Bibliothek, wie {grundlage}";
+                    ? "aus der Erweiterung"
+                    : $"aus der Erweiterung, wie {grundlage}";
                 return new GeneratorOption(name, erklaerung);
             });
 
-        return BuiltIn.Concat(eigene).Concat(bibliothek).ToList();
+        return BuiltIn.Concat(eigene).Concat(erweiterung).ToList();
     }
 
     /// <summary>
@@ -709,8 +712,8 @@ public sealed record GeneratorOption(string Name, string Description)
     /// Wertvergleich — nicht derselbe wie der in der Auswahlliste, und das
     /// Auswahlfeld bliebe leer, obwohl die Regel einen Generator traegt.
     /// </summary>
-    public static GeneratorOption? Find(Profile profile, string? name, GeneratorLibrary? library = null)
-        => name is null ? null : For(profile, library).FirstOrDefault(option =>
+    public static GeneratorOption? Find(Profile profile, string? name, ExtensionLibrary? extensions = null)
+        => name is null ? null : For(profile, extensions).FirstOrDefault(option =>
             string.Equals(option.Name, name, StringComparison.OrdinalIgnoreCase))
             ?? new GeneratorOption(name, "eigener Namensraum");
 

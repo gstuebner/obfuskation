@@ -398,9 +398,9 @@ public class RoundtripTests
             System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json));
 
     [Fact]
-    public void Hostname_aus_der_Bibliothek_kommt_in_Spalte_und_Freitext_zurueck()
+    public void Hostname_aus_der_Erweiterungsdatei_kommt_in_Spalte_und_Freitext_zurueck()
     {
-        var library = new GeneratorLibrary
+        var extensions = new ExtensionLibrary
         {
             Generators = { ["assetTag"] = new GeneratorSettings { Type = "pattern", Pattern = "INV999999" } },
             TextRules =
@@ -412,7 +412,7 @@ public class RoundtripTests
         using var setup = new TestProfile()
             .WithField("Zielsystem", FieldAction.Pseudonymize, "assetTag")
             .WithField("Bemerkung", FieldAction.ScanText);
-        var engine = setup.CreateEngine(library);
+        var engine = setup.CreateEngine(extensions);
 
         var original = "Zielsystem;Bemerkung\r\nINV123456;Neustart von INV123456 am Montag\r\n";
         var content = TestProfile.Utf8(original);

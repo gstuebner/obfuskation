@@ -18,15 +18,15 @@
       <StackPanel Spacing="12">
 
         <TextBlock Classes="muted" TextWrapping="Wrap"
-                   Text="Beispielwerte, die vollständig auf ein bekanntes Muster passen — aus den eingebauten Mustern und der Generator-Bibliothek. Vorbelegt sind nur Felder, die noch auf „offen“ stehen; eine bereits getroffene Entscheidung bleibt unangetastet, bis das Häkchen ausdrücklich gesetzt wird."/>
+                   Text="Beispielwerte, die vollständig auf ein bekanntes Muster passen — aus den eingebauten Mustern und der Erweiterungsdatei. Vorbelegt sind nur Felder, die noch auf „offen“ stehen; eine bereits getroffene Entscheidung bleibt unangetastet, bis das Häkchen ausdrücklich gesetzt wird."/>
 
         <!-- Ohne Vorschlaege: der Moment, in dem sichtbar wird, dass eigene
-             Muster in die Generator-Bibliothek gehoeren. -->
+             Muster in die Erweiterungsdatei gehoeren. -->
         <StackPanel Spacing="6" IsVisible="{Binding !HasSuggestions}">
           <TextBlock Classes="warning" FontWeight="SemiBold"
                      Text="Kein Feld passt vollständig auf ein bekanntes Muster."/>
           <TextBlock Classes="small muted" TextWrapping="Wrap"
-                     Text="{Binding LibraryPath, StringFormat='Ein hauseigenes Muster gehört in die Generator-Bibliothek unter {0} — sie wird bei jedem Profil automatisch mitgeprüft.'}"/>
+                     Text="{Binding ExtensionPath, StringFormat='Ein hauseigenes Muster gehört in die Erweiterungsdatei unter {0} — sie wird bei jedem Profil automatisch mitgeprüft.'}"/>
         </StackPanel>
 
         <ScrollViewer MaxHeight="420" IsVisible="{Binding HasSuggestions}">

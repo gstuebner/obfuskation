@@ -21,7 +21,7 @@ public sealed record ValueSuggestion(
 
 /// <summary>
 /// Schlaegt anhand von Beispielwerten einen Generator vor — die haertere
-/// Aussage als ein Namensfragment (<see cref="ProfileScaffolder.Suggest"/>):
+/// Aussage als ein Spaltenmuster (<see cref="FieldNameSuggester.Suggest"/>):
 /// ein Wert, der auf ein Muster passt, ist Beweis, ein Feldname ist nur
 /// Vermutung.
 ///
@@ -34,9 +34,9 @@ public sealed record ValueSuggestion(
 ///
 /// Kandidatenmuster sind der Grundstock aus
 /// <see cref="ProfileScaffolder.DefaultTextRules"/> zusammen mit den
-/// Textregeln der <see cref="GeneratorLibrary"/> — dadurch schlaegt die
-/// Erkennung auch ein hauseigenes Muster vor, sobald es in der Bibliothek
-/// steht.
+/// Textregeln der <see cref="ExtensionLibrary"/> — dadurch schlaegt die
+/// Erkennung auch ein hauseigenes Muster vor, sobald es in der
+/// Erweiterungsdatei steht.
 /// </summary>
 public static class ValueSuggester
 {
@@ -61,12 +61,12 @@ public static class ValueSuggester
     /// </param>
     public static IReadOnlyList<ValueSuggestion> Suggest(
         IReadOnlyDictionary<string, IReadOnlyList<string>> samplesByField,
-        GeneratorLibrary? library = null,
+        ExtensionLibrary? extensions = null,
         ProfileDefaults? defaults = null)
     {
-        library ??= GeneratorLibrary.Load();
+        extensions ??= ExtensionLibrary.Load();
         var leerwerte = defaults ?? EmptyValueDefaults;
-        var candidates = BuildCandidates(library);
+        var candidates = BuildCandidates(extensions);
         if (candidates.Count == 0)
             return Array.Empty<ValueSuggestion>();
 
@@ -107,9 +107,9 @@ public static class ValueSuggester
 
     private readonly record struct Candidate(TextRule Rule, Regex FullMatch);
 
-    private static List<Candidate> BuildCandidates(GeneratorLibrary library)
+    private static List<Candidate> BuildCandidates(ExtensionLibrary extensions)
     {
-        var rules = ProfileScaffolder.DefaultTextRules().Concat(library.TextRules);
+        var rules = ProfileScaffolder.DefaultTextRules().Concat(extensions.TextRules);
         var candidates = new List<Candidate>();
 
         foreach (var rule in rules)

@@ -21,54 +21,11 @@ public static class ProfileScaffolder
     private static readonly Regex DisallowedPrefixChars =
         new("[^A-Za-z0-9ÄÖÜäöüß_-]", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    /// <summary>Namensbestandteile, die einen Generator nahelegen.</summary>
-    private static readonly (string Fragment, string Generator)[] Hints =
-    [
-        ("iban", "iban"),
-        ("bic", "bic"),
-        ("swift", "bic"),
-        ("mail", "email"),
-        ("email", "email"),
-        ("telefon", "phone"),
-        ("phone", "phone"),
-        ("mobil", "phone"),
-        ("fax", "phone"),
-        ("nachname", "lastName"),
-        ("familienname", "lastName"),
-        ("vorname", "firstName"),
-        ("kundenname", "personName"),
-        ("inhaber", "personName"),
-        ("name", "personName"),
-        ("firma", "companyName"),
-        ("unternehmen", "companyName"),
-        ("strasse", "street"),
-        ("straße", "street"),
-        ("adresse", "street"),
-        ("anschrift", "street"),
-        ("plz", "postalCode"),
-        ("postleitzahl", "postalCode"),
-        ("ort", "city"),
-        ("stadt", "city"),
-        ("wohnort", "city"),
-        ("geburtsdatum", "dateShift"),
-        ("geburtstag", "dateShift"),
-        ("datum", "dateShift"),
-        ("date", "dateShift"),
-        ("nummer", "numericId"),
-        ("nr", "numericId"),
-        ("id", "numericId"),
-        ("konto", "numericId"),
-        ("verwendungszweck", "scanText"),
-        ("bemerkung", "scanText"),
-        ("notiz", "scanText"),
-        ("kommentar", "scanText"),
-    ];
-
     public static Profile Create(
-        string profileName, string? sampleFilePath, string? description = null, GeneratorLibrary? library = null)
+        string profileName, string? sampleFilePath, string? description = null, ExtensionLibrary? extensions = null)
         => Create(profileName,
             string.IsNullOrWhiteSpace(sampleFilePath) ? Array.Empty<string>() : new[] { sampleFilePath },
-            description, library);
+            description, extensions);
 
     /// <summary>
     /// Wie die Einzelfassung, aber aus mehreren zusammengehoerenden Dateien auf
@@ -78,16 +35,16 @@ public static class ProfileScaffolder
     /// nur bei seinem ersten Auftreten -- sonst bekaeme er zwei widerspruechliche
     /// Vorschlaege.
     ///
-    /// Ohne <paramref name="library"/> gilt <see cref="GeneratorLibrary.Load"/>.
+    /// Ohne <paramref name="extensions"/> gilt <see cref="ExtensionLibrary.Load()"/>.
     /// Wertetreffer aus <see cref="ValueSuggester"/> schlagen dabei das
-    /// Namensraten aus <see cref="Suggest"/>: ein passender Beispielwert ist
-    /// die haertere Aussage als ein Feldnamensfragment.
+    /// Namensraten aus <see cref="FieldNameSuggester"/>: ein passender
+    /// Beispielwert ist die haertere Aussage als ein Spaltenmuster.
     /// </summary>
     public static Profile Create(
         string profileName, IEnumerable<string> sampleFilePaths, string? description = null,
-        GeneratorLibrary? library = null)
+        ExtensionLibrary? extensions = null)
     {
-        library ??= GeneratorLibrary.Load();
+        extensions ??= ExtensionLibrary.Load();
 
         var profile = new Profile
         {
@@ -113,7 +70,7 @@ public static class ProfileScaffolder
 
             // Je Datei einmal bestimmt, nicht je Feld.
             var samples = FieldSampler.Sample(content, pfad);
-            var vorschlaege = ValueSuggester.Suggest(samples, library)
+            var vorschlaege = ValueSuggester.Suggest(samples, extensions)
                 .ToDictionary(v => v.FieldName, StringComparer.OrdinalIgnoreCase);
 
             foreach (var fieldName in inspected.FieldNames)
@@ -122,14 +79,15 @@ public static class ProfileScaffolder
                     continue;
 
                 vorschlaege.TryGetValue(fieldName, out var vorschlag);
-                profile.Fields.Add(CreateRule(profile, fieldName, vorschlag));
+                profile.Fields.Add(CreateRule(profile, fieldName, vorschlag, extensions));
             }
         }
 
         return profile;
     }
 
-    private static FieldRule CreateRule(Profile profile, string fieldName, ValueSuggestion? valueSuggestion)
+    private static FieldRule CreateRule(
+        Profile profile, string fieldName, ValueSuggestion? valueSuggestion, ExtensionLibrary extensions)
     {
         if (valueSuggestion is not null)
         {
@@ -146,7 +104,7 @@ public static class ProfileScaffolder
             };
         }
 
-        var suggestion = Suggest(fieldName);
+        var suggestion = FieldNameSuggester.Suggest(fieldName, extensions);
 
         if (suggestion == "scanText")
         {
@@ -239,25 +197,6 @@ public static class ProfileScaffolder
         => fieldName.Length == 0
             ? fieldName
             : char.ToLowerInvariant(fieldName[0]) + fieldName[1..];
-
-    /// <summary>
-    /// Schlaegt anhand des Feldnamens einen Generator vor, oder <c>null</c>,
-    /// wenn sich nichts ableiten laesst. Der Sonderwert <c>"scanText"</c> steht
-    /// fuer ein Freitextfeld und ist kein Generatorname.
-    ///
-    /// Oeffentlich, damit die Oberflaeche dieselbe Zuordnung verwendet wie
-    /// <c>init</c> — zwei getrennte Listen wuerden auseinanderlaufen.
-    /// </summary>
-    public static string? Suggest(string fieldName)
-    {
-        var normalized = fieldName.ToLowerInvariant();
-
-        foreach (var (fragment, generator) in Hints)
-            if (normalized.Contains(fragment, StringComparison.Ordinal))
-                return generator;
-
-        return null;
-    }
 
     /// <summary>
     /// Liest die Feldnamen einer Datei. Duenne Huelle um

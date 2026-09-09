@@ -214,9 +214,14 @@ public class InspectionTests
     [Fact]
     public void Ein_Feld_mit_ableitbarem_Generator_bekommt_keinen_Praefix_Namensraum()
     {
+        // Zwei Beispielwerte, nicht nur einer: seit das Namensraten am
+        // Feldnamen eine Erweiterungsdatei braucht (siehe FieldNameSuggester),
+        // bleibt ohne eine solche nur noch der Wertetreffer aus ValueSuggester
+        // uebrig -- der verlangt mindestens zwei passende Beispielwerte.
         using var setup = new TestProfile();
         var pfad = Path.Combine(setup.Directory, "sample.csv");
-        File.WriteAllText(pfad, "IBAN\nDE02120300000000202051\n", new UTF8Encoding(false));
+        File.WriteAllText(
+            pfad, "IBAN\nDE02120300000000202051\nDE02500105170137075030\n", new UTF8Encoding(false));
 
         var profil = ProfileScaffolder.Create("test", pfad);
 

@@ -207,17 +207,17 @@ public class EquivalenceTests : IDisposable
     }
 
     /// <summary>
-    /// Ein Profil, das ein Feld ueber einen Bibliothekseintrag ersetzt statt
+    /// Ein Profil, das ein Feld ueber einen Erweiterungseintrag ersetzt statt
     /// ueber einen eigenen Namensraum -- der Inventarnummer-Fall aus dem Plan: die
-    /// Bibliothek traegt "assetTag" (Basistyp <c>pattern</c>), das Profil
+    /// Erweiterung traegt "assetTag" (Basistyp <c>pattern</c>), das Profil
     /// kennt den Schluessel selbst nicht.
     /// </summary>
-    private Profile ErzeugeProfilMitBibliotheksverweis()
+    private Profile ErzeugeProfilMitErweiterungsverweis()
     {
         var profil = new Profile
         {
-            ProfileName = "gleichlauf-bibliothek",
-            MappingStore = Path.Combine(_verzeichnis, "mapping-bibliothek.json"),
+            ProfileName = "gleichlauf-erweiterung",
+            MappingStore = Path.Combine(_verzeichnis, "mapping-erweiterung.json"),
             Fields =
             [
                 new FieldRule { Match = "Kundennummer", Action = FieldAction.Pseudonymize, Generator = "assetTag" },
@@ -230,17 +230,18 @@ public class EquivalenceTests : IDisposable
             ],
         };
 
-        ProfileStore.Save(profil, Path.Combine(_verzeichnis, "profil-bibliothek.json"));
+        ProfileStore.Save(profil, Path.Combine(_verzeichnis, "profil-erweiterung.json"));
         return profil;
     }
 
     /// <summary>
-    /// Wird bewusst als Objekt statt als Datei unter <see cref="GeneratorLibrary.DefaultPath"/>
-    /// erzeugt und explizit durchgereicht -- so bleibt der Test unabhaengig
-    /// vom (fuer den ganzen Testlauf gemeinsamen) <c>XDG_CONFIG_HOME</c> und
-    /// kann keinen anderen Test beeinflussen.
+    /// Wird bewusst als Objekt statt als Datei unter einem der beiden
+    /// Fundorte von <see cref="ExtensionLibrary.ResolvePath"/> erzeugt und
+    /// explizit durchgereicht -- so bleibt der Test unabhaengig vom (fuer den
+    /// ganzen Testlauf gemeinsamen) <c>XDG_CONFIG_HOME</c> und kann keinen
+    /// anderen Test beeinflussen.
     /// </summary>
-    private static GeneratorLibrary ErzeugeBibliothek() => new()
+    private static ExtensionLibrary ErzeugeErweiterung() => new()
     {
         Generators = { ["assetTag"] = new GeneratorSettings { Type = "pattern", Pattern = "INV999999" } },
         TextRules =
@@ -250,10 +251,10 @@ public class EquivalenceTests : IDisposable
     };
 
     [Fact]
-    public async Task Die_Oberflaeche_liefert_dasselbe_wie_ein_unmittelbarer_Lauf_mit_gesetzter_Bibliothek()
+    public async Task Die_Oberflaeche_liefert_dasselbe_wie_ein_unmittelbarer_Lauf_mit_gesetzter_Erweiterung()
     {
-        var profil = ErzeugeProfilMitBibliotheksverweis();
-        var bibliothek = ErzeugeBibliothek();
+        var profil = ErzeugeProfilMitErweiterungsverweis();
+        var erweiterung = ErzeugeErweiterung();
 
         var eingabe = new UTF8Encoding(false).GetBytes(
             "Kundennummer;Kundenname;IBAN;Betrag\n"
@@ -261,16 +262,16 @@ public class EquivalenceTests : IDisposable
             + "INV654321;Erika Musterfrau;DE02500105170137075030;-89,90\n");
 
         // Der Weg, den auch das Kommandozeilenprogramm nimmt -- diesmal mit
-        // gesetzter Bibliothek.
-        var ueberEngine = new ObfuscationEngine(profil, bibliothek)
+        // gesetzter Erweiterung.
+        var ueberEngine = new ObfuscationEngine(profil, erweiterung)
             .Obfuscate(eingabe, "kunden.csv", new RunOptions { Strict = true });
 
         var csvPfad = Path.Combine(_verzeichnis, "kunden.csv");
         await File.WriteAllBytesAsync(csvPfad, eingabe);
 
-        // Der Weg der Oberflaeche: dieselbe Bibliothek wird -- wie beim echten
+        // Der Weg der Oberflaeche: dieselbe Erweiterung wird -- wie beim echten
         // Programmstart -- an die Sitzung durchgereicht statt neu geladen.
-        var sitzung = ProfileSession.Load(Path.Combine(_verzeichnis, "profil-bibliothek.json"), bibliothek);
+        var sitzung = ProfileSession.Load(Path.Combine(_verzeichnis, "profil-erweiterung.json"), erweiterung);
         var ueberOberflaeche = sitzung.Engine.Obfuscate(
             await File.ReadAllBytesAsync(csvPfad), csvPfad, new RunOptions { Strict = true });
 
@@ -278,7 +279,7 @@ public class EquivalenceTests : IDisposable
             Encoding.UTF8.GetString(ueberEngine.Content),
             Encoding.UTF8.GetString(ueberOberflaeche.Content));
 
-        // Der Bibliotheksgenerator muss auch tatsaechlich gegriffen haben --
+        // Der Erweiterungsgenerator muss auch tatsaechlich gegriffen haben --
         // sonst pruefte der Vergleich oben nur zwei gleich falsche Ergebnisse
         // gegeneinander.
         var ersteZeile = Encoding.UTF8.GetString(ueberOberflaeche.Content).Split('\n')[1].Split(';');

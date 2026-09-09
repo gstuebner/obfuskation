@@ -9,7 +9,7 @@ using Obfuskation.Core.Mapping;
 // ueberall dieselben Namen gelten.
 var configOption = new Option<string?>("--config", "-c")
 {
-    Description = "Pfad zur Konfigurationsdatei (Vorgabe: obfuskation.json, aufwaerts gesucht)",
+    Description = "Pfad zur Konfigurationsdatei (Vorgabe: obfuskation-projekt.json, aufwaerts gesucht)",
 };
 
 var outputOption = new Option<string?>("--output", "-o")
@@ -43,9 +43,9 @@ var allowUnsafeStoreOption = new Option<bool>("--allow-unsafe-store")
     Description = "Ersetzungstabelle auch in einem Git-Arbeitsverzeichnis ablegen (nicht empfohlen)",
 };
 
-var noLibraryOption = new Option<bool>("--no-library")
+var noExtensionsOption = new Option<bool>("--no-extensions")
 {
-    Description = "Ohne die Generator-Bibliothek arbeiten (siehe 'obfuskation library path'); " +
+    Description = "Ohne die Erweiterungsdatei arbeiten (siehe 'obfuskation extensions path'); " +
                   "fuer Fehlersuche und reproduzierbare Laeufe",
     Recursive = true,
 };
@@ -62,11 +62,11 @@ rootCommand.Subcommands.Add(BuildDeobfuscateCommand());
 rootCommand.Subcommands.Add(BuildScanCommand());
 rootCommand.Subcommands.Add(BuildMappingCommand());
 rootCommand.Subcommands.Add(BuildProfileCommand());
-rootCommand.Subcommands.Add(BuildLibraryCommand());
+rootCommand.Subcommands.Add(BuildExtensionsCommand());
 
 // Recursive gilt fuer alle Unterbefehle, ohne dass jeder sie einzeln
 // eintragen muss — siehe System.CommandLine, Option.Recursive.
-rootCommand.Options.Add(noLibraryOption);
+rootCommand.Options.Add(noExtensionsOption);
 
 // Fassung und Ersteller stehen unter jeder Hilfe, wie in allen Programmen.
 ProgramInfo.AddHelpFooter(rootCommand);
@@ -94,7 +94,7 @@ Command BuildInitCommand()
     var centralOption = new Option<bool>("--central")
     {
         Description = "Im zentralen Profilordner ablegen (~/.config/obfuskation/profile/<name>.json) " +
-                      "statt als obfuskation.json im aktuellen Verzeichnis",
+                      "statt als obfuskation-projekt.json im aktuellen Verzeichnis",
     };
 
     var forceOption = new Option<bool>("--force")
@@ -133,8 +133,8 @@ Command BuildInitCommand()
             return ExitCodes.Failure;
         }
 
-        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
-        var profile = ProfileScaffolder.Create(profileName, from, description, library);
+        var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));
+        var profile = ProfileScaffolder.Create(profileName, from, description, extensions);
         ProfileStore.Save(profile, target);
 
         ConsoleOutput.WriteInfo($"{fullTarget} angelegt (Profil '{profileName}').");
@@ -185,8 +185,8 @@ Command BuildObfuscateCommand()
         var dryRun = parseResult.GetValue(dryRunOption);
 
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
-        var engine = new ObfuscationEngine(profile, library);
+        var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));
+        var engine = new ObfuscationEngine(profile, extensions);
 
         var options = new RunOptions
         {
@@ -237,8 +237,8 @@ Command BuildDeobfuscateCommand()
         var json = parseResult.GetValue(jsonOption);
 
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
-        var engine = new ObfuscationEngine(profile, library);
+        var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));
+        var engine = new ObfuscationEngine(profile, extensions);
 
         var options = new RunOptions
         {
@@ -282,8 +282,8 @@ Command BuildScanCommand()
         var json = parseResult.GetValue(jsonOption);
 
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
-        var engine = new ObfuscationEngine(profile, library);
+        var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));
+        var engine = new ObfuscationEngine(profile, extensions);
 
         var options = new RunOptions
         {
@@ -330,8 +330,8 @@ Command BuildMappingCommand()
     listCommand.SetAction(parseResult => CommandContext.Run(() =>
     {
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
-        var engine = new ObfuscationEngine(profile, library);
+        var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));
+        var engine = new ObfuscationEngine(profile, extensions);
         var path = engine.ResolveMappingStorePath();
 
         if (!File.Exists(path))
@@ -363,8 +363,8 @@ Command BuildMappingCommand()
     pathCommand.SetAction(parseResult => CommandContext.Run(() =>
     {
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
-        var library = CommandContext.LoadLibrary(parseResult.GetValue(noLibraryOption));
-        Console.Out.WriteLine(new ObfuscationEngine(profile, library).ResolveMappingStorePath());
+        var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));
+        Console.Out.WriteLine(new ObfuscationEngine(profile, extensions).ResolveMappingStorePath());
         return ExitCodes.Success;
     }));
 
@@ -417,32 +417,37 @@ Command BuildProfileCommand()
     return command;
 }
 
-Command BuildLibraryCommand()
+Command BuildExtensionsCommand()
 {
-    var command = new Command("library",
-        "Auskunft ueber die Generator-Bibliothek -- hauseigene Muster ausserhalb jedes Profils " +
-        "(siehe 'library path' fuer den Ablageort).");
+    var command = new Command("extensions",
+        "Auskunft ueber die Erweiterungsdatei -- hauseigene Generatoren, Textregeln und Spaltenmuster " +
+        "ausserhalb jedes Profils (siehe 'extensions path' fuer den Ablageort).");
 
     var listCommand = new Command("list",
-        "Zeigt die Generatoren und Textregeln der Bibliothek samt ihren Mustern. Anders als bei " +
-        "'mapping list' stehen hier keine Echtdaten, sondern nur Konfiguration -- die Muster " +
-        "gehoeren deshalb mit in die Ausgabe.");
+        "Zeigt Generatoren, Textregeln und Spaltenmuster der Erweiterungsdatei samt ihren Mustern. " +
+        "Anders als bei 'mapping list' stehen hier keine Echtdaten, sondern nur Konfiguration -- die " +
+        "Muster gehoeren deshalb mit in die Ausgabe. Nennt zudem, welcher der beiden Fundorte greift.");
     listCommand.SetAction(_ => CommandContext.Run(() =>
     {
-        var library = GeneratorLibrary.Load();
+        var resolution = ExtensionLibrary.ResolvePath();
+        var extensions = ExtensionLibrary.Load(resolution.Path);
 
-        ConsoleOutput.WriteInfo($"Bibliothek: {GeneratorLibrary.DefaultPath}");
+        if (resolution.Path is null)
+            ConsoleOutput.WriteInfo("Erweiterungsdatei: keine gefunden.");
+        else
+            ConsoleOutput.WriteInfo(
+                $"Erweiterungsdatei: {resolution.Path} ({DescribeOrigin(resolution.Origin!.Value)})");
 
-        if (library.IsEmpty)
+        if (extensions.IsEmpty)
         {
             ConsoleOutput.WriteInfo("Keine Eintraege.");
             return ExitCodes.Success;
         }
 
-        if (library.Generators.Count > 0)
+        if (extensions.Generators.Count > 0)
         {
             ConsoleOutput.WriteInfo("Generatoren:");
-            foreach (var (key, settings) in library.Generators.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+            foreach (var (key, settings) in extensions.Generators.OrderBy(kv => kv.Key, StringComparer.Ordinal))
             {
                 var baseName = string.IsNullOrWhiteSpace(settings.Type) ? key : settings.Type;
                 ConsoleOutput.WriteInfo($"  {key} ({GeneratorDescriptions.Label(baseName)})");
@@ -451,21 +456,48 @@ Command BuildLibraryCommand()
             }
         }
 
-        if (library.TextRules.Count > 0)
+        if (extensions.TextRules.Count > 0)
         {
             ConsoleOutput.WriteInfo("Textregeln:");
-            foreach (var rule in library.TextRules.OrderBy(r => r.Name, StringComparer.Ordinal))
+            foreach (var rule in extensions.TextRules.OrderBy(r => r.Name, StringComparer.Ordinal))
                 ConsoleOutput.WriteInfo(
                     $"  {rule.Name} (Prio {rule.Priority}, Generator '{rule.Generator}'): {rule.Pattern}");
+        }
+
+        if (extensions.FieldRules.Count > 0)
+        {
+            ConsoleOutput.WriteInfo("Spaltenmuster:");
+            foreach (var rule in extensions.FieldRules)
+                ConsoleOutput.WriteInfo($"  {rule.Pattern} -> {rule.Generator}");
         }
 
         return ExitCodes.Success;
     }));
 
-    var pathCommand = new Command("path", "Gibt den Pfad der Generator-Bibliothek aus.");
+    var pathCommand = new Command("path", "Gibt den Pfad der Erweiterungsdatei aus.");
     pathCommand.SetAction(_ => CommandContext.Run(() =>
     {
-        Console.Out.WriteLine(GeneratorLibrary.DefaultPath);
+        // Der eigentliche Pfad geht auf die Standardausgabe -- nur er, damit
+        // ein Skript ihn per Kommandosubstitution abgreifen kann. Alles
+        // Erklaerende (geprueft Orte, uebergangene Profildatei) geht auf die
+        // Standardfehlerausgabe.
+        var resolution = ExtensionLibrary.ResolvePath();
+
+        if (resolution.Path is not null)
+            Console.Out.WriteLine(resolution.Path);
+        else
+            ConsoleOutput.WriteInfo("Keine Erweiterungsdatei gefunden. Geprueft:");
+
+        foreach (var candidate in resolution.Candidates)
+        {
+            if (candidate.SkippedAsProfile)
+                ConsoleOutput.WriteInfo(
+                    $"  {candidate.Path} ({DescribeOrigin(candidate.Origin)}): dort liegt ein Profil, uebergangen.");
+            else if (resolution.Path is null)
+                ConsoleOutput.WriteInfo(
+                    $"  {candidate.Path} ({DescribeOrigin(candidate.Origin)}): nicht vorhanden.");
+        }
+
         return ExitCodes.Success;
     }));
 
@@ -473,6 +505,13 @@ Command BuildLibraryCommand()
     command.Subcommands.Add(pathCommand);
     return command;
 }
+
+string DescribeOrigin(ExtensionOrigin origin) => origin switch
+{
+    ExtensionOrigin.ProgramDirectory => "neben der Programmdatei",
+    ExtensionOrigin.ConfigDirectory => "im Konfigurationsordner",
+    _ => origin.ToString(),
+};
 
 IReadOnlyList<ProfileSummary> SortProfiles(IReadOnlyList<ProfileSummary> summaries, ProfileListSort sort)
     => sort switch

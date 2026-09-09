@@ -15,7 +15,7 @@ namespace Obfuskation.Gui.ViewModels;
 public sealed class TextRulesViewModel : ObservableObject
 {
     private readonly Profile _profile;
-    private readonly GeneratorLibrary _library;
+    private readonly ExtensionLibrary _extensions;
     private readonly Action _onChanged;
     private readonly TextRuleEngine _engine = new();
 
@@ -27,30 +27,30 @@ public sealed class TextRulesViewModel : ObservableObject
 
     private string _matchSummary = "";
 
-    public TextRulesViewModel(Profile profile, GeneratorLibrary library, Action onChanged)
+    public TextRulesViewModel(Profile profile, ExtensionLibrary extensions, Action onChanged)
     {
         _profile = profile;
-        _library = library;
+        _extensions = extensions;
         _onChanged = onChanged;
 
         foreach (var rule in profile.TextRules)
-            Rules.Add(new TextRuleViewModel(profile, library, rule, OnRuleChanged));
+            Rules.Add(new TextRuleViewModel(profile, extensions, rule, OnRuleChanged));
 
-        // Bibliotheksregeln nur lesend anhaengen -- gepflegt wird die Datei im
-        // Texteditor (siehe GeneratorLibrary). Eine gleichnamige Profilregel
-        // ersetzt eine Bibliotheksregel vollstaendig, statt zusaetzlich zu
+        // Erweiterungsregeln nur lesend anhaengen -- gepflegt wird die Datei im
+        // Texteditor (siehe ExtensionLibrary). Eine gleichnamige Profilregel
+        // ersetzt eine Erweiterungsregel vollstaendig, statt zusaetzlich zu
         // gelten (dieselbe Regel wie ObfuscationEngine.MergeTextRules); sie
         // erscheint dann nicht doppelt.
         var profilnamen = new HashSet<string>(
             profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
 
-        foreach (var rule in library.TextRules.Where(rule => !profilnamen.Contains(rule.Name)))
-            Rules.Add(new TextRuleViewModel(profile, library, rule, OnRuleChanged, isLibraryRule: true));
+        foreach (var rule in extensions.TextRules.Where(rule => !profilnamen.Contains(rule.Name)))
+            Rules.Add(new TextRuleViewModel(profile, extensions, rule, OnRuleChanged, isExtensionRule: true));
 
         AddCommand = new RelayCommand(Add);
-        RemoveCommand = new RelayCommand(Remove, () => _selected is { IsLibraryRule: false });
+        RemoveCommand = new RelayCommand(Remove, () => _selected is { IsExtensionRule: false });
 
-        Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(profile, library));
+        Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(profile, extensions));
 
         // Erst jetzt: der Setter meldet dem Entfernen-Befehl seine
         // Verfuegbarkeit, den es vorher noch nicht gab.
@@ -110,7 +110,7 @@ public sealed class TextRulesViewModel : ObservableObject
 
         _profile.TextRules.Add(rule);
 
-        var viewModel = new TextRuleViewModel(_profile, _library, rule, OnRuleChanged);
+        var viewModel = new TextRuleViewModel(_profile, _extensions, rule, OnRuleChanged);
         Rules.Add(viewModel);
         Selected = viewModel;
 
@@ -151,9 +151,9 @@ public sealed class TextRulesViewModel : ObservableObject
     /// Verwendet dieselbe Aufloesung ueberlappender Treffer wie der echte Lauf,
     /// damit hier nichts anderes herauskommt als dort.
     ///
-    /// Geprueft werden Profil- und Bibliotheksregeln zusammen -- dieselbe
+    /// Geprueft werden Profil- und Erweiterungsregeln zusammen -- dieselbe
     /// Vereinigung wie <c>ObfuscationEngine.MergeTextRules</c>: eine
-    /// Bibliotheksregel gilt, ausser eine gleichnamige Profilregel ersetzt sie
+    /// Erweiterungsregel gilt, ausser eine gleichnamige Profilregel ersetzt sie
     /// vollstaendig. Das Erprobungsfeld soll pruefen koennen, was ein echter
     /// Lauf tatsaechlich findet, nicht nur den Ausschnitt im Profil.
     /// </summary>
@@ -164,7 +164,7 @@ public sealed class TextRulesViewModel : ObservableObject
         var profilnamen = new HashSet<string>(
             _profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
 
-        var brauchbare = _library.TextRules
+        var brauchbare = _extensions.TextRules
             .Where(rule => !profilnamen.Contains(rule.Name))
             .Concat(_profile.TextRules)
             .Where(rule => !string.IsNullOrWhiteSpace(rule.Pattern))
@@ -210,41 +210,41 @@ public sealed class TextRulesViewModel : ObservableObject
 /// <summary>
 /// Eine einzelne Textregel im Formular.
 ///
-/// Eine Bibliotheksregel (<see cref="IsLibraryRule"/>) ist nur lesend: die
-/// Setter tun dann nichts. Gepflegt wird die Bibliotheksdatei im Texteditor,
-/// nicht hier -- siehe <see cref="GeneratorLibrary"/>.
+/// Eine Erweiterungsregel (<see cref="IsExtensionRule"/>) ist nur lesend: die
+/// Setter tun dann nichts. Gepflegt wird die Erweiterungsdatei im Texteditor,
+/// nicht hier -- siehe <see cref="ExtensionLibrary"/>.
 /// </summary>
 public sealed class TextRuleViewModel : ObservableObject
 {
     private readonly Action _onChanged;
     private readonly Profile _profile;
-    private readonly GeneratorLibrary _library;
+    private readonly ExtensionLibrary _extensions;
 
     public TextRuleViewModel(
-        Profile profile, GeneratorLibrary library, TextRule rule, Action onChanged, bool isLibraryRule = false)
+        Profile profile, ExtensionLibrary extensions, TextRule rule, Action onChanged, bool isExtensionRule = false)
     {
         _profile = profile;
-        _library = library;
+        _extensions = extensions;
         Rule = rule;
         _onChanged = onChanged;
-        IsLibraryRule = isLibraryRule;
+        IsExtensionRule = isExtensionRule;
     }
 
     public TextRule Rule { get; }
 
     /// <summary>
-    /// Ob diese Regel aus der Generator-Bibliothek stammt statt aus dem
-    /// Profil -- steuert, ob das Formular sie bearbeitbar zeigt und ob sie
-    /// sich entfernen laesst.
+    /// Ob diese Regel aus der Erweiterungsdatei stammt statt aus dem Profil --
+    /// steuert, ob das Formular sie bearbeitbar zeigt und ob sie sich
+    /// entfernen laesst.
     /// </summary>
-    public bool IsLibraryRule { get; }
+    public bool IsExtensionRule { get; }
 
     public string Name
     {
         get => Rule.Name;
         set
         {
-            if (IsLibraryRule || Rule.Name == value)
+            if (IsExtensionRule || Rule.Name == value)
                 return;
             Rule.Name = value;
             OnPropertyChanged();
@@ -257,7 +257,7 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.Pattern;
         set
         {
-            if (IsLibraryRule || Rule.Pattern == value)
+            if (IsExtensionRule || Rule.Pattern == value)
                 return;
             Rule.Pattern = value;
             OnPropertyChanged();
@@ -267,10 +267,10 @@ public sealed class TextRuleViewModel : ObservableObject
 
     public GeneratorOption? Generator
     {
-        get => GeneratorOption.Find(_profile, Rule.Generator, _library);
+        get => GeneratorOption.Find(_profile, Rule.Generator, _extensions);
         set
         {
-            if (IsLibraryRule || value is null || Rule.Generator == value.Name)
+            if (IsExtensionRule || value is null || Rule.Generator == value.Name)
                 return;
             Rule.Generator = value.Name;
             OnPropertyChanged();
@@ -283,7 +283,7 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.Priority;
         set
         {
-            if (IsLibraryRule || Rule.Priority == value)
+            if (IsExtensionRule || Rule.Priority == value)
                 return;
             Rule.Priority = value;
             OnPropertyChanged();
@@ -296,7 +296,7 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.IgnoreCase;
         set
         {
-            if (IsLibraryRule || Rule.IgnoreCase == value)
+            if (IsExtensionRule || Rule.IgnoreCase == value)
                 return;
             Rule.IgnoreCase = value;
             OnPropertyChanged();
@@ -304,8 +304,8 @@ public sealed class TextRuleViewModel : ObservableObject
         }
     }
 
-    public string Display => IsLibraryRule
-        ? $"{Rule.Name}  ·  Bibliothek"
+    public string Display => IsExtensionRule
+        ? $"{Rule.Name}  ·  Erweiterung"
         : $"{Rule.Name}  ·  {Rule.Priority}";
 }
 

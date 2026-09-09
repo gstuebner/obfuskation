@@ -8,7 +8,7 @@ namespace Obfuskation.Core.Tests;
 /// </summary>
 public class ValueSuggesterTests
 {
-    private static GeneratorLibrary AssetTagLibrary() => new()
+    private static ExtensionLibrary AssetTagExtensions() => new()
     {
         Generators = { ["assetTag"] = new GeneratorSettings { Type = "pattern", Pattern = "INV999999" } },
         TextRules =
@@ -25,7 +25,7 @@ public class ValueSuggesterTests
     {
         var samples = Samples("Zielsystem", "INV123456", "INV654321");
 
-        var vorschlaege = ValueSuggester.Suggest(samples, AssetTagLibrary());
+        var vorschlaege = ValueSuggester.Suggest(samples, AssetTagExtensions());
 
         var vorschlag = Assert.Single(vorschlaege);
         Assert.Equal("Zielsystem", vorschlag.FieldName);
@@ -40,7 +40,7 @@ public class ValueSuggesterTests
     {
         var samples = Samples("Notiz", "Neustart von INV123456 am Montag", "INV654321");
 
-        Assert.Empty(ValueSuggester.Suggest(samples, AssetTagLibrary()));
+        Assert.Empty(ValueSuggester.Suggest(samples, AssetTagExtensions()));
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class ValueSuggesterTests
     {
         var samples = Samples("Zielsystem", "INV123456");
 
-        Assert.Empty(ValueSuggester.Suggest(samples, AssetTagLibrary()));
+        Assert.Empty(ValueSuggester.Suggest(samples, AssetTagExtensions()));
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class ValueSuggesterTests
     {
         var samples = Samples("Zielsystem", "INV123456", "INV654321", "", "   ");
 
-        var vorschlag = Assert.Single(ValueSuggester.Suggest(samples, AssetTagLibrary()));
+        var vorschlag = Assert.Single(ValueSuggester.Suggest(samples, AssetTagExtensions()));
 
         Assert.Equal("assetTag", vorschlag.Generator);
         Assert.Equal(2, vorschlag.MatchedSamples);
@@ -64,11 +64,11 @@ public class ValueSuggesterTests
     }
 
     [Fact]
-    public void Ohne_Bibliothek_schlagen_nur_die_eingebauten_Standardmuster_an()
+    public void Ohne_Erweiterungsdatei_schlagen_nur_die_eingebauten_Standardmuster_an()
     {
         var samples = Samples("IBAN", "DE02120300000000202051", "DE02500105170137075030");
 
-        var vorschlag = Assert.Single(ValueSuggester.Suggest(samples, GeneratorLibrary.Empty));
+        var vorschlag = Assert.Single(ValueSuggester.Suggest(samples, ExtensionLibrary.Empty));
 
         Assert.Equal("iban", vorschlag.Generator);
     }

@@ -372,9 +372,9 @@ public class ScanAndConfigTests
     }
 
     [Fact]
-    public void Ein_Bibliotheksverweis_ist_kein_unbekannter_Generator()
+    public void Ein_Erweiterungsverweis_ist_kein_unbekannter_Generator()
     {
-        var library = new GeneratorLibrary
+        var extensions = new ExtensionLibrary
         {
             Generators = { ["assetTag"] = new GeneratorSettings { Type = "pattern", Pattern = "INV999999" } },
         };
@@ -385,15 +385,15 @@ public class ScanAndConfigTests
             Action = FieldAction.Pseudonymize, Generator = "assetTag",
         });
 
-        var befunde = ProfileValidator.Validate(profile, library);
+        var befunde = ProfileValidator.Validate(profile, extensions);
 
         Assert.DoesNotContain(befunde, i => i.Severity == ValidationSeverity.Error);
     }
 
     [Fact]
-    public void Eine_fremde_Option_an_einem_Bibliothekseintrag_wird_gemeldet()
+    public void Eine_fremde_Option_an_einem_Erweiterungseintrag_wird_gemeldet()
     {
-        var library = new GeneratorLibrary
+        var extensions = new ExtensionLibrary
         {
             Generators =
             {
@@ -405,9 +405,53 @@ public class ScanAndConfigTests
         };
         var profile = new Profile { ProfileName = "test" };
 
-        var befunde = ProfileValidator.Validate(profile, library);
+        var befunde = ProfileValidator.Validate(profile, extensions);
 
         Assert.Contains(befunde, i =>
-            i.Path == "library.generators.assetTag.values" && i.Severity == ValidationSeverity.Error);
+            i.Path == "extensions.generators.assetTag.values" && i.Severity == ValidationSeverity.Error);
+    }
+
+    [Fact]
+    public void Ein_kaputtes_fieldRules_Muster_wird_gemeldet()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            FieldRules = [new FieldNameRule { Pattern = "(unbalanciert", Generator = "personName" }],
+        };
+        var profile = new Profile { ProfileName = "test" };
+
+        var befunde = ProfileValidator.Validate(profile, extensions);
+
+        Assert.Contains(befunde, i =>
+            i.Path == "extensions.fieldRules[0].pattern" && i.Severity == ValidationSeverity.Error);
+    }
+
+    [Fact]
+    public void Ein_unbekannter_Generator_in_fieldRules_wird_gemeldet()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            FieldRules = [new FieldNameRule { Pattern = "zielsystem", Generator = "gibtsnicht" }],
+        };
+        var profile = new Profile { ProfileName = "test" };
+
+        var befunde = ProfileValidator.Validate(profile, extensions);
+
+        Assert.Contains(befunde, i =>
+            i.Path == "extensions.fieldRules[0].generator" && i.Severity == ValidationSeverity.Error);
+    }
+
+    [Fact]
+    public void ScanText_in_fieldRules_ist_kein_unbekannter_Generator()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            FieldRules = [new FieldNameRule { Pattern = "bemerkung", Generator = "scanText" }],
+        };
+        var profile = new Profile { ProfileName = "test" };
+
+        var befunde = ProfileValidator.Validate(profile, extensions);
+
+        Assert.DoesNotContain(befunde, i => i.Severity == ValidationSeverity.Error);
     }
 }

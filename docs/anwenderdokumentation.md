@@ -356,9 +356,11 @@ erklärt wird (Abschnitt 4).
 **Wo ein Profil liegt.** Neu angelegte Profile landen als Vorgabe unter
 `~/.config/obfuskation/profile/<name>.json` — ein fester, zentraler Ort, den
 die Übersicht (siehe unten) durchsuchen kann. Eine projektlokale
-`obfuskation.json`, wie sie `obfuskation init` ohne weitere Angaben anlegt,
-bleibt gleichwertig möglich; sie erscheint in der Übersicht über die
-Zuletzt-Liste, sobald sie einmal geöffnet wurde.
+`obfuskation-projekt.json`, wie sie `obfuskation init` ohne weitere Angaben
+anlegt, bleibt gleichwertig möglich; sie erscheint in der Übersicht über die
+Zuletzt-Liste, sobald sie einmal geöffnet wurde. Eine vorhandene
+`obfuskation.json` mit Profilinhalt (`profileName` oder `fields`) wird
+weiterhin unter ihrem alten Namen gefunden.
 
 ### Anlegen
 
@@ -452,7 +454,7 @@ Liegt die Profildatei im zentralen Ordner **und** trug ihr Dateiname bislang
 den alten Profilnamen, wird sie passend mitbenannt. In zwei Fällen bleibt
 der Dateiname dagegen unangetastet und nur der Name *im* Profil ändert
 sich: wenn die Datei nicht im zentralen Ordner liegt (etwa eine
-projektlokale `obfuskation.json`), oder wenn der neue Name im zentralen
+projektlokale `obfuskation-projekt.json`), oder wenn der neue Name im zentralen
 Ordner bereits einer anderen Datei gehört — in diesem Fall würde ein
 Mitbenennen sonst ein fremdes Profil überschreiben. Ist das gerade im
 Hauptfenster geöffnete Profil betroffen, zieht die laufende Sitzung
@@ -694,7 +696,7 @@ obfuskation deobfuscate [<datei>] [-o <ziel>] [--json]
 obfuskation scan <datei> [--json]
 obfuskation mapping list|path
 obfuskation profile list [--sort name|used|changed] [--json]
-obfuskation library list|path
+obfuskation extensions list|path
 ```
 
 **`--config` nimmt jetzt auch einen bloßen Profilnamen entgegen**, nicht
@@ -721,17 +723,19 @@ programmübergreifenden Nutzungs-Index. `--sort` wählt die Sortierung
 (Vorgabe: nach Namen), `--json` liefert dieselbe Liste maschinenlesbar auf
 der Standardausgabe.
 
-**`obfuskation library list`** zeigt die Schlüssel der
-Generator-Bibliothek, ihren Basistyp und die Namen ihrer Textregeln,
-Muster eingeschlossen — anders als bei der Ersetzungstabelle sind das keine
-Echtdaten, nur Konfiguration. **`obfuskation library path`** zeigt den
-Ablageort. Die Option **`--no-library`** lässt einen Lauf ohne die
-Bibliothek arbeiten, etwa zur Fehlersuche oder für ein Ergebnis, das
-unabhängig von der lokalen Konfiguration des Rechners reproduzierbar
-bleibt. Einzelheiten und das Inventarnummer-Rezept in Kapitel 10.
+**`obfuskation extensions list`** zeigt die Schlüssel der
+Erweiterungsdatei, ihren Basistyp und die Namen ihrer Textregeln und
+Spaltenmuster, Muster eingeschlossen — anders als bei der Ersetzungstabelle
+sind das keine Echtdaten, nur Konfiguration. Zusätzlich nennt der Befehl,
+welcher der beiden Fundorte greift. **`obfuskation extensions path`** zeigt
+diesen Ort, oder beide geprüften Orte, wenn keiner eine Datei hergibt. Die
+Option **`--no-extensions`** lässt einen Lauf ohne die Erweiterungsdatei
+arbeiten, etwa zur Fehlersuche oder für ein Ergebnis, das unabhängig von
+der lokalen Konfiguration des Rechners reproduzierbar bleibt. Einzelheiten
+und das Inventarnummer-Rezept in Kapitel 10.
 
 **`obfuskation init --central`** legt das Regelgerüst nicht mehr als
-`obfuskation.json` im aktuellen Verzeichnis an, sondern direkt am zentralen
+`obfuskation-projekt.json` im aktuellen Verzeichnis an, sondern direkt am zentralen
 Ablageort — demselben, den auch der Anlegen-Dialog der Oberfläche
 vorschlägt — und meldet danach den vollständigen Zielpfad. `--description`
 setzt gleich die freie Beschreibung, die auch die Oberfläche in der
@@ -764,17 +768,22 @@ Vollständige Beschreibung der Befehle, Optionen und Rückgabewerte in
 
 ---
 
-## 10. Eigene Muster (Generator-Bibliothek)
+## 10. Eigene Muster (Erweiterungsdatei)
 
 Wer in einem festen Umfeld arbeitet, hat oft wiederkehrende hauseigene
-Muster: interne Inventarnummern, Ticketnummern, eigene Kennungen. Diese Muster
-gehören weder in ein Profil, das eventuell weitergegeben wird, noch sollen
-sie in jedem neuen Profil erneut eingetippt werden. Dafür gibt es die
-**Generator-Bibliothek**, eine Datei am festen, persönlichen Ort
-`~/.config/obfuskation/generators.json`. Sie fließt beim Start automatisch
-in jedes Profil ein, wird aber **nie** in eine Profildatei
-zurückgeschrieben — eine Änderung an der Bibliothek betrifft also nie den
-Inhalt eines Profils.
+Muster: interne Inventarnummern, Ticketnummern, eigene Kennungen, und dazu, welche
+Spalte welchen Generator braucht. Diese Muster gehören weder in ein Profil,
+das eventuell weitergegeben wird, noch sollen sie in jedem neuen Profil
+erneut eingetippt werden. Dafür gibt es die **Erweiterungsdatei**,
+`obfuskation.json`, gesucht an einem von zwei festen Orten — in dieser
+Reihenfolge, die zuerst gefundene Datei gilt vollständig:
+
+1. neben der laufenden Programmdatei
+2. `~/.config/obfuskation`
+
+Sie fließt beim Start automatisch in jedes Profil ein, wird aber **nie** in
+eine Profildatei zurückgeschrieben — eine Änderung an der Erweiterungsdatei
+betrifft also nie den Inhalt eines Profils.
 
 ### Was eine Maske ist
 
@@ -794,10 +803,10 @@ Am Beispiel eines internen Hostnamens der Form `INV123456` (drei feste
 Buchstaben, sechs Ziffern), der sowohl in einer eigenen Spalte als auch im
 Fließtext vorkommen kann:
 
-1. **Bibliotheksdatei anlegen oder öffnen** unter
-   `~/.config/obfuskation/generators.json` (mit einem beliebigen
-   Texteditor — ein eigener Editor in der Oberfläche ist für diese Fassung
-   nicht vorgesehen).
+1. **Erweiterungsdatei anlegen oder öffnen**, entweder neben der
+   Programmdatei oder unter `~/.config/obfuskation/obfuskation.json` (mit
+   einem beliebigen Texteditor — ein eigener Editor in der Oberfläche ist
+   für diese Fassung nicht vorgesehen).
 2. **Generator und Textregel eintragen:**
 
    ```jsonc
@@ -813,31 +822,61 @@ Fließtext vorkommen kann:
    ```
 
    Ein lauffähiges (aber inhaltlich harmloses) Beispiel derselben Form liegt
-   unter `docs/beispiel/bibliothek-beispiel.json` — Inhalt anpassen und nach
-   `~/.config/obfuskation/generators.json` kopieren.
-3. **Spalte zuweisen:** Ein Feld wie `Zielsystem` auf „ersetzen“ mit dem
-   Generator `assetTag` stellen. In der Generatorauswahl erscheint er mit
-   dem Zusatz „— aus der Bibliothek", damit erkennbar bleibt, dass er nicht
-   im Profil selbst steht.
+   unter `docs/beispiel/obfuskation-erweiterung-beispiel.json` — Inhalt
+   anpassen und an einen der beiden Fundorte kopieren, dort schlicht als
+   `obfuskation.json`.
+3. **Spalte zuweisen — von Hand oder automatisch:** Ein Feld wie
+   `Zielsystem` auf „ersetzen“ mit dem Generator `assetTag` stellen. In der
+   Generatorauswahl erscheint er mit dem Zusatz „— aus der
+   Erweiterungsdatei", damit erkennbar bleibt, dass er nicht im Profil
+   selbst steht. Trägt die Erweiterungsdatei zusätzlich eine passende
+   `fieldRules`-Regel ein (siehe unten), schlägt `init` bzw. „Muster
+   erkennen…" diesen Generator für ein so benanntes Feld von selbst vor.
 4. **Freitext zuweisen:** Ein Feld wie `Bemerkung`, das denselben Inventarnummern
    auch im Fließtext enthalten kann, auf „Freitext durchsuchen" stellen. Die
-   Bibliotheksregel `assetTag` wirkt dort automatisch mit, ohne dass sie im
-   Profil aufgeführt werden müsste.
+   Textregel `assetTag` aus der Erweiterungsdatei wirkt dort automatisch
+   mit, ohne dass sie im Profil aufgeführt werden müsste.
 5. **Ergebnis:** Spalte und Freitext liefern für denselben Klartext dasselbe
    Pseudonym (gleicher Namensraum `assetTag`), weil beide auf denselben
-   Bibliothekseintrag zurückgreifen. `Prüfen` meldet nichts, und
+   Eintrag der Erweiterungsdatei zurückgreifen. `Prüfen` meldet nichts, und
    `Klartextdatei erzeugen…` stellt den ursprünglichen Inventarnummern an beiden
    Stellen wieder her.
+
+### Spaltenmuster: `fieldRules`
+
+Zusätzlich zu Generatoren und Textregeln kann die Erweiterungsdatei einen
+Abschnitt `fieldRules` tragen — Regeln, die nicht auf den Feldinhalt,
+sondern auf den **Feldnamen** selbst zielen:
+
+```jsonc
+"fieldRules": [
+  { "pattern": "zielsystem|assetTag", "generator": "assetTag" },
+  { "pattern": ".*iban.*",            "generator": "iban" },
+  { "pattern": "bemerkung|notiz",     "generator": "scanText" }
+]
+```
+
+Jede Regel prüft `pattern` (ein regulärer Ausdruck, ohne Rücksicht auf
+Groß-/Kleinschreibung, sofern nicht mit `"ignoreCase": false` abgeschaltet)
+gegen den **ganzen** Feldnamen — ein Teiltreffer zählt nicht, `"nr"` trifft
+also nicht mehr mitten in `Firmenname`. `generator` nennt einen eingebauten
+Generator, einen eigenen aus dem `generators`-Abschnitt derselben Datei,
+oder den Sonderwert `scanText` für ein Feld, das als Freitext durchsucht
+werden soll. Die erste passende Regel gewinnt, die Reihenfolge in der Datei
+entscheidet.
 
 ### Der Knopf »Muster erkennen…«
 
 Neben der Feldliste im Hauptfenster steht die Schaltfläche **»Muster
-erkennen…«**. Sie öffnet einen Dialog, der die tatsächlichen Beispielwerte
-jedes Feldes gegen die bekannten Muster prüft — die eingebauten
-Standardmuster **und** alle Muster aus der Generator-Bibliothek. Findet sich
-für ein Feld ein Muster, das auf **alle** vorliegenden Beispielwerte passt,
-erscheint eine Zeile mit Feldname, vorgeschlagenem Generator und dem
-Beispielwert, der den Vorschlag belegt, dazu ein Häkchen.
+erkennen…«**. Sie öffnet einen Dialog, der für jedes noch offene Feld in
+zwei Stufen nach einem Vorschlag sucht: zuerst, ob die tatsächlichen
+Beispielwerte vollständig auf ein bekanntes Muster passen — die
+eingebauten Standardmuster **und** alle Muster aus der Erweiterungsdatei
+(`ValueSuggester`); trifft keines, ob der Feldname selbst einer
+`fieldRules`-Regel der Erweiterungsdatei entspricht. Findet sich so ein
+Vorschlag, erscheint eine Zeile mit Feldname, vorgeschlagenem Generator und
+— bei einem Werte-Treffer — dem Beispielwert, der ihn belegt, dazu ein
+Häkchen.
 
 **Vorbelegt sind ausschließlich Felder, die noch auf „offen" stehen.** Ein
 bereits entschiedenes Feld wird nie ohne ausdrückliches Zutun überschrieben
@@ -847,8 +886,16 @@ vorgeschlagenen Generator; das Profil gilt danach als ungespeichert
 verändert, wie nach jeder anderen Regeländerung auch.
 
 Findet der Dialog keinen einzigen Vorschlag, sagt er das ausdrücklich und
-verweist auf die Generator-Bibliothek — das ist typischerweise der Moment,
-in dem auffällt, dass ein hauseigenes Muster dort noch fehlt.
+verweist auf die Erweiterungsdatei — das ist typischerweise der Moment, in
+dem auffällt, dass ein hauseigenes Muster dort noch fehlt. **Ohne
+Erweiterungsdatei entfällt die zweite Stufe vollständig: das Programm rät
+nicht mehr von sich aus am Spaltennamen** — anders als bis einschließlich
+Fassung 1.5.0, die rund dreißig fest einkompilierte Namensfragmente
+automatisch und mit mäßiger Treffsicherheit prüfte (`"nr"` traf auch in
+`Firmenname`). Wer dieses frühere Verhalten zurückhaben möchte, kopiert
+`docs/beispiel/obfuskation-erweiterung-beispiel.json` — die frühere Liste,
+als `fieldRules` geschrieben — an einen der beiden Fundorte und passt sie
+an den eigenen Datenbestand an.
 
 ### Fallstricke
 
@@ -862,25 +909,32 @@ in dem auffällt, dass ein hauseigenes Muster dort noch fehlt.
 - **Eine feste Maske schaut sich den Originalwert nicht an.** Wechseln
   Länge oder Aufbau der Werte (mal sechs, mal sieben Ziffern), passt eine
   einzelne Maske nicht auf alle Fälle — dafür braucht es mehrere
-  Namensräume (mehrere Bibliothekseinträge mit je eigener Maske und eigener
-  Textregel), nicht eine Maske, die versucht, beides abzudecken.
+  Namensräume (mehrere Einträge in der Erweiterungsdatei mit je eigener
+  Maske und eigener Textregel), nicht eine Maske, die versucht, beides
+  abzudecken.
 - **Eine nachträglich geänderte Maske entwertet bestehende
   Tabelleneinträge nicht.** Bereits vergebene Pseudonyme bleiben in der
   Ersetzungstabelle stehen und lassen sich weiterhin zurückübersetzen — ab
   dem Zeitpunkt der Änderung erzeugt der Generator aber Werte in der neuen
   Form. Der Bestand liest sich danach gemischt, ähnlich wie beim
   nachträglichen Setzen eines Präfix (Kapitel 6).
-- **Die Bibliotheksdatei bleibt privat und gehört nicht ins Repository
+- **Die Erweiterungsdatei bleibt privat und gehört nicht ins Repository
   eines Projekts.** Sie kann unternehmensinterne Namensschemata enthalten,
   die außerhalb des eigenen Hauses nichts zu suchen haben — genau wie die
   Ersetzungstabelle, nur dass hier keine Echtdaten, sondern das Wissen um
   interne Namenskonventionen geschützt wird.
 - **Vorrang:** Ein gleichnamiger Eintrag im Profil selbst gewinnt immer
-  gegen die Bibliothek — nützlich, um für ein einzelnes Profil bewusst
-  abzuweichen. Eine gleichnamige Textregel im Profil ersetzt die
-  Bibliotheksregel vollständig, statt zusätzlich zu greifen.
-- `--no-library` auf der Kommandozeile läuft ohne die Bibliothek, `library
-  list` zeigt ihren Inhalt, `library path` ihren Ablageort (Kapitel 9).
+  gegen die Erweiterungsdatei — nützlich, um für ein einzelnes Profil
+  bewusst abzuweichen. Eine gleichnamige Textregel im Profil ersetzt die
+  Erweiterungsregel vollständig, statt zusätzlich zu greifen.
+- **Nur der zuerst gefundene Ort zählt.** Liegt sowohl neben der
+  Programmdatei als auch unter `~/.config/obfuskation` eine
+  `obfuskation.json`, gilt ausschließlich die erste — nichts wird
+  zusammengemischt. Eine Datei, die an einem der beiden Orte wie ein Profil
+  aussieht, wird dort übergangen (siehe Kapitel 5).
+- `--no-extensions` auf der Kommandozeile läuft ohne die Erweiterungsdatei,
+  `extensions list` zeigt ihren Inhalt, `extensions path` ihren Ablageort
+  (Kapitel 9).
 
 ---
 

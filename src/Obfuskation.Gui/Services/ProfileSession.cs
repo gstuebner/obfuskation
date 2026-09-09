@@ -14,14 +14,14 @@ namespace Obfuskation.Gui.Services;
 /// </summary>
 public sealed class ProfileSession
 {
-    private readonly GeneratorLibrary _library;
+    private readonly ExtensionLibrary _extensions;
     private ObfuscationEngine? _engine;
 
-    private ProfileSession(Profile profile, string? path, GeneratorLibrary library)
+    private ProfileSession(Profile profile, string? path, ExtensionLibrary extensions)
     {
         Profile = profile;
         Path = path;
-        _library = library;
+        _extensions = extensions;
     }
 
     public Profile Profile { get; }
@@ -34,27 +34,27 @@ public sealed class ProfileSession
     public string DisplayName => Profile.ProfileName;
 
     /// <summary>
-    /// Die Generator-Bibliothek, mit der diese Sitzung arbeitet -- von der
+    /// Die Erweiterungsdatei, mit der diese Sitzung arbeitet -- von der
     /// Oberflaeche einmal beim Start geladen und hierher durchgereicht, damit
-    /// Engine, Pruefung und Geruesterzeugung dieselbe Bibliothek sehen statt
+    /// Engine, Pruefung und Geruesterzeugung dieselbe Erweiterung sehen statt
     /// jede fuer sich die Datei erneut zu lesen (siehe <see cref="MainViewModel"/>).
     /// </summary>
-    public GeneratorLibrary Library => _library;
+    public ExtensionLibrary Extensions => _extensions;
 
     /// <summary>
-    /// Ohne <paramref name="library"/> gilt <see cref="GeneratorLibrary.Load"/>
-    /// -- fuer Aufrufer, denen die einmalig geladene Bibliothek der Oberflaeche
+    /// Ohne <paramref name="extensions"/> gilt <see cref="ExtensionLibrary.Load()"/>
+    /// -- fuer Aufrufer, denen die einmalig geladene Erweiterung der Oberflaeche
     /// nicht vorliegt (etwa Tests).
     /// </summary>
-    public static ProfileSession Load(string path, GeneratorLibrary? library = null)
+    public static ProfileSession Load(string path, ExtensionLibrary? extensions = null)
         => new(ProfileStore.Load(PathHelper.ExpandHome(path)), System.IO.Path.GetFullPath(path),
-            library ?? GeneratorLibrary.Load());
+            extensions ?? ExtensionLibrary.Load());
 
     public static ProfileSession Create(
-        string profileName, string? sampleFilePath, string? description = null, GeneratorLibrary? library = null)
+        string profileName, string? sampleFilePath, string? description = null, ExtensionLibrary? extensions = null)
     {
-        library ??= GeneratorLibrary.Load();
-        return new(ProfileScaffolder.Create(profileName, sampleFilePath, description, library), null, library)
+        extensions ??= ExtensionLibrary.Load();
+        return new(ProfileScaffolder.Create(profileName, sampleFilePath, description, extensions), null, extensions)
         {
             HasUnsavedChanges = true,
         };
@@ -63,10 +63,10 @@ public sealed class ProfileSession
     /// <summary>Wie die Einzelfassung, aber das Regelgeruest entsteht aus mehreren Dateien auf einmal.</summary>
     public static ProfileSession Create(
         string profileName, IEnumerable<string> sampleFilePaths, string? description = null,
-        GeneratorLibrary? library = null)
+        ExtensionLibrary? extensions = null)
     {
-        library ??= GeneratorLibrary.Load();
-        return new(ProfileScaffolder.Create(profileName, sampleFilePaths, description, library), null, library)
+        extensions ??= ExtensionLibrary.Load();
+        return new(ProfileScaffolder.Create(profileName, sampleFilePaths, description, extensions), null, extensions)
         {
             HasUnsavedChanges = true,
         };
@@ -96,7 +96,7 @@ public sealed class ProfileSession
     /// Die Engine zum aktuellen Regelwerk. Wirft
     /// <see cref="ConfigurationException"/>, solange das Profil fehlerhaft ist.
     /// </summary>
-    public ObfuscationEngine Engine => _engine ??= new ObfuscationEngine(Profile, _library);
+    public ObfuscationEngine Engine => _engine ??= new ObfuscationEngine(Profile, _extensions);
 
     /// <summary>
     /// Die Engine, sofern das Profil fehlerfrei ist — sonst <c>null</c> samt
@@ -105,7 +105,7 @@ public sealed class ProfileSession
     /// </summary>
     public bool TryGetEngine(out ObfuscationEngine? engine, out IReadOnlyList<ValidationIssue> issues)
     {
-        issues = ProfileValidator.Validate(Profile, _library);
+        issues = ProfileValidator.Validate(Profile, _extensions);
 
         if (issues.Any(issue => issue.Severity == ValidationSeverity.Error))
         {
@@ -117,5 +117,5 @@ public sealed class ProfileSession
         return true;
     }
 
-    public IReadOnlyList<ValidationIssue> Validate() => ProfileValidator.Validate(Profile, _library);
+    public IReadOnlyList<ValidationIssue> Validate() => ProfileValidator.Validate(Profile, _extensions);
 }

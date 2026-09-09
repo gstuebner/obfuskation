@@ -47,15 +47,15 @@
           <StackPanel Spacing="8" IsVisible="{Binding HasSelected}">
             <TextBlock Text="Regel" Classes="card-title" Margin="0"/>
 
-            <!-- Bibliotheksregeln sind nur lesend: gepflegt wird die Datei im
-                 Texteditor (siehe GeneratorLibrary), nicht dieses Formular. -->
+            <!-- Erweiterungsregeln sind nur lesend: gepflegt wird die Datei im
+                 Texteditor (siehe ExtensionLibrary), nicht dieses Formular. -->
             <TextBlock Classes="muted small" TextWrapping="Wrap"
-                       IsVisible="{Binding Selected.IsLibraryRule}"
-                       Text="Bibliotheksregel — nur lesend. Bearbeitet wird sie in der Bibliotheksdatei, nicht hier."/>
+                       IsVisible="{Binding Selected.IsExtensionRule}"
+                       Text="Erweiterungsregel — nur lesend. Bearbeitet wird sie in der Erweiterungsdatei, nicht hier."/>
 
             <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="8" ColumnSpacing="8"
-                  IsEnabled="{Binding !Selected.IsLibraryRule}">
+                  IsEnabled="{Binding !Selected.IsExtensionRule}">
               <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
                          Classes="muted" VerticalAlignment="Center"/>
               <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Selected.Name}"/>

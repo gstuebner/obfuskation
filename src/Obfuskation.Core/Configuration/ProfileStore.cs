@@ -6,7 +6,21 @@ namespace Obfuskation.Core.Configuration;
 /// <summary>Laedt und speichert Profile als JSON.</summary>
 public static class ProfileStore
 {
-    public const string DefaultFileName = "obfuskation.json";
+    /// <summary>
+    /// Neuer, qualifizierter Name der Projektdatei. Wird ab jetzt allein
+    /// geschrieben -- <see cref="LegacyFileName"/> bleibt nur zum Lesen
+    /// bestehender Bestaende erhalten.
+    /// </summary>
+    public const string DefaultFileName = "obfuskation-projekt.json";
+
+    /// <summary>
+    /// Der unqualifizierte Programmname als frueherer Dateiname der
+    /// Projektdatei. Seit die Erweiterungsdatei (<see cref="ExtensionLibrary"/>)
+    /// denselben Namen fuer ihre eigene Rolle beansprucht, wird er nur noch
+    /// als Profil erkannt, wenn <see cref="LooksLikeProfile"/> zutrifft --
+    /// siehe <see cref="Discover"/>.
+    /// </summary>
+    public const string LegacyFileName = "obfuskation.json";
 
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -56,17 +70,64 @@ public static class ProfileStore
     /// <summary>
     /// Sucht die Konfigurationsdatei ab <paramref name="startDirectory"/> aufwaerts.
     /// Gibt <c>null</c> zurueck, wenn keine gefunden wurde.
+    ///
+    /// Je Verzeichnisebene wird erst <see cref="DefaultFileName"/> geprueft,
+    /// dann <see cref="LegacyFileName"/> -- erst danach geht die Suche eine
+    /// Ebene hoeher. Eine gefundene <see cref="LegacyFileName"/> zaehlt nur,
+    /// wenn <see cref="LooksLikeProfile"/> zutrifft: der unqualifizierte Name
+    /// kann an derselben Stelle auch die Erweiterungsdatei sein (siehe
+    /// <see cref="ExtensionLibrary.ResolvePath"/>), und die hat weder
+    /// <c>profileName</c> noch <c>fields</c>. Ohne diese Pruefung wuerde die
+    /// Suche an ihr haengenbleiben, statt weiter aufwaerts nach einem
+    /// tatsaechlichen Profil zu suchen.
     /// </summary>
     public static string? Discover(string startDirectory)
     {
         var directory = new DirectoryInfo(Path.GetFullPath(startDirectory));
         while (directory is not null)
         {
-            var candidate = Path.Combine(directory.FullName, DefaultFileName);
-            if (File.Exists(candidate))
-                return candidate;
+            var neu = Path.Combine(directory.FullName, DefaultFileName);
+            if (File.Exists(neu))
+                return neu;
+
+            var alt = Path.Combine(directory.FullName, LegacyFileName);
+            if (File.Exists(alt) && LooksLikeProfile(alt))
+                return alt;
+
             directory = directory.Parent;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Siebt fremde oder andersrollige JSON-Dateien aus, bevor ueberhaupt
+    /// <see cref="Load"/> versucht wird: eine Datei zaehlt als Profil, wenn
+    /// sie <c>profileName</c> oder <c>fields</c> traegt. Gebraucht an zwei
+    /// Stellen, die sich nicht auseinanderentwickeln duerfen --
+    /// <see cref="Discover"/> (unterscheidet ein Altprofil von der
+    /// gleichnamigen Erweiterungsdatei) und <see cref="ProfileCatalog"/>
+    /// (siebt fremde Dateien im zentralen Ordner aus).
+    /// </summary>
+    public static bool LooksLikeProfile(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var document = JsonDocument.Parse(stream);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                   (document.RootElement.TryGetProperty("profileName", out _) ||
+                    document.RootElement.TryGetProperty("fields", out _));
+        }
+        catch (JsonException)
+        {
+            // Kaputtes JSON laesst sich hier nicht beurteilen -- durchlassen,
+            // Load wirft gleich noch einmal und liefert dann den Fehler mit
+            // brauchbarer Meldung.
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }

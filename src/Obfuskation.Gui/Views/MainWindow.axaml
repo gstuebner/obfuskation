@@ -188,7 +188,7 @@
             <TextBlock Grid.Column="0" Text="Felder" Classes="card-title" VerticalAlignment="Center"/>
 
             <!-- Wertbasierte Vorschlaege (Feature: Mustererkennung), aus den
-                 eingebauten Mustern und der Generator-Bibliothek. Nur
+                 eingebauten Mustern und der Erweiterungsdatei. Nur
                  sinnvoll, wenn ueberhaupt Felder da sind. -->
             <Button Grid.Column="1" Content="Muster erkennen…" Classes="flat"
                     Command="{Binding ShowPatternSuggestionsCommand}"

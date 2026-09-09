@@ -15,7 +15,9 @@ public static class CommandContext
     /// Laedt das Profil. <paramref name="configPath"/> darf ein Dateipfad oder
     /// ein blosser Profilname sein (dann wird unter
     /// <see cref="PathHelper.DefaultProfilePath"/> gesucht); ohne Angabe wird
-    /// ab dem aktuellen Verzeichnis aufwaerts nach <c>obfuskation.json</c>
+    /// ab dem aktuellen Verzeichnis aufwaerts nach
+    /// <see cref="ProfileStore.DefaultFileName"/> (hilfsweise nach einer
+    /// vorhandenen <see cref="ProfileStore.LegacyFileName"/> mit Profilinhalt)
     /// gesucht.
     /// </summary>
     public static Profile LoadProfile(string? configPath)
@@ -64,13 +66,13 @@ public static class CommandContext
            && !value.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Laedt die Generator-Bibliothek, oder eine leere, wenn <c>--no-library</c>
-    /// gesetzt ist. Zentral, damit jeder Unterbefehl dieselbe Bibliothek gleich
-    /// behandelt — sonst brechen die Aequivalenztests zwischen Oberflaeche und
-    /// Kommandozeile.
+    /// Laedt die Erweiterungsdatei, oder eine leere, wenn <c>--no-extensions</c>
+    /// gesetzt ist. Zentral, damit jeder Unterbefehl dieselbe Erweiterung
+    /// gleich behandelt — sonst brechen die Aequivalenztests zwischen
+    /// Oberflaeche und Kommandozeile.
     /// </summary>
-    public static GeneratorLibrary LoadLibrary(bool noLibrary)
-        => noLibrary ? GeneratorLibrary.Empty : GeneratorLibrary.Load();
+    public static ExtensionLibrary LoadExtensions(bool noExtensions)
+        => noExtensions ? ExtensionLibrary.Empty : ExtensionLibrary.Load();
 
     public static byte[] ReadInput(string? path)
     {

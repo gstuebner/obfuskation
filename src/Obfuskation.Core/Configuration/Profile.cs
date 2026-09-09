@@ -135,6 +135,38 @@ public sealed class TextRule
     public bool IgnoreCase { get; set; }
 }
 
+/// <summary>
+/// Ein Spaltenmuster der Erweiterungsdatei (<see cref="ExtensionLibrary.FieldRules"/>):
+/// schlaegt <see cref="FieldNameSuggester"/> anhand des ganzen Feldnamens einen
+/// Generator vor. Gleiche Machart wie <see cref="TextRule"/>, aber gegen den
+/// Feldnamen statt gegen Freitext geprueft.
+/// </summary>
+public sealed class FieldNameRule
+{
+    /// <summary>
+    /// Muster fuer den ganzen Feldnamen -- <see cref="FieldNameSuggester"/>
+    /// umschliesst es mit <c>\A(?:…)\z</c>, ein Teiltreffer zaehlt also nicht.
+    /// </summary>
+    public string Pattern { get; set; } = "";
+
+    /// <summary>
+    /// Generatorname — eingebaut, aus <see cref="ExtensionLibrary.Generators"/>,
+    /// oder der Sonderwert <c>"scanText"</c> fuer ein Freitextfeld.
+    /// </summary>
+    public string Generator { get; set; } = "";
+
+    /// <summary>
+    /// Anders als bei <see cref="TextRule.IgnoreCase"/> standardmaessig
+    /// <c>true</c>: Spaltennamen unterscheiden sich in der Schreibweise
+    /// staendig, und das bisherige eingebaute Namensraten war ebenfalls
+    /// unabhaengig davon.
+    /// </summary>
+    public bool IgnoreCase { get; set; } = true;
+
+    /// <summary>Freitext fuer den Menschen.</summary>
+    public string? Comment { get; set; }
+}
+
 public sealed class GeneratorSettings
 {
     /// <summary>Zugrundeliegender Generatortyp. Leer bedeutet: wie der Schluessel.</summary>

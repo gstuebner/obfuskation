@@ -9,13 +9,13 @@ namespace Obfuskation.Core.Configuration;
 /// statt einer Sammelmeldung, damit die Oberflaeche jeden Hinweis am
 /// zugehoerigen Eingabefeld anzeigen kann.
 ///
-/// Seit der Generator-Bibliothek (<see cref="GeneratorLibrary"/>) prueft diese
-/// Klasse zwei Quellen: das Profil selbst und die Bibliothek, die neben jedem
+/// Seit der Erweiterungsdatei (<see cref="ExtensionLibrary"/>) prueft diese
+/// Klasse zwei Quellen: das Profil selbst und die Erweiterung, die neben jedem
 /// Profil in dieselbe Generatorenmenge einfliesst. Ein Verweis auf einen
-/// Bibliothekseintrag gilt als bekannt; ein fehlerhafter Bibliothekseintrag
+/// Erweiterungseintrag gilt als bekannt; ein fehlerhafter Erweiterungseintrag
 /// wird mit demselben Massstab gemeldet wie ein fehlerhafter Profileintrag,
-/// nur unter dem Pfad <c>library.generators.&lt;key&gt;</c> bzw.
-/// <c>library.textRules[i]</c>.
+/// nur unter dem Pfad <c>extensions.generators.&lt;key&gt;</c> bzw.
+/// <c>extensions.textRules[i]</c> bzw. <c>extensions.fieldRules[i]</c>.
 /// </summary>
 public static class ProfileValidator
 {
@@ -69,9 +69,9 @@ public static class ProfileValidator
         ("maskChar", "partialMask"),
     ];
 
-    public static IReadOnlyList<ValidationIssue> Validate(Profile profile, GeneratorLibrary? library = null)
+    public static IReadOnlyList<ValidationIssue> Validate(Profile profile, ExtensionLibrary? extensions = null)
     {
-        library ??= GeneratorLibrary.Load();
+        extensions ??= ExtensionLibrary.Load();
         var issues = new List<ValidationIssue>();
 
         if (profile.Version > Profile.CurrentVersion)
@@ -87,9 +87,10 @@ public static class ProfileValidator
                 "Der Profilname darf nicht leer sein; er bestimmt die Ablage der Ersetzungstabelle."));
         }
 
-        ValidateGenerators(profile, library, issues);
-        ValidateTextRules(profile, library, issues);
-        ValidateFields(profile, library, issues);
+        ValidateGenerators(profile, extensions, issues);
+        ValidateTextRules(profile, extensions, issues);
+        ValidateFields(profile, extensions, issues);
+        ValidateFieldRules(profile, extensions, issues);
 
         if (profile.Fields.Count == 0 && profile.TextRules.Count == 0)
         {
@@ -107,10 +108,10 @@ public static class ProfileValidator
         return issues;
     }
 
-    private static void ValidateGenerators(Profile profile, GeneratorLibrary library, List<ValidationIssue> issues)
+    private static void ValidateGenerators(Profile profile, ExtensionLibrary extensions, List<ValidationIssue> issues)
     {
-        foreach (var (key, settings) in library.Generators)
-            ValidateGeneratorEntry("library.generators", key, settings, issues);
+        foreach (var (key, settings) in extensions.Generators)
+            ValidateGeneratorEntry("extensions.generators", key, settings, issues);
 
         foreach (var (key, settings) in profile.Generators)
         {
@@ -118,13 +119,13 @@ public static class ProfileValidator
 
             // Ein gleichnamiger Profileintrag gewinnt (siehe
             // GeneratorRegistry.Build) — das ist gewollt moeglich, aber ein
-            // wortlos ueberschriebener Bibliothekseintrag ist eine leichte
+            // wortlos ueberschriebener Erweiterungseintrag ist eine leichte
             // Ueberraschung wert.
-            if (library.Generators.ContainsKey(key))
+            if (extensions.Generators.ContainsKey(key))
             {
                 issues.Add(new ValidationIssue($"generators.{key}", ValidationSeverity.Warning,
-                    $"'{key}' überschreibt den gleichnamigen Eintrag aus der Generator-Bibliothek für " +
-                    "dieses Profil; die Bibliotheksfassung greift hier nicht."));
+                    $"'{key}' überschreibt den gleichnamigen Eintrag aus der Erweiterungsdatei für " +
+                    "dieses Profil; die Erweiterungsfassung greift hier nicht."));
             }
         }
     }
@@ -365,14 +366,14 @@ public static class ProfileValidator
         }
     }
 
-    private static void ValidateTextRules(Profile profile, GeneratorLibrary library, List<ValidationIssue> issues)
+    private static void ValidateTextRules(Profile profile, ExtensionLibrary extensions, List<ValidationIssue> issues)
     {
-        ValidateTextRuleList(library.TextRules, "library.textRules", profile, library, issues);
-        ValidateTextRuleList(profile.TextRules, "textRules", profile, library, issues);
+        ValidateTextRuleList(extensions.TextRules, "extensions.textRules", profile, extensions, issues);
+        ValidateTextRuleList(profile.TextRules, "textRules", profile, extensions, issues);
     }
 
     private static void ValidateTextRuleList(
-        IReadOnlyList<TextRule> rules, string pathPrefix, Profile profile, GeneratorLibrary library,
+        IReadOnlyList<TextRule> rules, string pathPrefix, Profile profile, ExtensionLibrary extensions,
         List<ValidationIssue> issues)
     {
         var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -411,7 +412,7 @@ public static class ProfileValidator
                 }
             }
 
-            ValidateGeneratorReference(profile, library, rule.Generator, $"{path}.generator", issues);
+            ValidateGeneratorReference(profile, extensions, rule.Generator, $"{path}.generator", issues);
 
             if (rule.CaptureGroup < 0)
             {
@@ -421,10 +422,10 @@ public static class ProfileValidator
         }
     }
 
-    private static void ValidateFields(Profile profile, GeneratorLibrary library, List<ValidationIssue> issues)
+    private static void ValidateFields(Profile profile, ExtensionLibrary extensions, List<ValidationIssue> issues)
     {
         var textRuleNames = new HashSet<string>(
-            library.TextRules.Select(rule => rule.Name).Concat(profile.TextRules.Select(rule => rule.Name)),
+            extensions.TextRules.Select(rule => rule.Name).Concat(profile.TextRules.Select(rule => rule.Name)),
             StringComparer.OrdinalIgnoreCase);
 
         for (var index = 0; index < profile.Fields.Count; index++)
@@ -460,7 +461,7 @@ public static class ProfileValidator
                     }
                     else
                     {
-                        ValidateGeneratorReference(profile, library, rule.Generator, $"{path}.generator", issues);
+                        ValidateGeneratorReference(profile, extensions, rule.Generator, $"{path}.generator", issues);
                     }
                     break;
 
@@ -476,7 +477,7 @@ public static class ProfileValidator
                             }
                         }
                     }
-                    else if (profile.TextRules.Count == 0 && library.TextRules.Count == 0)
+                    else if (profile.TextRules.Count == 0 && extensions.TextRules.Count == 0)
                     {
                         issues.Add(new ValidationIssue($"{path}.textRules", ValidationSeverity.Warning,
                             "'scanText' ohne hinterlegte Textregeln bewirkt nichts."));
@@ -493,20 +494,65 @@ public static class ProfileValidator
     }
 
     private static void ValidateGeneratorReference(
-        Profile profile, GeneratorLibrary library, string? generatorName, string path, List<ValidationIssue> issues)
+        Profile profile, ExtensionLibrary extensions, string? generatorName, string path,
+        List<ValidationIssue> issues)
     {
         if (string.IsNullOrWhiteSpace(generatorName))
             return;
 
         var known = GeneratorRegistry.KnownNames.Contains(generatorName, StringComparer.OrdinalIgnoreCase)
                     || profile.Generators.ContainsKey(generatorName)
-                    || library.Generators.ContainsKey(generatorName);
+                    || extensions.Generators.ContainsKey(generatorName);
 
         if (!known)
         {
             issues.Add(new ValidationIssue(path, ValidationSeverity.Error,
                 $"Unbekannter Generator '{generatorName}'. Verfügbar: " +
                 string.Join(", ", GeneratorRegistry.KnownNames)));
+        }
+    }
+
+    /// <summary>
+    /// Prueft die Spaltenmuster der Erweiterungsdatei
+    /// (<see cref="ExtensionLibrary.FieldRules"/>): Muster gesetzt und
+    /// uebersetzbar, Generator gesetzt und bekannt -- eingebaut, aus
+    /// <see cref="ExtensionLibrary.Generators"/>, aus den Generatoren des
+    /// Profils, oder der Sonderwert <c>scanText</c>.
+    /// </summary>
+    private static void ValidateFieldRules(Profile profile, ExtensionLibrary extensions, List<ValidationIssue> issues)
+    {
+        for (var index = 0; index < extensions.FieldRules.Count; index++)
+        {
+            var rule = extensions.FieldRules[index];
+            var path = $"extensions.fieldRules[{index}]";
+
+            if (string.IsNullOrWhiteSpace(rule.Pattern))
+            {
+                issues.Add(new ValidationIssue($"{path}.pattern", ValidationSeverity.Error,
+                    "Das Muster darf nicht leer sein."));
+            }
+            else
+            {
+                try
+                {
+                    _ = new Regex(rule.Pattern);
+                }
+                catch (ArgumentException ex)
+                {
+                    issues.Add(new ValidationIssue($"{path}.pattern", ValidationSeverity.Error,
+                        $"Ungültiger regulärer Ausdruck: {ex.Message}"));
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(rule.Generator))
+            {
+                issues.Add(new ValidationIssue($"{path}.generator", ValidationSeverity.Error,
+                    "Der Generator darf nicht leer sein."));
+            }
+            else if (!string.Equals(rule.Generator, "scanText", StringComparison.OrdinalIgnoreCase))
+            {
+                ValidateGeneratorReference(profile, extensions, rule.Generator, $"{path}.generator", issues);
+            }
         }
     }
 }

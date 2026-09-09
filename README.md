@@ -55,7 +55,7 @@ Whatever matches no pattern remains unchanged. IBAN, BIC, email, and phone numbe
 # 1. Derive rule scaffold from a real sample file
 obfuskation init --profile bank-statements --from customers.csv
 
-# 2. Review obfuskation.json: every column defaults to "error" and
+# 2. Review obfuskation-projekt.json: every column defaults to "error" and
 #    requires a deliberate human decision
 
 # 3. Replace
@@ -75,12 +75,12 @@ pbpaste | obfuskation deobfuscate
 ## The Graphical User Interface
 
 ```fish
-obfuskation-gui                        # looks for obfuskation.json like the CLI
+obfuskation-gui                        # looks for obfuskation-projekt.json like the CLI
 obfuskation-gui customers.csv          # open file immediately
 obfuskation-gui --config profile.json customers.csv
 ```
 
-When started without arguments, it looks for an `obfuskation.json` in the current working directory, falling back to the most recently used profile.
+When started without arguments, it looks for an `obfuskation-projekt.json` in the current working directory, falling back to the most recently used profile.
 
 **Layout:** At the top, the opened file with detected format, character encoding, and delimiter, next to it a "Recent ▾" button, shown once the profile already knows other files, to switch between them without the Open dialog. On the left, the fields, each with a status indicator — solid turquoise means *decided*, a red circle means *pending*, and as long as even one is pending, processing will abort. On the right, for a single selected field, up to three sample values from the file first — visible even while the handling is still pending — then the handling of the field, plus a live preview using an actual value (»Max Mustermann → Paul Gerber«) once it's being replaced. At the bottom, the three actions.
 
@@ -158,6 +158,8 @@ Both produce numeric IDs of the same format, but draw from separate pools. In th
 ---
 
 ## Configuration
+
+The profile file is named `obfuskation-projekt.json` and is searched for upward from the current directory. An existing `obfuskation.json` that looks like a profile (i.e. contains `profileName` or `fields`) is still found under its old name — renaming it is a recommendation, not a requirement.
 
 ```jsonc
 {
@@ -260,18 +262,24 @@ matching generator, and the GUI lets you set the prefix on a rule's
 
 ---
 
-## Custom Patterns (Generator Library)
+## Custom Patterns (Extension File)
 
 Organization-specific patterns — internal assetTags, ticket numbers,
-in-house IDs — don't belong in a profile that might end up in a shared
-repository, and retyping them into every new profile invites drift. A
-**generator library** at a fixed, per-user location solves both: it is
-merged into every profile at runtime and is never written back into a
-profile file.
+in-house IDs, and which generator a given column name should map to —
+don't belong in a profile that might end up in a shared repository, and
+retyping them into every new profile invites drift. An **extension file**
+at one of two fixed locations solves both: it is merged into every profile
+at runtime and is never written back into a profile file.
 
 ```
-~/.config/obfuskation/generators.json
+obfuskation.json
 ```
+
+Looked up in this order; the first file found applies completely, nothing
+is merged across the two locations:
+
+1. next to the running program file
+2. `~/.config/obfuskation`
 
 ```jsonc
 {
@@ -281,32 +289,75 @@ profile file.
   },
   "textRules": [
     { "name": "assetTag", "priority": 95, "pattern": "\\bINV\\d{6}\\b", "generator": "assetTag" }
+  ],
+  "fieldRules": [
+    { "pattern": "zielsystem|assetTag", "generator": "assetTag" },
+    { "pattern": ".*iban.*",            "generator": "iban" },
+    { "pattern": "bemerkung|notiz",     "generator": "scanText" }
   ]
 }
 ```
 
-Same shapes as in a profile (`generators`, `textRules`) — no second schema,
-no second validation. **A profile always wins over the library** for the
-same key: a profile's own `generators` entry shadows a library entry of the
-same name, and a profile text rule of the same `name` replaces the
-library's rule outright rather than running alongside it. That makes it
-safe to build up a shared library over time without ever risking a silent,
-unwanted override — whoever edits a specific profile can always be more
-specific than the library.
+Same shapes as in a profile (`generators`, `textRules`), plus `fieldRules`
+described below — no second schema, no second validation. **A profile
+always wins over the extension file** for the same key: a profile's own
+`generators` entry shadows an extension entry of the same name, and a
+profile text rule of the same `name` replaces the extension's rule
+outright rather than running alongside it. That makes it safe to build up
+a shared extension file over time without ever risking a silent, unwanted
+override — whoever edits a specific profile can always be more specific
+than the extension file.
 
 **The file is private and does not belong in this repository.** It
 typically holds organization-internal naming conventions that must not
 become visible just because a profile referencing them is public.
 
-`obfuskation library list` shows the configured keys, their base type, and
-their text rule names — patterns included: unlike the mapping table, the
-library holds no real data, only the shape of it, so there's nothing to
-protect by hiding it. `obfuskation library path` prints the file's
-location. `--no-library` runs without the library, for troubleshooting or
-to reproduce a result independent of the local machine's configuration. In
-the GUI, library-sourced generators appear in the generator dropdown
-alongside the profile's own, marked with their origin; they are read-only
-there in this release — edit the file directly.
+`obfuskation extensions list` shows the configured generator keys, their
+base type, their text rule names, and the field patterns below — patterns
+included: unlike the mapping table, the extension file holds no real data,
+only the shape of it, so there's nothing to protect by hiding it. It also
+names which of the two locations is in effect. `obfuskation extensions
+path` prints that location, or both checked locations if neither holds a
+file. `--no-extensions` runs without the extension file, for
+troubleshooting or to reproduce a result independent of the local
+machine's configuration. In the GUI, extension-sourced generators appear
+in the generator dropdown alongside the profile's own, marked with their
+origin; they are read-only there in this release — edit the file directly.
+
+An `obfuskation.json` that turns out to look like a profile (`profileName`
+or `fields` present) is skipped at that location and the next one is
+checked instead — the same file name doubles as the legacy profile name
+(see *Configuration* above), and content, not location, decides which role
+applies.
+
+### Column-Name Patterns: `fieldRules`
+
+Each entry matches the **whole** field name against `pattern` (a regular
+expression, case-insensitive by default) and names a `generator` — built
+in, defined under the extension file's own `generators`, or the special
+value `scanText` for a free-text field that should be scanned with text
+rules instead of replaced outright. The first matching rule wins; order in
+the file decides.
+
+`init` (and "Muster erkennen…" in the GUI) offers a suggestion for every
+field in three stages, in this order:
+
+1. the sample values fully match a known format (`ValueSuggester` — IBAN,
+   email, BIC, phone, or anything defined under `textRules`)
+2. otherwise, the field name matches a `fieldRules` pattern from the
+   extension file
+3. otherwise, a fresh `token` namespace of its own, clearly marked as a
+   fallback
+
+**Without an extension file, the second stage is skipped — the tool no
+longer guesses a generator from the column name on its own.** This is a
+deliberate behavior change from 1.5.0, which tried roughly thirty built-in
+name fragments (`"nummer"`, `"iban"`, `"nachname"`, …) automatically and
+with mixed accuracy (`"ort"` also matched inside `Sortiment`). To get comparable
+behavior back, copy
+[`docs/beispiel/obfuskation-erweiterung-beispiel.json`](docs/beispiel/obfuskation-erweiterung-beispiel.json)
+— the former list, rewritten as `fieldRules` — to one of the two locations
+above and adjust it to your own data.
 
 ---
 
@@ -340,19 +391,19 @@ obfuskation deobfuscate [<file>] [-o <dest>] [--json]
 obfuskation scan <file> [--json]
 obfuskation mapping list|path
 obfuskation profile list [--sort name|used|changed] [--json]
-obfuskation library list|path
+obfuskation extensions list|path
 ```
 
-Common options: `--config <path-or-profile-name>`, `--format csv|json|text`, `--allow-unsafe-store`, `--no-library`.
+Common options: `--config <path-or-profile-name>`, `--format csv|json|text`, `--allow-unsafe-store`, `--no-extensions`.
 
-`--config` also accepts a plain profile name instead of a path — `--config demo` resolves to `~/.config/obfuskation/profile/demo.json` if no literal file named `demo` exists, the same central location the GUI uses. `init --central` writes there directly instead of `obfuskation.json` in the current directory, and `profile list` shows every profile the tool knows about — the central folder plus everything remembered in the usage index — with name, file count, last-used and last-modified timestamps.
+`--config` also accepts a plain profile name instead of a path — `--config demo` resolves to `~/.config/obfuskation/profile/demo.json` if no literal file named `demo` exists, the same central location the GUI uses. `init --central` writes there directly instead of `obfuskation-projekt.json` in the current directory, and `profile list` shows every profile the tool knows about — the central folder plus everything remembered in the usage index — with name, file count, last-used and last-modified timestamps.
 
 - `--strict` — Fields without an explicit rule cause execution to abort, regardless of profile defaults.
 - `--dry-run` — Writes neither output files nor table entries, but produces the full report.
 - `--json` — Output report as JSON to stdout. Requires `-o`, otherwise report and data mix. The report contains **only counts and field names, never values**, and can safely be logged.
-- `--no-library` — Runs without the generator library
-  (`~/.config/obfuskation/generators.json`); useful for troubleshooting or a
-  reproducible run independent of the local machine's configuration.
+- `--no-extensions` — Runs without the extension file (see `obfuskation
+  extensions path`); useful for troubleshooting or a reproducible run
+  independent of the local machine's configuration.
 - `deobfuscate` without file argument reads from standard input (`stdin`).
 
 ### Exit Codes

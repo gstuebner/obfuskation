@@ -75,11 +75,11 @@ public sealed record AnalysisResult(InspectedFile File, IReadOnlyList<FieldAnaly
 public sealed class ObfuscationEngine
 {
     private readonly Profile _profile;
-    private readonly GeneratorLibrary _library;
+    private readonly ExtensionLibrary _extensions;
 
     /// <summary>
-    /// Das Profil mit hineingemischten Textregeln der Bibliothek: eine
-    /// Bibliotheksregel gilt genauso wie eine Profilregel, ausser eine
+    /// Das Profil mit hineingemischten Textregeln der Erweiterungsdatei: eine
+    /// Erweiterungsregel gilt genauso wie eine Profilregel, ausser eine
     /// gleichnamige Profilregel ersetzt sie vollstaendig (siehe
     /// <see cref="MergeTextRules"/>). Alles, was Textregeln verarbeitet
     /// (Resolver, ObfuscateTransformer, ScanTransformer, ...) bekommt dieses
@@ -88,13 +88,13 @@ public sealed class ObfuscationEngine
     /// </summary>
     private readonly Profile _effectiveProfile;
 
-    public ObfuscationEngine(Profile profile, GeneratorLibrary? library = null)
+    public ObfuscationEngine(Profile profile, ExtensionLibrary? extensions = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        _library = library ?? GeneratorLibrary.Load();
-        _effectiveProfile = MergeTextRules(_profile, _library);
+        _extensions = extensions ?? ExtensionLibrary.Load();
+        _effectiveProfile = MergeTextRules(_profile, _extensions);
 
-        var issues = ProfileValidator.Validate(profile, _library);
+        var issues = ProfileValidator.Validate(profile, _extensions);
         var errors = issues.Where(issue => issue.Severity == ValidationSeverity.Error).ToList();
         if (errors.Count > 0)
             throw new ConfigurationException(
@@ -156,7 +156,7 @@ public sealed class ObfuscationEngine
             readOnly: true, allowInsideGitWorkingTree: true);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver, _library);
+        var generators = GeneratorRegistry.Build(_profile, deriver, _extensions);
         var pseudonymizer = new Pseudonymizer(deriver, generators, store);
 
         return pseudonymizer.Pseudonymize(generatorName, sampleValue, persist: false);
@@ -204,7 +204,7 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver, _library);
+        var generators = GeneratorRegistry.Build(_profile, deriver, _extensions);
         var pseudonymizer = new Pseudonymizer(deriver, generators, store);
         var resolver = CreateResolver(options);
 
@@ -238,7 +238,7 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver, _library);
+        var generators = GeneratorRegistry.Build(_profile, deriver, _extensions);
         var pseudonymizer = new Pseudonymizer(deriver, generators, store);
         var reverseMapper = new ReverseTextMapper(store, generators);
         var resolver = CreateResolver(options);
@@ -311,25 +311,26 @@ public sealed class ObfuscationEngine
     }
 
     /// <summary>
-    /// Fuehrt die Textregeln der Bibliothek und des Profils zusammen: eine
-    /// Bibliotheksregel gilt, ausser eine gleichnamige Profilregel ersetzt sie
-    /// vollstaendig — sie faellt dann ganz weg, statt zusaetzlich zu gelten.
-    /// Prioritaeten bleiben unveraendert, die vorhandene Ueberlappungsaufloesung
-    /// in <see cref="Detection.TextRuleEngine"/> braucht keine Anpassung.
+    /// Fuehrt die Textregeln der Erweiterungsdatei und des Profils zusammen:
+    /// eine Erweiterungsregel gilt, ausser eine gleichnamige Profilregel
+    /// ersetzt sie vollstaendig — sie faellt dann ganz weg, statt zusaetzlich
+    /// zu gelten. Prioritaeten bleiben unveraendert, die vorhandene
+    /// Ueberlappungsaufloesung in <see cref="Detection.TextRuleEngine"/>
+    /// braucht keine Anpassung.
     ///
-    /// Ohne Bibliotheksregeln wird <paramref name="profile"/> unveraendert
+    /// Ohne Erweiterungsregeln wird <paramref name="profile"/> unveraendert
     /// zurueckgegeben — der haeufige Fall bleibt damit ohne zusaetzliche Kopie.
     /// </summary>
-    private static Profile MergeTextRules(Profile profile, GeneratorLibrary library)
+    private static Profile MergeTextRules(Profile profile, ExtensionLibrary extensions)
     {
-        if (library.TextRules.Count == 0)
+        if (extensions.TextRules.Count == 0)
             return profile;
 
         var profileNames = new HashSet<string>(
             profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
 
-        var merged = new List<TextRule>(library.TextRules.Count + profile.TextRules.Count);
-        merged.AddRange(library.TextRules.Where(rule => !profileNames.Contains(rule.Name)));
+        var merged = new List<TextRule>(extensions.TextRules.Count + profile.TextRules.Count);
+        merged.AddRange(extensions.TextRules.Where(rule => !profileNames.Contains(rule.Name)));
         merged.AddRange(profile.TextRules);
 
         // Nur die Textregeln aendern sich; alles andere bleibt dieselbe

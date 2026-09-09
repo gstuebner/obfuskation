@@ -1,0 +1,69 @@
+// Beispiel fuer eine Erweiterungsdatei. Am Einsatzort heisst sie schlicht
+// "obfuskation.json" und liegt entweder neben der Programmdatei oder unter
+// ~/.config/obfuskation (siehe "obfuskation extensions path").
+//
+// Die "fieldRules" hier bilden das Namensraten nach, das bis einschliesslich
+// Fassung 1.5.0 fest einkompiliert war (ProfileScaffolder.Hints): 30
+// Namensfragmente, per Contains() gegen den Spaltennamen geprueft. Seit
+// Fassung 1.6.0 rät das Programm ohne eine solche Datei am Spaltennamen gar
+// nicht mehr -- wer das bisherige Verhalten will, kopiert diese Datei an
+// einen der beiden Fundorte und passt sie an den eigenen Datenbestand an.
+//
+// Die Muster sind hier bewusst als ".*fragment.*" geschrieben, damit sie sich
+// wie frueher als Teiltreffer irgendwo im Spaltennamen verhalten --
+// FieldNameSuggester prueft ja den ganzen Feldnamen (\A(?:…)\z), ein rohes
+// Fragment allein wuerde also nur bei einem Feld treffen, das genau so heisst.
+// Die erste passende Regel gewinnt, Reihenfolge wie im alten Array.
+{
+  "version": 1,
+  "generators": {},
+  "textRules": [],
+  "fieldRules": [
+    { "pattern": ".*iban.*", "generator": "iban" },
+    { "pattern": ".*bic.*", "generator": "bic" },
+    { "pattern": ".*swift.*", "generator": "bic" },
+    { "pattern": ".*mail.*", "generator": "email" },
+    { "pattern": ".*email.*", "generator": "email" },
+    { "pattern": ".*telefon.*", "generator": "phone" },
+    { "pattern": ".*phone.*", "generator": "phone" },
+    { "pattern": ".*mobil.*", "generator": "phone" },
+    { "pattern": ".*fax.*", "generator": "phone" },
+    { "pattern": ".*nachname.*", "generator": "lastName" },
+    { "pattern": ".*familienname.*", "generator": "lastName" },
+    { "pattern": ".*vorname.*", "generator": "firstName" },
+    { "pattern": ".*kundenname.*", "generator": "personName" },
+    { "pattern": ".*inhaber.*", "generator": "personName" },
+    { "pattern": ".*name.*", "generator": "personName" },
+    { "pattern": ".*firma.*", "generator": "companyName" },
+    { "pattern": ".*unternehmen.*", "generator": "companyName" },
+    { "pattern": ".*strasse.*", "generator": "street" },
+    { "pattern": ".*straße.*", "generator": "street" },
+    { "pattern": ".*adresse.*", "generator": "street" },
+    { "pattern": ".*anschrift.*", "generator": "street" },
+    { "pattern": ".*plz.*", "generator": "postalCode" },
+    { "pattern": ".*postleitzahl.*", "generator": "postalCode" },
+    { "pattern": ".*ort.*", "generator": "city" },
+    { "pattern": ".*stadt.*", "generator": "city" },
+    { "pattern": ".*wohnort.*", "generator": "city" },
+    { "pattern": ".*geburtsdatum.*", "generator": "dateShift" },
+    { "pattern": ".*geburtstag.*", "generator": "dateShift" },
+    { "pattern": ".*datum.*", "generator": "dateShift" },
+    { "pattern": ".*date.*", "generator": "dateShift" },
+    {
+      "pattern": ".*nummer",
+      "generator": "numericId",
+      "comment": "Bewusst nur als Endung geprueft (nicht '.*nummer.*'): FieldNameSuggester prueft den ganzen Feldnamen, ein Muster mit Wildcards auf beiden Seiten waere aber gleichwertig zum alten Contains() und traefe an jeder Stelle des Namens -- das erzeugt gerade bei kurzen Fragmenten wie diesem Fehltreffer."
+    },
+    {
+      "pattern": ".*nr",
+      "generator": "numericId",
+      "comment": "Ebenfalls nur als Endung: das zweibuchstabige Fragment 'nr' als volles '.*nr.*' wuerde in vielen Spaltennamen zufaellig auftauchen und dort faelschlich numericId vorschlagen. Als Endung ('Kundennr', 'Auftragsnr') bleibt der Treffer gezielt."
+    },
+    { "pattern": ".*id.*", "generator": "numericId" },
+    { "pattern": ".*konto.*", "generator": "numericId" },
+    { "pattern": ".*verwendungszweck.*", "generator": "scanText" },
+    { "pattern": ".*bemerkung.*", "generator": "scanText" },
+    { "pattern": ".*notiz.*", "generator": "scanText" },
+    { "pattern": ".*kommentar.*", "generator": "scanText" }
+  ]
+}

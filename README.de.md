@@ -80,7 +80,7 @@ Pseudonymisat nicht verwechselt werden.
 # 1. Regelgeruest aus einer echten Datei ableiten
 obfuskation init --profile kontoauszuege --from kunden.csv
 
-# 2. obfuskation.json durchgehen: jede Spalte steht auf "error" und
+# 2. obfuskation-projekt.json durchgehen: jede Spalte steht auf "error" und
 #    braucht eine bewusste Entscheidung
 
 # 3. Ersetzen
@@ -104,12 +104,12 @@ bevor irgendetwas geschrieben wurde.
 ## Die Oberfläche
 
 ```fish
-obfuskation-gui                        # sucht obfuskation.json wie die CLI
+obfuskation-gui                        # sucht obfuskation-projekt.json wie die CLI
 obfuskation-gui kunden.csv             # Datei gleich mit öffnen
 obfuskation-gui --config profil.json kunden.csv
 ```
 
-Ohne Angabe sucht sie eine `obfuskation.json` im aktuellen Verzeichnis und
+Ohne Angabe sucht sie eine `obfuskation-projekt.json` im aktuellen Verzeichnis und
 fällt sonst auf das zuletzt benutzte Profil zurück.
 
 **Aufbau:** oben die geöffnete Datei mit erkanntem Format, Zeichensatz und
@@ -262,6 +262,12 @@ Ein anderes Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
 
 ## Konfiguration
 
+Die Profildatei heißt `obfuskation-projekt.json` und wird vom aktuellen
+Verzeichnis aus aufwärts gesucht. Eine vorhandene `obfuskation.json`, die
+wie ein Profil aussieht (also `profileName` oder `fields` enthält), wird
+weiterhin unter ihrem alten Namen gefunden — ein Umbenennen ist eine
+Empfehlung, keine Pflicht.
+
 ```jsonc
 {
   "version": 1,
@@ -364,18 +370,25 @@ Fallstricke: [Anwenderdokumentation](docs/anwenderdokumentation.md).
 
 ---
 
-## Eigene Muster (Generator-Bibliothek)
+## Eigene Muster (Erweiterungsdatei)
 
-Hauseigene Muster — interne Inventarnummern, Ticketnummern, eigene Kennungen —
-gehören nicht in ein Profil, das irgendwann in einem geteilten Repository
-landen könnte, und sollen nicht in jedem neuen Profil erneut abgetippt
-werden. Eine **Generator-Bibliothek** an einem festen, persönlichen Ort löst
-beides: sie fließt in jedes Profil ein, wird aber nie in eine Profildatei
+Hauseigene Muster — interne Inventarnummern, Ticketnummern, eigene Kennungen, und
+welcher Generator zu welchem Spaltennamen gehört — gehören nicht in ein
+Profil, das irgendwann in einem geteilten Repository landen könnte, und
+sollen nicht in jedem neuen Profil erneut abgetippt werden. Eine
+**Erweiterungsdatei** an einem von zwei festen Orten löst beides: sie
+fließt in jedes Profil ein, wird aber nie in eine Profildatei
 zurückgeschrieben.
 
 ```
-~/.config/obfuskation/generators.json
+obfuskation.json
 ```
+
+Gesucht in dieser Reihenfolge; die zuerst gefundene Datei gilt vollständig,
+es wird nichts zwischen den beiden Orten gemischt:
+
+1. neben der laufenden Programmdatei
+2. `~/.config/obfuskation`
 
 ```jsonc
 {
@@ -385,16 +398,22 @@ zurückgeschrieben.
   },
   "textRules": [
     { "name": "assetTag", "priority": 95, "pattern": "\\bINV\\d{6}\\b", "generator": "assetTag" }
+  ],
+  "fieldRules": [
+    { "pattern": "zielsystem|assetTag", "generator": "assetTag" },
+    { "pattern": ".*iban.*",            "generator": "iban" },
+    { "pattern": "bemerkung|notiz",     "generator": "scanText" }
   ]
 }
 ```
 
-Dieselben Typen wie im Profil (`generators`, `textRules`) — kein zweites
-Schema, keine zweite Prüfung. **Das Profil gewinnt immer gegen die
-Bibliothek** bei gleichem Schlüssel: ein eigener `generators`-Eintrag im
-Profil verdeckt einen gleichnamigen Bibliothekseintrag, und eine
-gleichnamige Profil-Textregel ersetzt die Bibliotheksregel vollständig,
-statt zusätzlich zu greifen. So lässt sich eine gemeinsame Bibliothek
+Dieselben Typen wie im Profil (`generators`, `textRules`), dazu neu
+`fieldRules`, weiter unten beschrieben — kein zweites Schema, keine zweite
+Prüfung. **Das Profil gewinnt immer gegen die Erweiterungsdatei** bei
+gleichem Schlüssel: ein eigener `generators`-Eintrag im Profil verdeckt
+einen gleichnamigen Erweiterungseintrag, und eine gleichnamige
+Profil-Textregel ersetzt die Erweiterungsregel vollständig, statt
+zusätzlich zu greifen. So lässt sich eine gemeinsame Erweiterungsdatei
 gefahrlos aufbauen — wer an einem Profil konkreter sein muss, kann das
 jederzeit.
 
@@ -402,16 +421,55 @@ jederzeit.
 typischerweise unternehmensinterne Namensschemata, die nicht sichtbar werden
 dürfen, nur weil ein Profil, das sich darauf bezieht, öffentlich ist.
 
-`obfuskation library list` zeigt die eingetragenen Schlüssel, ihren
-Basistyp und die Namen der Textregeln — Muster eingeschlossen: anders als
-die Ersetzungstabelle enthält die Bibliothek keine Echtdaten, nur die Form
-davon, es gibt also nichts zu schützen. `obfuskation library path` zeigt den
-Ablageort. `--no-library` lässt einen Lauf ohne die Bibliothek laufen, für
-die Fehlersuche oder für ein Ergebnis, das unabhängig von der lokalen
-Konfiguration des Rechners reproduzierbar bleibt. In der Oberfläche
-erscheinen Bibliothekseinträge in der Generatorauswahl neben den
-profileigenen, mit Herkunftshinweis; in dieser Fassung sind sie dort nur
-lesbar — bearbeitet wird die Datei direkt.
+`obfuskation extensions list` zeigt die eingetragenen Generatorschlüssel,
+ihren Basistyp, die Namen der Textregeln und die Spaltenmuster —
+Muster eingeschlossen: anders als die Ersetzungstabelle enthält die
+Erweiterungsdatei keine Echtdaten, nur die Form davon, es gibt also nichts
+zu schützen. Zusätzlich nennt der Befehl, welcher der beiden Orte greift.
+`obfuskation extensions path` zeigt diesen Ort, oder beide geprüften Orte,
+wenn keiner eine Datei hergibt. `--no-extensions` lässt einen Lauf ohne die
+Erweiterungsdatei laufen, für die Fehlersuche oder für ein Ergebnis, das
+unabhängig von der lokalen Konfiguration des Rechners reproduzierbar
+bleibt. In der Oberfläche erscheinen Erweiterungseinträge in der
+Generatorauswahl neben den profileigenen, mit Herkunftshinweis; in dieser
+Fassung sind sie dort nur lesbar — bearbeitet wird die Datei direkt.
+
+Eine `obfuskation.json`, die wie ein Profil aussieht (`profileName` oder
+`fields` vorhanden), wird an diesem Ort übergangen und der nächste Ort
+geprüft — derselbe Dateiname bezeichnet ja zugleich den früheren
+Profilnamen (siehe *Konfiguration* oben), und der Inhalt, nicht der Ort,
+entscheidet über die Rolle.
+
+### Spaltenmuster: `fieldRules`
+
+Jeder Eintrag vergleicht `pattern` (ein regulärer Ausdruck, standardmäßig
+ohne Rücksicht auf Groß-/Kleinschreibung) mit dem **ganzen** Feldnamen und
+nennt einen `generator` — eingebaut, unter den eigenen `generators` der
+Erweiterungsdatei definiert, oder der Sonderwert `scanText` für ein
+Freitextfeld, das mit den Textregeln durchsucht statt einfach ersetzt
+werden soll. Die erste passende Regel gewinnt, die Reihenfolge in der Datei
+entscheidet.
+
+`init` (und »Muster erkennen…« in der Oberfläche) schlägt für jedes Feld in
+dieser Reihenfolge etwas vor:
+
+1. die Beispielwerte passen vollständig auf ein bekanntes Muster
+   (`ValueSuggester` — IBAN, E-Mail, BIC, Telefon, oder was unter
+   `textRules` steht)
+2. sonst trifft eine `fieldRules`-Regel der Erweiterungsdatei auf den
+   Feldnamen
+3. sonst ein frischer, eigener `token`-Namensraum, deutlich als Notlösung
+   gekennzeichnet
+
+**Ohne Erweiterungsdatei entfällt die zweite Stufe — das Programm rät nicht
+mehr von sich aus am Spaltennamen.** Das ist eine bewusste
+Verhaltensänderung gegenüber 1.5.0, das rund dreißig fest einkompilierte
+Namensfragmente (`"nummer"`, `"iban"`, `"nachname"`, …) automatisch und mit
+mäßiger Treffsicherheit prüfte (`"ort"` traf auch mitten in `Sortiment`). Wer das
+bisherige Verhalten zurückhaben möchte, kopiert
+[`docs/beispiel/obfuskation-erweiterung-beispiel.json`](docs/beispiel/obfuskation-erweiterung-beispiel.json)
+— die frühere Liste, als `fieldRules` geschrieben — an einen der beiden
+Fundorte und passt sie an den eigenen Datenbestand an.
 
 ---
 
@@ -458,17 +516,17 @@ obfuskation deobfuscate [<datei>] [-o <ziel>] [--json]
 obfuskation scan <datei> [--json]
 obfuskation mapping list|path
 obfuskation profile list [--sort name|used|changed] [--json]
-obfuskation library list|path
+obfuskation extensions list|path
 ```
 
 Gemeinsame Optionen: `--config <pfad-oder-profilname>`, `--format csv|json|text`,
-`--allow-unsafe-store`, `--no-library`.
+`--allow-unsafe-store`, `--no-extensions`.
 
 `--config` nimmt statt eines Pfades auch einen bloßen Profilnamen entgegen —
 `--config demo` löst, sofern keine wörtliche Datei namens `demo` existiert,
 zu `~/.config/obfuskation/profile/demo.json` auf, demselben zentralen Ort,
 den auch die Oberfläche verwendet. `init --central` schreibt direkt dorthin
-statt nach `obfuskation.json` im aktuellen Verzeichnis, und `profile list`
+statt nach `obfuskation-projekt.json` im aktuellen Verzeichnis, und `profile list`
 zeigt alle bekannten Profile — den zentralen Ordner plus alles, was der
 Nutzungs-Index gemerkt hat — mit Name, Anzahl der Dateien sowie den
 Zeitpunkten der letzten Benutzung und Änderung.
@@ -480,10 +538,9 @@ Zeitpunkten der letzten Benutzung und Änderung.
 - `--json` — Bericht als JSON auf die Standardausgabe. Erfordert `-o`, sonst
   vermengten sich Bericht und Nutzdaten. Der Bericht enthält **nur Zähler und
   Feldnamen, niemals Werte** und darf deshalb protokolliert werden.
-- `--no-library` — läuft ohne die Generator-Bibliothek
-  (`~/.config/obfuskation/generators.json`); nützlich zur Fehlersuche oder
-  für einen von der lokalen Konfiguration unabhängigen, reproduzierbaren
-  Lauf.
+- `--no-extensions` — läuft ohne die Erweiterungsdatei (siehe `obfuskation
+  extensions path`); nützlich zur Fehlersuche oder für einen von der
+  lokalen Konfiguration unabhängigen, reproduzierbaren Lauf.
 - `deobfuscate` ohne Dateiangabe liest von der Standardeingabe.
 
 ### Rückgabewerte
