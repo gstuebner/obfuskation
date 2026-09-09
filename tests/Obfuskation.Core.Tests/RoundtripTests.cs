@@ -398,7 +398,7 @@ public class RoundtripTests
             System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json));
 
     [Fact]
-    public void Hostname_aus_der_Erweiterungsdatei_kommt_in_Spalte_und_Freitext_zurueck()
+    public void Inventarnummer_aus_der_Erweiterungsdatei_kommt_in_Spalte_und_Freitext_zurueck()
     {
         var extensions = new ExtensionLibrary
         {

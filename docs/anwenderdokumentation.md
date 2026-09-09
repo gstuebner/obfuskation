@@ -797,10 +797,10 @@ Ohne gesetzte Maske leitet der Generator sie selbst aus dem Original ab
 dann ist er ein allgemeiner, formaterhaltender Ersatz etwa für Vertrags-,
 Beleg- oder Auftragsnummern, ohne dass dafür eine eigene Maske nötig wäre.
 
-### Rezept: ein eigener Namensraum für einen hauseigenen Inventarnummern
+### Rezept: ein eigener Namensraum für ein hauseigenes Muster
 
-Am Beispiel eines internen Hostnamens der Form `INV123456` (drei feste
-Buchstaben, sechs Ziffern), der sowohl in einer eigenen Spalte als auch im
+Am Beispiel einer internen Inventarnummer der Form `INV123456` (drei feste
+Buchstaben, sechs Ziffern), die sowohl in einer eigenen Spalte als auch im
 Fließtext vorkommen kann:
 
 1. **Erweiterungsdatei anlegen oder öffnen**, entweder neben der
@@ -902,9 +902,9 @@ an den eigenen Datenbestand an.
 - **Buchstaben `A`, `a`, `X`, `9` im wörtlichen Teil einer Maske müssen mit
   `\` geschützt werden.** Ohne den Schutz werden sie als Platzhalter
   gelesen statt als das Zeichen, das tatsächlich dastehen soll — aus der
-  Maske `INV999999` wird `FW` also nur deshalb wörtlich übernommen, weil
-  keiner der beiden Buchstaben ein Maskenzeichen ist; eine Maske wie
-  `AW999999` bräuchte dagegen `\A W999999`, wenn das `A` wörtlich ein `A`
+  Maske `INV999999` wird `INV` also nur deshalb wörtlich übernommen, weil
+  keiner der drei Buchstaben ein Maskenzeichen ist; eine Maske wie
+  `ANV999999` bräuchte dagegen `\ANV999999`, wenn das `A` wörtlich ein `A`
   bleiben soll.
 - **Eine feste Maske schaut sich den Originalwert nicht an.** Wechseln
   Länge oder Aufbau der Werte (mal sechs, mal sieben Ziffern), passt eine

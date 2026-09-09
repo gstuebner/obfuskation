@@ -21,7 +21,7 @@ public class ValueSuggesterTests
         => new(StringComparer.OrdinalIgnoreCase) { [feld] = werte };
 
     [Fact]
-    public void Zwei_passende_Hostnamen_ergeben_einen_Vorschlag()
+    public void Zwei_passende_Inventarnummern_ergeben_einen_Vorschlag()
     {
         var samples = Samples("Zielsystem", "INV123456", "INV654321");
 

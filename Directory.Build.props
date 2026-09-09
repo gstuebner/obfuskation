@@ -77,7 +77,7 @@
          unbekanntes Pseudonym. In der Oberflaeche ein eigener Dialog fuer
          die neuen Optionen, der seine Zuordnung aus
          ProfileValidator.OptionOwnership liest.
-         1.6.0: Erweiterungsdatei. Hauseigene Muster, etwa ein Inventarnummer der
+         1.6.0: Erweiterungsdatei. Hauseigene Muster, etwa eine Inventarnummer der
          Form INV123456, sind Betriebswissen und haben in einer Profildatei
          nichts verloren, die geteilt oder eingecheckt wird. Sie liegen
          deshalb in einer eigenen, privaten Datei namens obfuskation.json,
