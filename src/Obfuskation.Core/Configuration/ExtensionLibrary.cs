@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Obfuskation.Core.Configuration;
 
@@ -55,8 +56,11 @@ public sealed record ExtensionResolution(string? Path, ExtensionOrigin? Origin, 
 /// Bewusst dieselben Typen wie im Profil (<see cref="GeneratorSettings"/>,
 /// <see cref="TextRule"/>): kein zweites Schema, keine zweite Validierung.
 ///
-/// Nur lesend: die Datei wird von Hand im Texteditor gepflegt, diese Klasse
-/// bietet deshalb kein <c>Save</c>.
+/// Die Datei laesst sich weiterhin von Hand im Texteditor pflegen; <see cref="Save"/>
+/// gibt es allein fuer die Oberflaeche, damit ein hauseigenes Muster nicht nur
+/// dem zugaenglich ist, der JSON schreibt. Am Verhaeltnis zum Profil aendert
+/// das nichts: geschrieben wird ausschliesslich diese Datei, nie ein Profil,
+/// und umgekehrt.
 /// </summary>
 public sealed class ExtensionLibrary
 {
@@ -85,7 +89,43 @@ public sealed class ExtensionLibrary
     /// <summary>Eine leere Erweiterung, fuer den Fall ohne oder mit abgeschalteter Datei.</summary>
     public static ExtensionLibrary Empty => new();
 
-    /// <summary>Ob weder Generatoren noch Textregeln noch Spaltenmuster hinterlegt sind.</summary>
+    /// <summary>
+    /// Fuehrt diese Erweiterungsregeln mit den Textregeln eines Profils
+    /// zusammen: eine Erweiterungsregel gilt, ausser eine gleichnamige
+    /// Profilregel ersetzt sie vollstaendig -- sie faellt dann ganz weg,
+    /// statt zusaetzlich zu gelten.
+    ///
+    /// Eine Stelle fuer diese Vereinigung, die <see cref="ObfuscationEngine"/>
+    /// (fuer den echten Lauf), <c>TextRulesViewModel</c> (fuer die Erprobung
+    /// im Textregel-Formular) und <c>TextViewModel</c> (fuer die Fundstellen
+    /// der Textansicht) gleichermassen nutzen. Eine zweite, unabhaengig
+    /// gepflegte Fassung koennte unbemerkt auseinanderlaufen und liesse die
+    /// Textansicht dann etwas anderes finden, als ein echter Lauf ersetzt.
+    ///
+    /// Ohne eigene Textregeln wird <paramref name="profileRules"/>
+    /// unveraendert zurueckgegeben -- der haeufige Fall bleibt damit ohne
+    /// zusaetzliche Kopie.
+    /// </summary>
+    public IReadOnlyList<TextRule> MergeTextRules(IReadOnlyList<TextRule> profileRules)
+    {
+        if (TextRules.Count == 0)
+            return profileRules;
+
+        var profileNames = new HashSet<string>(
+            profileRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
+
+        var merged = new List<TextRule>(TextRules.Count + profileRules.Count);
+        merged.AddRange(TextRules.Where(rule => !profileNames.Contains(rule.Name)));
+        merged.AddRange(profileRules);
+        return merged;
+    }
+
+    /// <summary>
+    /// Ob weder Generatoren noch Textregeln noch Spaltenmuster hinterlegt sind.
+    /// Nicht Teil des Dateiformats: <see cref="Save"/> soll die Datei so
+    /// schreiben, wie sie von Hand aussaehe.
+    /// </summary>
+    [JsonIgnore]
     public bool IsEmpty => Generators.Count == 0 && TextRules.Count == 0 && FieldRules.Count == 0;
 
     /// <summary>
@@ -163,6 +203,109 @@ public sealed class ExtensionLibrary
         catch (JsonException ex)
         {
             throw new ConfigurationException($"Erweiterungsdatei ist kein gültiges JSON: {resolved}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Wohin geschrieben wuerde: die vorhandene Datei, sonst
+    /// <see cref="PathHelper.ConfigDirectory"/>.
+    ///
+    /// Bewusst nie das Programmverzeichnis, obwohl <see cref="ResolvePath"/> es
+    /// zuerst prueft: dort liegt bei einer Installation aus einem Paket eine
+    /// Datei, die dem Anwender nicht gehoert, und ein Schreibversuch scheiterte
+    /// entweder an den Rechten oder veraenderte die Auslieferung. Existiert
+    /// dort eine Erweiterungsdatei, wird sie weiterhin gelesen — geschrieben
+    /// wird sie nur, wenn sie sich ohnehin schon beschreiben laesst.
+    /// </summary>
+    public static string ResolveWritePath(string? programDirectory = null)
+    {
+        var resolution = ResolvePath(programDirectory);
+        var configPath = Path.Combine(PathHelper.ConfigDirectory, FileName);
+
+        if (resolution.Path is null)
+            return configPath;
+
+        return resolution.Origin == ExtensionOrigin.ConfigDirectory || IsWritable(resolution.Path)
+            ? resolution.Path
+            : configPath;
+    }
+
+    /// <summary>
+    /// Ob die Datei an <paramref name="path"/> von Hand gepflegte Kommentare
+    /// enthaelt. <see cref="Save"/> schreibt reines JSON und wuerde sie
+    /// verlieren; wer eine solche Datei ueberschreibt, soll das vorher wissen
+    /// und bekommt ueber <see cref="Save"/> eine Sicherungskopie.
+    ///
+    /// Gesucht wird nur ausserhalb von Zeichenketten, damit ein
+    /// <c>"https://…"</c> in einem Muster nicht als Kommentar zaehlt.
+    /// </summary>
+    public static bool HasComments(string path)
+    {
+        if (!File.Exists(path))
+            return false;
+
+        var text = File.ReadAllText(path);
+        var inString = false;
+
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+
+            if (inString)
+            {
+                if (character == '\\')
+                    index++;
+                else if (character == '"')
+                    inString = false;
+                continue;
+            }
+
+            if (character == '"')
+                inString = true;
+            else if (character == '/' && index + 1 < text.Length && (text[index + 1] == '/' || text[index + 1] == '*'))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Schreibt die Erweiterung. Wie <see cref="ProfileStore.Save"/> erst in
+    /// eine Nebendatei, dann umbenennen — ein Abbruch darf keine halbe Datei
+    /// hinterlassen.
+    ///
+    /// Enthaelt die Zieldatei Kommentare, entsteht vorher eine Sicherungskopie
+    /// mit der Endung <c>.bak</c>: <see cref="JsonSerializer"/> schreibt
+    /// Kommentare nicht zurueck, und die Datei wird von Hand gepflegt (siehe
+    /// die Beispieldatei unter <c>docs/beispiel</c>). Wer sie kommentiert hat,
+    /// soll seine Notizen wiederfinden.
+    /// </summary>
+    public void Save(string path)
+    {
+        var full = Path.GetFullPath(PathHelper.ExpandHome(path));
+
+        var directory = Path.GetDirectoryName(full);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        if (HasComments(full))
+            File.Copy(full, full + ".bak", overwrite: true);
+
+        var temporary = full + ".tmp";
+        File.WriteAllText(temporary, JsonSerializer.Serialize(this, ProfileStore.JsonOptions));
+        File.Move(temporary, full, overwrite: true);
+    }
+
+    private static bool IsWritable(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 }

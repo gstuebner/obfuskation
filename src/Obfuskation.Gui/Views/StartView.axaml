@@ -1,0 +1,87 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Obfuskation.Gui.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="600"
+             x:Class="Obfuskation.Gui.Views.StartView"
+             x:DataType="vm:StartViewModel">
+
+  <!--
+      Drei Absichtskarten statt eines leeren Fensters mit "Neu aus Datei…"
+      oder "Profile…" — beides setzt voraus, zu wissen, was ein Profil ist.
+      Hier steht stattdessen, was jemand vorhat.
+  -->
+  <UserControl.Styles>
+    <!-- Eigene Klasse statt Button.primary/Button.flat: eine Absichtskarte
+         ist eine grosse Flaeche mit Kartenoptik (wie Border.card), aber
+         klickbar als Ganzes. Border traegt kein Command, darum ein Button
+         mit passenden Setzern statt einer Border. -->
+    <Style Selector="Button.intent-card">
+      <Setter Property="Background" Value="{DynamicResource BrushCardRaised}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BrushBorder}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="{DynamicResource RadiusCard}"/>
+      <Setter Property="Padding" Value="20"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="VerticalContentAlignment" Value="Top"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="Button.intent-card:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource BrushHover}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource BrushAccent}"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid>
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                MaxWidth="920" Spacing="16" Margin="24">
+
+      <Grid ColumnDefinitions="*,16,*,16,*" MinHeight="160">
+        <Button Grid.Column="0" Classes="intent-card" Command="{Binding TextCommand}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Text säubern" FontWeight="SemiBold"
+                       FontSize="{DynamicResource FontSizeLarge}"/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Text einfügen, Echtwerte raus, Ergebnis kopieren — für ChatGPT und Co."/>
+          </StackPanel>
+        </Button>
+
+        <Button Grid.Column="2" Classes="intent-card" Command="{Binding FilesCommand}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Dateien pseudonymisieren" FontWeight="SemiBold"
+                       FontSize="{DynamicResource FontSizeLarge}"/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="CSV, JSON oder mehrere zusammengehörende Dateien"/>
+          </StackPanel>
+        </Button>
+
+        <Button Grid.Column="4" Classes="intent-card" Command="{Binding ReplyCommand}">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Antwort zurückholen" FontWeight="SemiBold"
+                       FontSize="{DynamicResource FontSizeLarge}"/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Die Antwort der KI wieder auf die Echtwerte zurückführen"/>
+          </StackPanel>
+        </Button>
+      </Grid>
+
+      <!-- Schmaler Schnellzugriff auf das zuletzt benutzte Profil — nur
+           sichtbar, wenn es eines gibt, das auch noch existiert. -->
+      <Border Classes="card" IsVisible="{Binding HasRecentProfile}">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+            <TextBlock Text="Zuletzt benutzt" Classes="card-title" Margin="0"/>
+            <TextBlock Text="{Binding RecentProfileName}" FontWeight="SemiBold"/>
+          </StackPanel>
+          <Button Grid.Column="1" Content="Öffnen…" Classes="primary"
+                  Command="{Binding OpenRecentProfileCommand}" VerticalAlignment="Center"/>
+        </Grid>
+      </Border>
+
+      <Button Classes="flat" Content="Kurzhilfe…" Command="{Binding HelpCommand}"
+              HorizontalAlignment="Center"/>
+    </StackPanel>
+  </Grid>
+</UserControl>

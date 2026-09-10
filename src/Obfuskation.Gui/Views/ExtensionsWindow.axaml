@@ -1,0 +1,63 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="480"
+        x:Class="Obfuskation.Gui.Views.ExtensionsWindow"
+        x:DataType="vm:ExtensionsViewModel"
+        Title="Hauseigene Muster"
+        Width="560" Height="480" MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
+
+    <Border Grid.Row="0" Classes="card">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Fundort" Classes="muted"/>
+        <TextBlock Text="{Binding Path}" Classes="mono small" TextWrapping="Wrap"/>
+        <TextBlock Classes="muted small" TextWrapping="Wrap"
+                   Text="Diese Datei fließt in jedes Profil auf diesem Rechner ein, ohne je hineingeschrieben zu werden. „Immer ersetzen…“ legt hier an, sie lässt sich daneben jederzeit von Hand pflegen."/>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="1" Classes="card" Margin="0,12,0,0" IsVisible="{Binding !Exists}">
+      <TextBlock Classes="muted" TextWrapping="Wrap"
+                 Text="Unter diesem Pfad liegt noch keine Erweiterungsdatei. Sie entsteht, sobald „Immer ersetzen…“ zum ersten Mal mit „immer, in allen Projekten“ speichert."/>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Margin="0,12,0,0" IsVisible="{Binding Exists}">
+      <Grid RowDefinitions="Auto,*,Auto,*,Auto">
+        <TextBlock Grid.Row="0" Text="Eigene Generatoren" Classes="card-title"/>
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding GeneratorNames}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding}" Classes="mono small" Margin="0,1"/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Grid.Row="2" Text="Textregeln" Classes="card-title" Margin="0,10,0,0"/>
+        <ItemsControl Grid.Row="3" ItemsSource="{Binding TextRuleNames}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding}" Classes="mono small" Margin="0,1"/>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock Grid.Row="4" Text="{Binding FieldRuleSummary}" Classes="muted small" Margin="0,10,0,0"/>
+
+        <TextBlock Grid.Row="1" Text="Keine eigenen Generatoren." Classes="muted small"
+                   IsVisible="{Binding !HasGenerators}"/>
+        <TextBlock Grid.Row="3" Text="Keine Textregeln." Classes="muted small"
+                   IsVisible="{Binding !HasTextRules}"/>
+      </Grid>
+    </Border>
+
+    <Button Grid.Row="3" Content="Schließen" Classes="primary"
+            HorizontalAlignment="Right" Margin="0,12,0,0" Click="OnClose"/>
+  </Grid>
+</Window>

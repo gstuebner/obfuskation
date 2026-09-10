@@ -227,6 +227,23 @@ public sealed class DialogService : IDialogService
         return viewModel.Confirmed ? viewModel.Accepted : null;
     }
 
+    public async Task<bool> ShowAlwaysReplaceAsync(AlwaysReplaceViewModel viewModel)
+    {
+        var window = new AlwaysReplaceWindow { DataContext = viewModel };
+        viewModel.CloseRequested += () => window.Close();
+
+        // "Muster von Hand bearbeiten…" ersetzt diesen schlichten Dialog durch
+        // die vollstaendige Fachansicht: schliesst den einen, oeffnet den
+        // anderen -- beide als Dialog desselben Hauptfensters, nicht
+        // ineinander verschachtelt.
+        viewModel.EditManuallyRequested += textRules =>
+            new TextRulesWindow { DataContext = textRules }.ShowDialog(_owner);
+
+        await window.ShowDialog(_owner);
+
+        return viewModel.Confirmed;
+    }
+
     /// <summary>
     /// Vorschlag fuer den Namen der Ausgabedatei. Der Zusatz macht auf einen
     /// Blick klar, welche der beiden Dateien das Pseudonymisat ist — die

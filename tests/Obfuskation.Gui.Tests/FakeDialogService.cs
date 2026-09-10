@@ -40,6 +40,25 @@ internal sealed class FakeDialogService : IDialogService
     /// <summary>Das zuletzt erzeugte Ansichtsmodell, damit ein Test die Vorbelegung pruefen kann.</summary>
     public PatternSuggestionsViewModel? LastPatternSuggestionsViewModel { get; private set; }
 
+    /// <summary>
+    /// Vorgabe ist die vorsichtige Richtung: "Immer ersetzen…" gilt als
+    /// abgebrochen. Ein Test, der "Uebernehmen" pruefen will, ruft stattdessen
+    /// <see cref="AlwaysReplaceViewModel.ApplyCommand"/> selbst auf dem
+    /// zurueckgegebenen <see cref="LastAlwaysReplaceViewModel"/> auf --
+    /// dasselbe Vorgehen wie bei <see cref="TextRulesViewModel"/>, das ebenso
+    /// ohne Fenster mutiert.
+    /// </summary>
+    public bool AlwaysReplaceConfirmed { get; set; }
+
+    /// <summary>
+    /// Ob "Uebernehmen" die Reichweite "immer, in allen Projekten" waehlt --
+    /// die Regel geht dann in die Erweiterungsdatei statt ins Profil.
+    /// </summary>
+    public bool AlwaysReplaceUseExtension { get; set; }
+
+    /// <summary>Das zuletzt erzeugte Ansichtsmodell, damit ein Test es unmittelbar bedienen kann.</summary>
+    public AlwaysReplaceViewModel? LastAlwaysReplaceViewModel { get; private set; }
+
     public Task<string?> OpenDataFileAsync(string? startDirectory = null) => Task.FromResult(DataFileToOpen);
 
     public Task<IReadOnlyList<string>> OpenDataFilesAsync(string? startDirectory = null)
@@ -76,5 +95,26 @@ internal sealed class FakeDialogService : IDialogService
     {
         LastPatternSuggestionsViewModel = viewModel;
         return Task.FromResult(PatternSuggestionsResult);
+    }
+
+    public Task<bool> ShowAlwaysReplaceAsync(AlwaysReplaceViewModel viewModel)
+    {
+        LastAlwaysReplaceViewModel = viewModel;
+
+        // Statt eines vorgegebenen Rueckgabewerts wird hier -- wie bei einem
+        // echten Fenster -- tatsaechlich "Uebernehmen" ausgeloest: nur so
+        // entstehen die Nebenwirkungen (Regel im Profil bzw. in der
+        // Erweiterungsdatei), die ein Test pruefen will.
+        if (AlwaysReplaceConfirmed)
+        {
+            // Die Reichweite waehlt sonst der Anwender im Fenster; hier setzt
+            // sie der Test, bevor "Uebernehmen" laeuft.
+            if (AlwaysReplaceUseExtension)
+                viewModel.UseExtension = true;
+
+            viewModel.ApplyCommand.Execute(null);
+        }
+
+        return Task.FromResult(viewModel.Confirmed);
     }
 }

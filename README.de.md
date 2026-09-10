@@ -16,6 +16,14 @@ Es gibt zwei Wege zum selben Werkzeug: das Kommandozeilenprogramm
 tägliche Arbeit. Beide nutzen dieselbe Bibliothek und dieselbe
 Ersetzungstabelle — was der eine ersetzt, holt der andere zurück.
 
+Die Oberfläche öffnet auf einer Startseite mit drei Einstiegen: einen
+einzelnen Text säubern (einfügen, Echtwerte raus, Ergebnis kopieren — ohne
+vorheriges Profil oder Tabelle), mit CSV-/JSON-Dateien arbeiten, oder die
+Antwort einer KI zurückübersetzen. Wiederkehrende hauseigene Begriffe — ein
+Hostname-Muster, eine Kundennummer — lassen sich aus einer markierten Stelle
+heraus in eine dauerhafte Regel verwandeln, in Alltagssprache, ohne einen
+regulären Ausdruck zu schreiben.
+
 ## Dokumentation
 
 - [Anwenderdokumentation](docs/anwenderdokumentation.md) — für alle, die mit
@@ -112,6 +120,38 @@ obfuskation-gui --config profil.json kunden.csv
 Ohne Angabe sucht sie eine `obfuskation-projekt.json` im aktuellen Verzeichnis und
 fällt sonst auf das zuletzt benutzte Profil zurück.
 
+Findet sich dabei weder eine angegebene, noch eine gefundene, noch eine
+zuletzt benutzte Konfiguration, öffnet das Fenster stattdessen auf einer
+**Startseite** mit drei Karten: *Text säubern*, *Dateien pseudonymisieren*
+und *Antwort zurückholen*. Ein über die Befehlszeile angegebenes oder
+automatisch gefundenes Profil überspringt die Startseite wie bisher und
+öffnet direkt die Dateiansicht.
+
+**Textansicht.** Text einfügen, tippen, über eine Datei öffnen oder ins
+Fenster ziehen; kurz nach der letzten Änderung erscheint rechts der
+gesäuberte Text samt Fundliste („Gefunden: 3× email · 1× iban“), jeder Fund
+per Häkchen einzeln abwählbar. In die Ersetzungstabelle trägt erst
+**Kopieren** etwas ein — bis dahin ist alles Gezeigte eine verbindliche
+Vorschau, denn die Ansicht legt die Tabelle beim Betreten schon an, statt sie
+erst beim ersten echten Lauf entstehen zu lassen. Ein Richtungsumschalter
+wechselt zwischen Säubern und Zurückübersetzen; ein anderswo geladenes
+Profil bleibt dabei erhalten, sodass beide Ansichten dieselbe Tabelle
+benutzen.
+
+**„Immer ersetzen…“ — hauseigene Begriffe ohne regulären Ausdruck.** Eine
+Stelle im Text markieren (oder einen Eintrag der Fundliste wählen) und
+„Auswahl immer ersetzen…“ wählen, oder in der Dateiansicht den
+gleichnamigen Knopf neben „Felder automatisch erkennen…“ nutzen. Der Dialog
+fragt drei Dinge in Alltagssprache: *was* (vorbelegt aus der Auswahl), *wie
+weit* (wörtlich, oder — enthält der Wert Ziffern — „alles dieser Form“, aus
+`FW123456` wird die Beschreibung „FW“ + 6 Ziffern statt `\bFW\d{6}\b`, mit
+einer laufenden
+Trefferzahl im aktuellen Text) und *wo* (im Profil dieses Projekts, oder in
+der Erweiterungsdatei für alle Projekte — der Dialog nennt den Zielpfad und
+warnt vorher, wenn dabei eine Sicherungskopie über von Hand gepflegte
+Kommentare entsteht). „Muster von Hand bearbeiten…“ führt weiterhin zum
+vollständigen Regeleditor mit Erprobungsfeld.
+
 **Aufbau:** oben die geöffnete Datei mit erkanntem Format, Zeichensatz und
 Trennzeichen, daneben bei Bedarf „Zuletzt ▾" zum Wechseln zwischen den dem
 Profil bereits bekannten Dateien, ohne den Öffnen-Dialog. Links die Felder,
@@ -131,15 +171,19 @@ Einzelauswahl vorbehalten.
 
 Über **Mehr** erreichbar:
 
-- **Textregeln** — mit einem Erprobungsfeld. Muster an echtem Text ausprobieren,
-  bevor sie auf Daten losgelassen werden; zu weit gefasste Muster fallen dort
-  sofort auf.
 - **Ersetzungstabelle** — Pfad, Anzahl je Namensraum und die Dateirechte.
   Zeigt **keine Werte**, gleich wie `mapping list`.
-- **Kurzhilfe** — sechs kurze Karten für alle, die die Oberfläche zum ersten
-  Mal öffnen: wofür das Werkzeug da ist, was ein Profil ist und wozu es gut
-  ist, und der Weg durch das Programm.
+- **Hauseigene Muster…** — Fundort der Erweiterungsdatei und, sofern dort
+  eine liegt, die geerbten Generatoren, Textregeln und Spaltenmuster; zuvor
+  nur über `obfuskation extensions path` auf der Kommandozeile zu erfahren.
+- **Kurzhilfe** — kurze Karten für alle, die die Oberfläche zum ersten Mal
+  öffnen: wofür das Werkzeug da ist, was ein Profil ist und wozu es gut ist,
+  der Weg durch das Programm, und der Textmodus für den einzelnen Text.
 - **Über** — die fünf Hinweise von oben und die verwendeten Pfade.
+
+Der frühere Eintrag **Textregeln** ist aus diesem Menü entfallen; derselbe
+Editor samt Erprobungsfeld ist weiterhin über „Immer ersetzen… → Muster von
+Hand bearbeiten…“ erreichbar (siehe oben).
 
 **Hell und dunkel:** der Umschalter rechts oben geht durch drei Zustände —
 Systemvorgabe (folgt der Einstellung des Betriebssystems), dunkel, hell. Die
@@ -450,7 +494,8 @@ Freitextfeld, das mit den Textregeln durchsucht statt einfach ersetzt
 werden soll. Die erste passende Regel gewinnt, die Reihenfolge in der Datei
 entscheidet.
 
-`init` (und »Muster erkennen…« in der Oberfläche) schlägt für jedes Feld in
+`init` (und »Felder automatisch erkennen…«, vormals »Muster erkennen…«, in
+der Oberfläche) schlägt für jedes Feld in
 dieser Reihenfolge etwas vor:
 
 1. die Beispielwerte passen vollständig auf ein bekanntes Muster

@@ -302,6 +302,31 @@ public sealed class MappingStore : IDisposable
     }
 
     /// <summary>
+    /// Legt die Tabelle an, falls es sie noch nicht gibt, und schreibt damit
+    /// das eben erzeugte Salt fest.
+    ///
+    /// Der Anlass ist die Vorschau: Pseudonyme leiten sich aus Salt und
+    /// Klartext ab, ein Probelauf (<c>RunOptions.DryRun</c>) liefert also genau
+    /// dann dieselben Werte wie der spaetere echte Lauf, wenn beide dasselbe
+    /// Salt vorfinden. Ohne bestehende Datei entsteht in <see cref="Open"/> ein
+    /// fluechtiges Salt, das <see cref="Save"/> mangels Aenderungen nie
+    /// schreibt — die Vorschau zeigte dann Werte, die spaeter anders
+    /// herauskaemen. Wer eine verbindliche Vorschau braucht, ruft dies einmal
+    /// vorher auf.
+    ///
+    /// Mehrfach aufgerufen aendert es nichts: eine vorhandene Datei bleibt
+    /// unangetastet, ihr Salt gilt weiter.
+    /// </summary>
+    public void EnsureCreated()
+    {
+        if (File.Exists(Path))
+            return;
+
+        _dirty = true;
+        Save();
+    }
+
+    /// <summary>
     /// Schreibt den Store atomar: erst in eine Nebendatei im selben Verzeichnis,
     /// dann umbenennen. Ein Abbruch darf niemals einen halben Store hinterlassen.
     /// </summary>

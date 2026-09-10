@@ -238,3 +238,144 @@ public sealed class ExtensionLibraryResolvePathTests : IDisposable
         }
     }
 }
+
+/// <summary>
+/// Die Erweiterungsdatei schreiben. Seit die Oberflaeche ein hauseigenes
+/// Muster anlegen kann, entsteht diese Datei nicht mehr nur im Texteditor --
+/// gepruefte wird deshalb vor allem, dass dabei nichts verlorengeht, was ein
+/// Mensch von Hand hineingeschrieben hat.
+/// </summary>
+public sealed class ExtensionLibrarySaveTests : IDisposable
+{
+    private readonly string _programVerzeichnis;
+
+    public ExtensionLibrarySaveTests()
+    {
+        _programVerzeichnis = Path.Combine(Path.GetTempPath(), "obfuskation-extensions-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_programVerzeichnis);
+        Directory.CreateDirectory(PathHelper.ConfigDirectory);
+    }
+
+    [Fact]
+    public void Geschrieben_und_wieder_gelesen_ergibt_dieselbe_Regel()
+    {
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        var erweiterung = new ExtensionLibrary
+        {
+            TextRules = { new TextRule { Name = "fw", Priority = 60, Generator = "token", Pattern = @"\bFW\d{6}\b" } },
+        };
+
+        erweiterung.Save(pfad);
+        var gelesen = ExtensionLibrary.Load(pfad);
+
+        var regel = Assert.Single(gelesen.TextRules);
+        Assert.Equal("fw", regel.Name);
+        Assert.Equal(@"\bFW\d{6}\b", regel.Pattern);
+        Assert.Equal(60, regel.Priority);
+    }
+
+    [Fact]
+    public void Die_geschriebene_Datei_traegt_keine_berechneten_Felder()
+    {
+        // "isEmpty" ist eine Auskunft der Klasse, kein Bestandteil des
+        // Dateiformats -- wer die Datei danach von Hand oeffnet, soll nur
+        // finden, was er selbst hineinschreiben wuerde.
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        new ExtensionLibrary().Save(pfad);
+
+        Assert.DoesNotContain("isEmpty", File.ReadAllText(pfad), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Vor_dem_Ueberschreiben_einer_kommentierten_Datei_entsteht_eine_Sicherungskopie()
+    {
+        // Die mitgelieferte Beispieldatei ist ausfuehrlich kommentiert, und
+        // System.Text.Json schreibt Kommentare nicht zurueck. Wer seine Datei
+        // von Hand erklaert hat, soll die Erklaerungen wiederfinden.
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        File.WriteAllText(pfad, "// Hauseigene Muster, gepflegt von der IT\n{ \"version\": 1 }");
+
+        new ExtensionLibrary().Save(pfad);
+
+        Assert.True(File.Exists(pfad + ".bak"));
+        Assert.Contains("gepflegt von der IT", File.ReadAllText(pfad + ".bak"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ohne_Kommentare_entsteht_keine_Sicherungskopie()
+    {
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        new ExtensionLibrary().Save(pfad);
+
+        new ExtensionLibrary().Save(pfad);
+
+        Assert.False(File.Exists(pfad + ".bak"));
+    }
+
+    [Fact]
+    public void Ein_Schraegstrich_in_einem_Muster_gilt_nicht_als_Kommentar()
+    {
+        // Sonst legte jedes Speichern einer Datei mit einer URL oder einem
+        // Datumsmuster eine Sicherungskopie an.
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        new ExtensionLibrary
+        {
+            TextRules = { new TextRule { Name = "quelle", Pattern = @"https://beispiel\.de/\d+" } },
+        }.Save(pfad);
+
+        Assert.False(ExtensionLibrary.HasComments(pfad));
+    }
+
+    [Fact]
+    public void Ohne_vorhandene_Datei_wird_in_den_Konfigurationsordner_geschrieben()
+    {
+        var ziel = ExtensionLibrary.ResolveWritePath(_programVerzeichnis);
+
+        Assert.Equal(Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName), ziel);
+    }
+
+    [Fact]
+    public void Eine_vorhandene_Datei_im_Konfigurationsordner_ist_das_Ziel()
+    {
+        var vorhanden = Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName);
+        new ExtensionLibrary().Save(vorhanden);
+
+        Assert.Equal(vorhanden, ExtensionLibrary.ResolveWritePath(_programVerzeichnis));
+    }
+
+    [Fact]
+    public void Eine_beschreibbare_Datei_neben_der_Programmdatei_bleibt_das_Ziel()
+    {
+        // Wer seine Erweiterung bewusst neben das Programm gelegt hat und sie
+        // beschreiben darf, soll sie dort weiterpflegen -- sonst entstuenden
+        // zwei Dateien, von denen nur die erste gilt.
+        var neben = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        new ExtensionLibrary().Save(neben);
+
+        Assert.Equal(neben, ExtensionLibrary.ResolveWritePath(_programVerzeichnis));
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_programVerzeichnis))
+                Directory.Delete(_programVerzeichnis, recursive: true);
+
+            foreach (var datei in new[]
+                     {
+                         Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName),
+                         Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName + ".bak"),
+                     })
+            {
+                if (File.Exists(datei))
+                    File.Delete(datei);
+            }
+        }
+        catch (IOException)
+        {
+            // Ein liegengebliebenes Wegwerfverzeichnis darf den Testlauf nicht stoeren.
+        }
+    }
+}

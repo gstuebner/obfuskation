@@ -79,8 +79,25 @@ public sealed class ProfileSession
     public void MarkChanged()
     {
         HasUnsavedChanges = true;
-        _engine = null;
+        InvalidateEngine();
     }
+
+    /// <summary>
+    /// Verwirft die zwischengespeicherte Engine, ohne den Aenderungsstand des
+    /// Profils anzutasten.
+    ///
+    /// Fuer Aenderungen, die in jeden Lauf einfliessen, aber nicht im Profil
+    /// stehen: eine neue Regel in der Erweiterungsdatei ("Immer ersetzen…"
+    /// mit der Reichweite "immer, in allen Projekten"). Die Engine fuehrt
+    /// Profil- und Erweiterungsregeln in ihrem Konstruktor zusammen
+    /// (<see cref="ObfuscationEngine"/>) -- eine bereits gebaute kennt die
+    /// neue Regel deshalb nicht, und ohne dieses Verwerfen bliebe sie bis zum
+    /// naechsten Profilwechsel wirkungslos. <see cref="MarkChanged"/> waere
+    /// hier das falsche Mittel: es setzte zusaetzlich
+    /// <see cref="HasUnsavedChanges"/>, und ein Sternchen im Fenstertitel
+    /// versprach eine Profilaenderung, die es nicht gibt.
+    /// </summary>
+    public void InvalidateEngine() => _engine = null;
 
     public void Save(string? path = null)
     {

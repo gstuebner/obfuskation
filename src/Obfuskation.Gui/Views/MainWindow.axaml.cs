@@ -18,39 +18,15 @@ public partial class MainWindow : Window
             if (DataContext is not MainViewModel viewModel)
                 return;
 
-            viewModel.TextRulesRequested += () => ShowTextRules(viewModel);
             viewModel.MappingRequested += () => ShowMapping(viewModel);
             viewModel.GeneratorOptionsRequested += () => ShowGeneratorOptions(viewModel);
             viewModel.AboutRequested += () => ShowAbout(viewModel);
             viewModel.HelpRequested += ShowHelp;
+            viewModel.ExtensionsRequested += () => ShowExtensions(viewModel);
         };
     }
 
     private void InitializeComponent() => AvaloniaXamlLoader.Load(this);
-
-    /// <summary>
-    /// Die Auswahl der Feldliste ans Ansichtsmodell weiterreichen.
-    ///
-    /// <c>SelectedItems</c> gehoert der Liste und laesst sich nicht binden wie
-    /// ein einzelner Wert — die Ansicht meldet die Auswahl deshalb selbst. Das
-    /// Ansichtsmodell bleibt frei von Fensterwissen und damit pruefbar.
-    /// </summary>
-    private void OnFieldSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (DataContext is not MainViewModel viewModel || sender is not ListBox list)
-            return;
-
-        viewModel.UpdateSelection(
-            list.SelectedItems?.OfType<FieldRuleViewModel>() ?? []);
-    }
-
-    private void ShowTextRules(MainViewModel viewModel)
-    {
-        if (viewModel.CreateTextRulesViewModel() is not { } inhalt)
-            return;
-
-        new TextRulesWindow { DataContext = inhalt }.ShowDialog(this);
-    }
 
     private void ShowMapping(MainViewModel viewModel)
     {
@@ -72,4 +48,7 @@ public partial class MainWindow : Window
         => new AboutWindow(viewModel.MappingStorePath).ShowDialog(this);
 
     private void ShowHelp() => new HelpWindow().ShowDialog(this);
+
+    private void ShowExtensions(MainViewModel viewModel)
+        => new ExtensionsWindow { DataContext = viewModel.CreateExtensionsViewModel() }.ShowDialog(this);
 }

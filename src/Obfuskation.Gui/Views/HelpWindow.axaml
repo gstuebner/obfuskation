@@ -35,6 +35,19 @@
           </StackPanel>
         </Border>
 
+        <!-- =============================================== Nur Text ==== -->
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Nur ein Text?" Classes="card-title" Margin="0"/>
+            <TextBlock TextWrapping="Wrap"
+                       Text="Für einen einzelnen Fließtext — eine E-Mail, einen Absatz, eine Antwort einer KI — braucht es kein Profil und keine Tabelle im herkömmlichen Sinn: Auf der Startseite „Text säubern“ wählen, Text einfügen oder hineintippen, das Ergebnis kopieren. Erkannte Stellen wie IBAN, E-Mail oder Telefonnummer lassen sich einzeln per Häkchen von der Ersetzung ausnehmen."/>
+            <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Kommt eine hauseigene Bezeichnung immer wieder vor — etwa Hostnamen der Form FW123456 —, im Text markieren und „Auswahl immer ersetzen…“ wählen. Der Dialog fragt in Klartext, ob nur genau dieses Wort oder alles dieser Form gemeint ist, und ob die Regel nur für dieses eine Projekt oder für alle gelten soll. Kein regulärer Ausdruck nötig. Denselben Dialog gibt es in der Dateiansicht als Knopf „Immer ersetzen…“ neben der Feldliste."/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,4,0,0"
+                       Text="Wer aus dem Textmodus zu einer Tabelle wechselt, bleibt im selben Profil — dieselbe Ersetzungstabelle gilt dann für beides."/>
+          </StackPanel>
+        </Border>
+
         <!-- ================================================= Profil ==== -->
         <Border Classes="card" BorderBrush="{DynamicResource BrushAccent}">
           <StackPanel Spacing="6">

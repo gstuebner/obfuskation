@@ -152,7 +152,8 @@ public sealed class TextRulesViewModel : ObservableObject
     /// damit hier nichts anderes herauskommt als dort.
     ///
     /// Geprueft werden Profil- und Erweiterungsregeln zusammen -- dieselbe
-    /// Vereinigung wie <c>ObfuscationEngine.MergeTextRules</c>: eine
+    /// Vereinigung wie <c>ObfuscationEngine.MergeTextRules</c>, denn beide
+    /// nutzen <see cref="ExtensionLibrary.MergeTextRules"/>: eine
     /// Erweiterungsregel gilt, ausser eine gleichnamige Profilregel ersetzt sie
     /// vollstaendig. Das Erprobungsfeld soll pruefen koennen, was ein echter
     /// Lauf tatsaechlich findet, nicht nur den Ausschnitt im Profil.
@@ -161,12 +162,7 @@ public sealed class TextRulesViewModel : ObservableObject
     {
         Matches.Clear();
 
-        var profilnamen = new HashSet<string>(
-            _profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
-
-        var brauchbare = _extensions.TextRules
-            .Where(rule => !profilnamen.Contains(rule.Name))
-            .Concat(_profile.TextRules)
+        var brauchbare = _extensions.MergeTextRules(_profile.TextRules)
             .Where(rule => !string.IsNullOrWhiteSpace(rule.Pattern))
             .ToList();
 

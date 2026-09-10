@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using Obfuskation.Core;
 using Obfuskation.Core.Configuration;
 using Obfuskation.Core.Generation;
@@ -7,6 +8,18 @@ using Obfuskation.Core.Reporting;
 using Obfuskation.Gui.Services;
 
 namespace Obfuskation.Gui.ViewModels;
+
+/// <summary>
+/// Welche der drei austauschbaren Ansichten das Hauptfenster gerade zeigt.
+/// Das geladene Profil (falls vorhanden) bleibt beim Wechsel unangetastet im
+/// Hintergrund bestehen -- nur die Anzeige wechselt.
+/// </summary>
+public enum AppView
+{
+    Start,
+    Text,
+    Files,
+}
 
 /// <summary>
 /// Das Hauptfenster: geoeffnetes Profil, geoeffnete Datei, Feldregeln und die
@@ -35,6 +48,10 @@ public sealed class MainViewModel : ObservableObject
     private MappingSummary? _mappingSummary;
     private CancellationTokenSource? _cancellation;
     private string _progressText = "";
+    private AppView _currentView = AppView.Start;
+
+    /// <summary>Das Ansichtsmodell der Textansicht, neu gebaut bei jedem Betreten.</summary>
+    private TextViewModel? _text;
 
     public MainViewModel(GuiSettings settings, Func<IDialogService> dialogs)
     {
@@ -85,8 +102,6 @@ public sealed class MainViewModel : ObservableObject
 
         // Die Nebenfenster oeffnet die Ansicht; das Ansichtsmodell liefert nur
         // die Daten dafuer und kennt keine Fenster.
-        ShowTextRulesCommand = new RelayCommand(
-            () => TextRulesRequested?.Invoke(), () => _session is not null);
         ShowMappingCommand = new RelayCommand(
             () => MappingRequested?.Invoke(), () => _session is not null);
         ShowGeneratorOptionsCommand = new RelayCommand(
@@ -94,9 +109,46 @@ public sealed class MainViewModel : ObservableObject
         ShowAboutCommand = new RelayCommand(() => AboutRequested?.Invoke());
         ShowHelpCommand = new RelayCommand(() => HelpRequested?.Invoke());
 
+        // "Hauseigene Muster…" ist unabhaengig vom geladenen Profil erreichbar
+        // -- die Erweiterungsdatei existiert unabhaengig von jedem Profil und
+        // wird schon im Konstruktor geladen (siehe oben).
+        ShowExtensionsCommand = new RelayCommand(() => ExtensionsRequested?.Invoke());
+
+        // "Immer ersetzen…" aus der Dateiansicht: Vorbelegung ist der
+        // Beispielwert des gerade gewaehlten Feldes (falls eines gewaehlt
+        // ist), die Vorschau prueft gegen den Rohinhalt der geoeffneten Datei.
+        // Der Einstieg aus der Textansicht laeuft nicht hierueber, sondern
+        // ueber TextViewModel.RequestAlwaysReplace (siehe ShowText).
+        ShowAlwaysReplaceCommand = new AsyncRelayCommand(
+            () => ShowAlwaysReplaceAsync(_selectedField?.SampleValue ?? "", CurrentFileContextText()),
+            () => _session is not null);
+
+        // Die Ansichtsumschaltung: das Profil (falls vorhanden) bleibt beim
+        // Wechsel unberuehrt im Hintergrund geladen, es wechselt nur die
+        // Anzeige. ShowFilesCommand ist der einzige der drei Befehle mit
+        // eigener Handlung -- die Startseite verlangt von dort "sofort" ein
+        // Profil oder eine Datei, nicht nur den Blick auf eine ohnehin leere
+        // Dateiansicht.
+        ShowStartCommand = new RelayCommand(() => SwitchView(AppView.Start));
+        ShowTextCommand = new RelayCommand(() => ShowText(reverse: false));
+        ShowReplyCommand = new RelayCommand(() => ShowText(reverse: true));
+        ShowFilesCommand = new AsyncRelayCommand(ShowFilesAsync);
+
+        // Freitexthinweis der Feldliste (Teil D-1): eine geoeffnete Datei ohne
+        // Felder ist entweder wirklich leer oder schlicht Fliesstext -- dann
+        // fuehrt dieser Knopf direkt in die Textansicht, mit dem Dateiinhalt
+        // schon eingefuegt.
+        OpenInTextViewCommand = new RelayCommand(OpenCurrentFileInTextView, () => _dataFilePath is not null);
+
         Actions = new ObservableCollection<ActionOption>(ActionOption.All);
 
         Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.BuiltIn);
+
+        // Erst hier: der Konstruktor der Startseite braucht die eben
+        // angelegten Befehle.
+        Start = new StartViewModel(
+            _settings, ShowTextCommand, ShowReplyCommand, ShowFilesCommand, ShowHelpCommand,
+            OpenRecentProfileAsync);
     }
 
     // ------------------------------------------------------------- Befehle
@@ -113,22 +165,53 @@ public sealed class MainViewModel : ObservableObject
     public AsyncRelayCommand ShowPatternSuggestionsCommand { get; }
     public RelayCommand CancelCommand { get; }
     public RelayCommand ToggleThemeCommand { get; }
-    public RelayCommand ShowTextRulesCommand { get; }
     public RelayCommand ShowMappingCommand { get; }
     public RelayCommand ShowGeneratorOptionsCommand { get; }
     public RelayCommand ShowAboutCommand { get; }
     public RelayCommand ShowHelpCommand { get; }
+    public RelayCommand ShowExtensionsCommand { get; }
+
+    /// <summary>Der Dialog "Immer ersetzen…" aus der Dateiansicht heraus (siehe Konstruktor).</summary>
+    public AsyncRelayCommand ShowAlwaysReplaceCommand { get; }
+
+    /// <summary>Kopfzeile: zurueck zur Startseite, das Profil bleibt geladen.</summary>
+    public RelayCommand ShowStartCommand { get; }
+
+    /// <summary>Karte "Text säubern" der Startseite.</summary>
+    public RelayCommand ShowTextCommand { get; }
+
+    /// <summary>Karte "Antwort zurückholen" -- dieselbe Ansicht, umgekehrte Richtung.</summary>
+    public RelayCommand ShowReplyCommand { get; }
+
+    /// <summary>
+    /// Karte "Dateien pseudonymisieren": wechselt in die Dateiansicht und
+    /// stoesst sofort den passenden Dialog an -- ohne Profil "Neu aus
+    /// Datei…", mit einem bereits (etwa aus der Textansicht) geladenen
+    /// Profil "Öffnen…" fuer eine Datendatei.
+    /// </summary>
+    public AsyncRelayCommand ShowFilesCommand { get; }
+
+    /// <summary>Freitexthinweis der Feldliste: "In der Textansicht öffnen" (Teil D-1).</summary>
+    public RelayCommand OpenInTextViewCommand { get; }
 
     /// <summary>Bitten an die Ansicht, ein Nebenfenster zu oeffnen.</summary>
-    public event Action? TextRulesRequested;
     public event Action? MappingRequested;
     public event Action? GeneratorOptionsRequested;
     public event Action? AboutRequested;
     public event Action? HelpRequested;
+    public event Action? ExtensionsRequested;
 
-    /// <summary>Das Ansichtsmodell der Textregeln zum laufenden Profil.</summary>
+    /// <summary>
+    /// Das Ansichtsmodell der Textregeln zum laufenden Profil -- weiterhin
+    /// erreichbar, seit der Menueintrag "Textregeln…" entfallen ist (siehe
+    /// Plan Teil C): "Immer ersetzen…" fuehrt ueber "Muster von Hand
+    /// bearbeiten…" auf genau dieses Ansichtsmodell.
+    /// </summary>
     public TextRulesViewModel? CreateTextRulesViewModel()
         => _session is null ? null : new TextRulesViewModel(_session.Profile, _extensions, OnTextRulesChanged);
+
+    /// <summary>Auskunft ueber die Erweiterungsdatei fuer "Hauseigene Muster…".</summary>
+    public ExtensionsViewModel CreateExtensionsViewModel() => new(_extensionPath, _extensions);
 
     /// <summary>
     /// Das Ansichtsmodell des Optionsdialogs fuer das fuehrende gewaehlte
@@ -178,6 +261,41 @@ public sealed class MainViewModel : ObservableObject
     public ObservableCollection<RecentFileViewModel> RecentDataFiles { get; } = new();
 
     // ------------------------------------------------------------ Zustand
+
+    /// <summary>Das Ansichtsmodell der Startseite -- einmal angelegt, ueber die Lebenszeit des Fensters gleich.</summary>
+    public StartViewModel Start { get; }
+
+    /// <summary>
+    /// Das Ansichtsmodell der Textansicht. Anders als <see cref="Start"/> neu
+    /// gebaut bei jedem Betreten (siehe <see cref="ShowText"/>): "ein bereits
+    /// geladenes Profil wird weiterverwendet" muss bei jedem Eintritt neu
+    /// gelten, nicht nur beim ersten -- zwischen zwei Besuchen kann ueber
+    /// "Profile…" ein anderes Profil geladen worden sein.
+    /// </summary>
+    public TextViewModel? Text
+    {
+        get => _text;
+        private set => SetProperty(ref _text, value);
+    }
+
+    /// <summary>Welche der drei Ansichten das Fenster gerade zeigt.</summary>
+    public AppView CurrentView
+    {
+        get => _currentView;
+        private set
+        {
+            if (!SetProperty(ref _currentView, value))
+                return;
+
+            OnPropertyChanged(nameof(IsStartView));
+            OnPropertyChanged(nameof(IsTextView));
+            OnPropertyChanged(nameof(IsFilesView));
+        }
+    }
+
+    public bool IsStartView => _currentView == AppView.Start;
+    public bool IsTextView => _currentView == AppView.Text;
+    public bool IsFilesView => _currentView == AppView.Files;
 
     public ProfileSession? Session => _session;
 
@@ -408,15 +526,44 @@ public sealed class MainViewModel : ObservableObject
             ? $"Regel: {_selectedFields.Count} Felder"
             : _selectedField is null ? "Regel" : $"Regel: {_selectedField.FieldName}";
 
-    /// <summary>Wegweiser, solange noch nichts geoeffnet ist.</summary>
-    public string EmptyHint => _session is null
-        ? "Noch kein Profil geladen.\n\nMit \u201eNeu aus Datei\u2026\u201c ein Regelgerüst aus einer "
-          + "vorhandenen Datei ableiten, oder unter \u201eProfile\u2026\u201c ein bestehendes Profil "
-          + "wählen. Ein Profil bündelt Feldregeln und Ersetzungstabelle für zusammengehörende Dateien."
-          + "\n\nWer zum ersten Mal hier ist: „Mehr ▾“ → „Kurzhilfe…“ "
-          + "erklärt das Nötige auf einer Seite."
-        : "Keine Datei geöffnet.\n\nMit \u201eÖffnen\u2026\u201c eine CSV-, JSON- oder Textdatei wählen; "
-          + "die Felder erscheinen dann hier.";
+    /// <summary>
+    /// Wegweiser, solange die Feldliste leer ist -- drei Faelle: kein Profil,
+    /// keine Datei, oder eine geoeffnete Datei ohne Felder, weil sie
+    /// Fliesstext ist (siehe <see cref="IsFreeTextFile"/>). Der dritte Fall
+    /// ist kein Fehlzustand wie die ersten beiden: die Datei ist offen, sie
+    /// hat nur keine Spalten, an denen Feldregeln greifen koennten.
+    /// </summary>
+    public string EmptyHint
+    {
+        get
+        {
+            if (_session is null)
+            {
+                return "Noch kein Profil geladen.\n\nMit \u201eNeu aus Datei\u2026\u201c ein Regelgerüst aus einer "
+                       + "vorhandenen Datei ableiten, oder unter \u201eProfile\u2026\u201c ein bestehendes Profil "
+                       + "wählen. Ein Profil bündelt Feldregeln und Ersetzungstabelle für zusammengehörende Dateien."
+                       + "\n\nWer zum ersten Mal hier ist: „Mehr ▾“ → „Kurzhilfe…“ "
+                       + "erklärt das Nötige auf einer Seite.";
+            }
+
+            if (IsFreeTextFile)
+            {
+                return "Diese Datei ist Fließtext — sie hat keine Felder. Es greifen die Muster unter "
+                       + "„Immer ersetzen…“.";
+            }
+
+            return "Keine Datei geöffnet.\n\nMit \u201eÖffnen\u2026\u201c eine CSV-, JSON- oder Textdatei wählen; "
+                   + "die Felder erscheinen dann hier.";
+        }
+    }
+
+    /// <summary>
+    /// Ob die geoeffnete Datei Fliesstext ist (<see cref="DataFormat.Text"/>)
+    /// statt einer Tabelle -- dann bleibt die Feldliste immer leer, unabhaengig
+    /// vom Profil. Steuert Wortlaut und Knopf im Freitexthinweis
+    /// (<see cref="EmptyHint"/>, <see cref="OpenInTextViewCommand"/>).
+    /// </summary>
+    public bool IsFreeTextFile => _analysis?.File.Format == DataFormat.Text;
 
     public bool ShowEmptyHint => Fields.Count == 0;
 
@@ -491,6 +638,214 @@ public sealed class MainViewModel : ObservableObject
     public string ThemeSymbol => ThemeService.Symbol(_settings.Theme);
     public string ThemeName => ThemeService.Describe(_settings.Theme);
 
+    // ------------------------------------------------------ Ansichtswechsel
+
+    private void SwitchView(AppView view)
+    {
+        CurrentView = view;
+
+        // Beim Zurueckkehren zur Startseite kann sich "zuletzt benutzt"
+        // geaendert haben (ein Profil wurde zwischenzeitlich angelegt oder
+        // anderswo geoeffnet) -- die Startseite haelt selbst keinen Bezug auf
+        // GuiSettings.RecentProfiles, der sich von selbst auffrischen wuerde.
+        if (view == AppView.Start)
+            Start.Refresh();
+    }
+
+    /// <summary>
+    /// Wechselt in die Textansicht. <paramref name="reverse"/> kommt von der
+    /// Startseiten-Karte "Antwort zurückholen" und legt fest, mit welcher
+    /// Richtung die Textansicht beginnt.
+    ///
+    /// Ist kein Profil geladen, entsteht hier ein Vorgabeprofil "text" (siehe
+    /// <see cref="EnsureTextProfile"/>); ein bereits geladenes Profil (etwa
+    /// aus der Dateiansicht mitgebracht) wird weiterverwendet, damit
+    /// zusammengehoerende Arbeit in derselben Ersetzungstabelle landet.
+    /// </summary>
+    private void ShowText(bool reverse)
+    {
+        try
+        {
+            EnsureTextProfile();
+        }
+        catch (Exception ex) when (ex is ConfigurationException or IOException or UnauthorizedAccessException)
+        {
+            StatusText = ex.Message;
+            return;
+        }
+
+        Text = new TextViewModel(
+            _session!, reverse ? TextDirection.Reverse : TextDirection.Forward, RefreshMappingSummary,
+            onAlwaysReplaceRequested: sample => _ = ShowAlwaysReplaceAsync(sample, Text?.InputText ?? ""));
+
+        SwitchView(AppView.Text);
+    }
+
+    /// <summary>
+    /// Knopf im Freitexthinweis der Feldliste (Teil D-1): wechselt in die
+    /// Textansicht und uebernimmt den Inhalt der gerade geoeffneten Datei als
+    /// Eingabetext -- wer eine <c>.txt</c>-Datei versehentlich im Dateimodus
+    /// geoeffnet hat, soll sie nicht ein zweites Mal ueber "Einfügen" oder
+    /// "Datei…" suchen muessen.
+    /// </summary>
+    private void OpenCurrentFileInTextView()
+    {
+        if (_dataFilePath is null)
+            return;
+
+        string inhalt;
+        try
+        {
+            inhalt = File.ReadAllText(_dataFilePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            StatusText = ex.Message;
+            return;
+        }
+
+        ShowText(reverse: false);
+
+        if (Text is not null)
+            Text.InputText = inhalt;
+    }
+
+    /// <summary>
+    /// Der Text, an dem der Vorschaustreifen von "Immer ersetzen…" seine
+    /// Trefferzahl zeigt, wenn der Dialog aus der Dateiansicht heraus
+    /// angestossen wird -- dort gibt es keinen Fliesstext wie in der
+    /// Textansicht, nur den Rohinhalt der geoeffneten Datei.
+    /// </summary>
+    private string CurrentFileContextText() => _dataContent is null ? "" : Encoding.UTF8.GetString(_dataContent);
+
+    /// <summary>
+    /// Der Dialog "Immer ersetzen…", von beiden Einstiegen gemeinsam genutzt:
+    /// aus der Textmarkierung der Textansicht (<see cref="TextViewModel.RequestAlwaysReplace"/>,
+    /// verdrahtet in <see cref="ShowText"/>) und aus <see cref="ShowAlwaysReplaceCommand"/>
+    /// der Dateiansicht. Baut das Ansichtsmodell mit direktem Zugriff auf
+    /// Profil und Erweiterung, zeigt den Dialog und rechnet danach die
+    /// Vorschau der Textansicht neu -- die muss die neue Regel sofort
+    /// beruecksichtigen, unabhaengig davon, ob sie gerade sichtbar ist oder
+    /// nur im Hintergrund weiterlebt (siehe <see cref="Text"/>).
+    /// </summary>
+    private async Task ShowAlwaysReplaceAsync(string initialSample, string contextText)
+    {
+        if (_session is null)
+            return;
+
+        var viewModel = new AlwaysReplaceViewModel(
+            _session.Profile, _extensions, initialSample, contextText,
+            wentToProfile =>
+            {
+                // Nur ein tatsaechlicher Profileintrag markiert das Profil als
+                // veraendert -- eine Erweiterungsregel speichert sich selbst
+                // und veraendert am geladenen Profil nichts, ein Sternchen im
+                // Titel waere hier irrefuehrend.
+                if (wentToProfile)
+                {
+                    _session.MarkChanged();
+                    OnPropertyChanged(nameof(ProfileTitle));
+                    OnPropertyChanged(nameof(HasUnsavedChanges));
+                }
+                else
+                {
+                    // Aber verworfen werden muss die Engine auch dann: sie
+                    // fuehrt Profil- und Erweiterungsregeln in ihrem
+                    // Konstruktor zusammen und kennt eine eben angelegte
+                    // Erweiterungsregel sonst nicht. Ohne das bliebe der
+                    // Hauptfall dieses Dialogs -- "FW123456, immer, in allen
+                    // Projekten" -- bis zum naechsten Profilwechsel
+                    // wirkungslos, waehrend die Fundstellenliste den Treffer
+                    // schon anzeigte: sie liest die Regeln unmittelbar aus
+                    // der Erweiterung, nicht aus der Engine.
+                    _session.InvalidateEngine();
+                }
+
+                RefreshGenerators();
+                RefreshIssues();
+            },
+            () => CreateTextRulesViewModel()!);
+
+        var bestaetigt = await _dialogs().ShowAlwaysReplaceAsync(viewModel);
+        if (!bestaetigt)
+            return;
+
+        Text?.RefreshPreview();
+
+        StatusText = viewModel.UseExtension
+            ? $"Regel „{viewModel.RuleName}“ angelegt in {viewModel.ExtensionPath}."
+            : $"Regel „{viewModel.RuleName}“ im Profil angelegt.";
+    }
+
+    /// <summary>
+    /// Stellt sicher, dass beim Betreten der Textansicht ein Profil geladen
+    /// ist. Existiert bereits eines an der festen Ablage des Textprofils,
+    /// wird es weiterverwendet (samt seiner Ersetzungstabelle) statt es zu
+    /// ueberschreiben -- sonst verloere ein zweiter Besuch, was ein frueherer
+    /// bereits pseudonymisiert hat.
+    /// </summary>
+    private void EnsureTextProfile()
+    {
+        if (_session is not null)
+            return;
+
+        var pfad = PathHelper.DefaultProfilePath("text");
+
+        var session = File.Exists(pfad)
+            ? ProfileSession.Load(pfad, _extensions)
+            : ProfileSession.Create("text", Array.Empty<string>(), null, _extensions);
+
+        if (session.Path is null)
+            session.Save(pfad);
+
+        LoadProfile(session);
+    }
+
+    /// <summary>
+    /// Die Startseiten-Karte "Dateien pseudonymisieren": wechselt sofort in
+    /// die Dateiansicht und stoesst von dort denselben Weg an, den auch die
+    /// bisherige Oberflaeche kennt -- ohne Profil "Neu aus Datei…", mit einem
+    /// bereits geladenen Profil (etwa aus der Textansicht mitgebracht) direkt
+    /// "Öffnen…" fuer eine Datendatei.
+    /// </summary>
+    private async Task ShowFilesAsync()
+    {
+        SwitchView(AppView.Files);
+
+        if (_session is null)
+            await NewProfileAsync();
+        else
+            await OpenDataFileAsync();
+    }
+
+    /// <summary>
+    /// Oeffnet ein Profil ueber seinen Pfad und wechselt in die Dateiansicht --
+    /// fuer den Schnellzugriff "zuletzt benutzt" auf der Startseite. Dieselbe
+    /// Rueckfrage bei ungespeicherten Aenderungen wie ueberall sonst, denn die
+    /// Startseite ist auch mit bereits geladenem Profil erreichbar (Klick auf
+    /// "Obfuskation" in der Kopfzeile).
+    /// </summary>
+    private async Task OpenRecentProfileAsync(string path)
+    {
+        if (!File.Exists(path))
+            return;
+
+        if (!await EnsureChangesHandledAsync())
+            return;
+
+        await GuardedAsync(() =>
+        {
+            LoadProfile(ProfileSession.Load(path, _extensions));
+            StatusText = $"Profil geladen: {Path.GetFileName(path)}";
+
+            // Innerhalb des geschuetzten Blocks, hinter dem erfolgreichen
+            // LoadProfile: schlaegt das Laden fehl, bleibt die Startseite
+            // stehen, statt eine Dateiansicht ohne Profil zu zeigen.
+            CurrentView = AppView.Files;
+            return Task.CompletedTask;
+        });
+    }
+
     // --------------------------------------------------------------- Start
 
     /// <summary>
@@ -518,6 +873,11 @@ public sealed class MainViewModel : ObservableObject
 
         if (dataPath is not null && File.Exists(dataPath) && _session is not null)
             await GuardedAsync(() => LoadDataFileAsync(dataPath));
+
+        // Nur der wirklich leere Fall landet auf der Startseite: ein
+        // uebergebenes Profil, ein gefundenes (ProfileStore.Discover) oder das
+        // zuletzt benutzte fuehren wie bisher direkt in die Dateiansicht.
+        CurrentView = _session is not null ? AppView.Files : AppView.Start;
     }
 
     // ------------------------------------------------------------- Profile
@@ -572,6 +932,11 @@ public sealed class MainViewModel : ObservableObject
         {
             LoadProfile(ProfileSession.Load(gewaehlt.Path, _extensions));
             StatusText = $"Profil geladen: {gewaehlt.Name}";
+
+            // Innerhalb des geschuetzten Blocks, hinter dem erfolgreichen
+            // LoadProfile: schlaegt das Laden fehl, bleibt die Startseite
+            // stehen, statt eine Dateiansicht ohne Profil zu zeigen.
+            CurrentView = AppView.Files;
             return Task.CompletedTask;
         });
     }
@@ -635,6 +1000,8 @@ public sealed class MainViewModel : ObservableObject
 
                 StatusText = "Neues Profil angelegt. Jedes Feld braucht noch eine Entscheidung.";
             }
+
+            CurrentView = AppView.Files;
 
             // Alle gewaehlten Dateien sofort eintragen, nicht erst die erste
             // ueber LoadDataFileAsync unten -- sonst kennten Schnellwahl und
@@ -882,6 +1249,7 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(HasUndecided));
             OnPropertyChanged(nameof(ShowEmptyHint));
             OnPropertyChanged(nameof(EmptyHint));
+            OnPropertyChanged(nameof(IsFreeTextFile));
             OnPropertyChanged(nameof(NewFieldsHint));
             OnPropertyChanged(nameof(HasNewFieldsHint));
             OnPropertyChanged(nameof(HasBlockingIssues));
@@ -927,6 +1295,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasUndecided));
         OnPropertyChanged(nameof(ShowEmptyHint));
         OnPropertyChanged(nameof(EmptyHint));
+        OnPropertyChanged(nameof(IsFreeTextFile));
         OnPropertyChanged(nameof(NewFieldsHint));
         OnPropertyChanged(nameof(HasNewFieldsHint));
         OnPropertyChanged(nameof(HasBlockingIssues));
@@ -1510,7 +1879,6 @@ public sealed class MainViewModel : ObservableObject
     {
         SaveProfileCommand.RaiseCanExecuteChanged();
         OpenDataFileCommand.RaiseCanExecuteChanged();
-        ShowTextRulesCommand.RaiseCanExecuteChanged();
         ShowMappingCommand.RaiseCanExecuteChanged();
         ShowGeneratorOptionsCommand.RaiseCanExecuteChanged();
         ObfuscateCommand.RaiseCanExecuteChanged();
@@ -1519,5 +1887,7 @@ public sealed class MainViewModel : ObservableObject
         ObfuscateAllCommand.RaiseCanExecuteChanged();
         DeobfuscateAllCommand.RaiseCanExecuteChanged();
         ShowPatternSuggestionsCommand.RaiseCanExecuteChanged();
+        ShowAlwaysReplaceCommand.RaiseCanExecuteChanged();
+        OpenInTextViewCommand.RaiseCanExecuteChanged();
     }
 }

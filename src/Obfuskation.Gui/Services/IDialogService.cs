@@ -67,6 +67,14 @@ public interface IDialogService
     /// </summary>
     Task<IReadOnlyList<PatternSuggestionAcceptance>?> ShowPatternSuggestionsAsync(
         PatternSuggestionsViewModel viewModel);
+
+    /// <summary>
+    /// Der Dialog "Immer ersetzen…": <paramref name="viewModel"/> traegt Profil
+    /// und Erweiterung bereits und schreibt bei "Uebernehmen" selbst hinein
+    /// (siehe <see cref="AlwaysReplaceViewModel"/>). Liefert <c>true</c>, wenn
+    /// dabei eine Regel entstanden ist, <c>false</c> bei Abbruch.
+    /// </summary>
+    Task<bool> ShowAlwaysReplaceAsync(AlwaysReplaceViewModel viewModel);
 }
 
 /// <summary>Antwort auf die Rueckfrage vorm Loeschen eines Profils.</summary>

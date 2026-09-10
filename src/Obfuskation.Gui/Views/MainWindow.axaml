@@ -3,6 +3,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        xmlns:views="using:Obfuskation.Gui.Views"
         mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="720"
         x:Class="Obfuskation.Gui.Views.MainWindow"
         x:DataType="vm:MainViewModel"
@@ -12,12 +13,15 @@
         Icon="avares://obfuskation-gui/Assets/obfuskation.png"
         Background="{DynamicResource BrushBackground}">
 
-  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="12" >
-    <Grid.Styles>
-      <Style Selector="Border.card">
-        <Setter Property="Margin" Value="0,0,0,12"/>
-      </Style>
-    </Grid.Styles>
+  <!--
+      Der Rahmen um drei austauschbare Ansichten (Start, Text, Dateien) —
+      siehe MainViewModel.CurrentView. Die Kopfzeile bleibt in jeder Ansicht
+      sichtbar und traegt links immer denselben Weg zurueck zur Startseite;
+      rechts zeigt sie nur die Schaltflaechen, die in der jeweiligen Ansicht
+      auch etwas bedeuten — "Neu aus Datei…" und "Speichern" beziehen sich
+      auf eine Datei, die es ausserhalb der Dateiansicht nicht gibt.
+  -->
+  <Grid RowDefinitions="Auto,*" Margin="12">
 
     <!-- ============================================== Kopfzeile ======== -->
     <Grid Grid.Row="0" RowDefinitions="Auto,Auto" Margin="0,0,0,12">
@@ -26,7 +30,14 @@
 
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
                     VerticalAlignment="Center">
-          <TextBlock Text="Obfuskation" Classes="heading" VerticalAlignment="Center"/>
+          <!-- Als Schaltflaeche statt TextBlock: von jeder Ansicht aus mit
+               einem Klick zurueck zur Startseite. Das geladene Profil bleibt
+               dabei im Hintergrund bestehen — es wird nur die Ansicht
+               gewechselt, nichts verworfen. -->
+          <Button Classes="flat" Padding="0" Command="{Binding ShowStartCommand}"
+                  ToolTip.Tip="Zur Startseite">
+            <TextBlock Text="Obfuskation" Classes="heading"/>
+          </Button>
           <TextBlock Text="{Binding ProfileName}" Classes="muted"
                      VerticalAlignment="Center" Margin="4,0,0,0"/>
 
@@ -45,16 +56,25 @@
         </StackPanel>
 
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <!-- Nur im Dateimodus sinnvoll: beide beziehen sich auf eine
+               geoeffnete Datendatei bzw. das Sichern ihres Regelwerks. Im
+               Start- und Textmodus blieben sie wirkungslose Umwege. -->
           <Button Content="Neu aus Datei…" Command="{Binding NewProfileCommand}"
+                  IsVisible="{Binding IsFilesView}"
                   ToolTip.Tip="Regelgeruest aus einer vorhandenen Datei ableiten"/>
           <Button Content="Profile…" Command="{Binding ShowProfilesCommand}"/>
-          <Button Content="Speichern" Command="{Binding SaveProfileCommand}"/>
+          <Button Content="Speichern" Command="{Binding SaveProfileCommand}"
+                  IsVisible="{Binding IsFilesView}"/>
 
           <Button Content="Mehr ▾">
             <Button.Flyout>
               <MenuFlyout>
-                <MenuItem Header="Textregeln…" Command="{Binding ShowTextRulesCommand}"/>
                 <MenuItem Header="Ersetzungstabelle…" Command="{Binding ShowMappingCommand}"/>
+                <!-- Der fruehere Eintrag "Textregeln…" entfaellt: eigene Muster
+                     legt "Immer ersetzen…" an (Textansicht und Dateiansicht),
+                     die Fachansicht bleibt darueber unter "Muster von Hand
+                     bearbeiten…" erreichbar. -->
+                <MenuItem Header="Hauseigene Muster…" Command="{Binding ShowExtensionsCommand}"/>
                 <Separator/>
                 <MenuItem Header="Kurzhilfe…" Command="{Binding ShowHelpCommand}"/>
                 <MenuItem Header="Über Obfuskation…" Command="{Binding ShowAboutCommand}"/>
@@ -83,432 +103,25 @@
                  TextTrimming="CharacterEllipsis"/>
     </Grid>
 
-    <!-- ================================================== Datei ======== -->
-    <Border Grid.Row="1" Classes="card">
-      <Grid ColumnDefinitions="Auto,*,Auto">
-        <TextBlock Grid.Column="0" Text="Datei" Classes="card-title"
-                   VerticalAlignment="Center" Margin="0,0,16,0"/>
-
-        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-          <TextBlock Text="{Binding DataFileName}" FontWeight="SemiBold"/>
-          <TextBlock Text="{Binding DataFileDetails}" Classes="muted small"
-                     IsVisible="{Binding HasDataFile}"/>
-          <!-- Neue Felder ohne eigene Regel sollen nicht unbemerkt bleiben,
-               wenn eine Datei zum ersten Mal unter diesem Profil laeuft. -->
-          <TextBlock Text="{Binding NewFieldsHint}" Classes="muted small"
-                     IsVisible="{Binding HasNewFieldsHint}"/>
-        </StackPanel>
-
-        <!-- Weniger Umbau als eine eigene Spalte: beide Schaltflaechen teilen
-             sich die letzte Spalte der Karte in einer waagerechten Leiste. -->
-        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-
-          <!-- Schnellwahl (Feature F-1): zwischen den dem Profil bekannten
-               Dateien wechseln, ohne jedes Mal ueber den Oeffnen-Dialog zu
-               gehen. Nur sichtbar, wenn der Profilindex ueberhaupt etwas zu
-               bieten hat. -->
-          <Button Content="Zuletzt ▾" IsVisible="{Binding HasRecentDataFiles}">
-            <Button.Flyout>
-              <!-- Schlichtes Flyout mit ItemsControl statt MenuFlyout mit
-                   ItemsSource: so laesst sich am Ende der dynamischen Liste
-                   noch ein fester "Öffnen…"-Eintrag anhaengen, ohne mit
-                   ItemContainerTheme und Item-Template gegeneinander zu
-                   arbeiten. -->
-              <Flyout>
-                <StackPanel Spacing="2" MinWidth="220" MaxWidth="420">
-                  <ItemsControl ItemsSource="{Binding RecentDataFiles}">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="vm:RecentFileViewModel">
-                        <Button Classes="flat" Command="{Binding OpenCommand}"
-                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                ToolTip.Tip="{Binding FullPath}">
-                          <StackPanel Orientation="Horizontal" Spacing="6">
-                            <!-- Wie der Statuspunkt der Feldliste: die gerade
-                                 geladene Datei soll auf einen Blick auffindbar
-                                 sein. Nicht mehr vorhandene Dateien bleiben in
-                                 der Liste, werden aber ueber CanExecute
-                                 (Exists) ausgegraut statt entfernt. -->
-                            <TextBlock Text="●" FontSize="11" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource BrushAccent}"
-                                       IsVisible="{Binding IsCurrent}"/>
-                            <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis"/>
-                          </StackPanel>
-                        </Button>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-
-                  <Separator/>
-
-                  <!-- Rueckfallweg fuer neue Dateien, damit die Schnellwahl
-                       nicht in eine Sackgasse fuehrt. -->
-                  <Button Classes="flat" Content="Öffnen…" Command="{Binding OpenDataFileCommand}"
-                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"/>
-                </StackPanel>
-              </Flyout>
-            </Button.Flyout>
-          </Button>
-
-          <Button Content="Öffnen…" Classes="primary" Command="{Binding OpenDataFileCommand}"/>
-        </StackPanel>
-      </Grid>
-    </Border>
-
-    <!-- ================================= Hinweise (D-3) ================= -->
-    <!-- Laesst sich aus dem Profil keine Engine aufbauen, bleibt die
-         Feldliste leer, und der bestehende Hinweisbereich im Regelbereich
-         (unten, an HasSelectedField gebunden) waere dann nie zu sehen, weil
-         es ohne Felder auch kein gewaehltes Feld gibt. Eigene Karte
-         oberhalb der Feldliste, unabhaengig von einer Feldauswahl. -->
-    <Border Grid.Row="2" Classes="card" IsVisible="{Binding HasBlockingIssues}">
-      <StackPanel Spacing="4">
-        <TextBlock Text="Hinweise zur Konfiguration" Classes="card-title" Margin="0"/>
-        <ItemsControl ItemsSource="{Binding Issues}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
-                <TextBlock Grid.Column="0" Text="{Binding Path}"
-                           Classes="mono small muted" VerticalAlignment="Top"/>
-                <TextBlock Grid.Column="1" Text="{Binding Message}"
-                           Classes="small" TextWrapping="Wrap"/>
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </StackPanel>
-    </Border>
-
-    <!-- ====================================== Felder und Regel ========= -->
-    <Grid Grid.Row="3" ColumnDefinitions="320,12,*">
-
-      <!-- Feldliste -->
-      <Border Grid.Column="0" Classes="card" Margin="0">
-        <Grid RowDefinitions="Auto,*">
-          <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-            <TextBlock Grid.Column="0" Text="Felder" Classes="card-title" VerticalAlignment="Center"/>
-
-            <!-- Wertbasierte Vorschlaege (Feature: Mustererkennung), aus den
-                 eingebauten Mustern und der Erweiterungsdatei. Nur
-                 sinnvoll, wenn ueberhaupt Felder da sind. -->
-            <Button Grid.Column="1" Content="Muster erkennen…" Classes="flat"
-                    Command="{Binding ShowPatternSuggestionsCommand}"
-                    ToolTip.Tip="Beispielwerte gegen bekannte Muster prüfen und passende Generatoren vorschlagen"/>
-          </Grid>
-
-          <TextBlock Grid.Row="1" Text="{Binding EmptyHint}" Classes="muted"
-                     IsVisible="{Binding ShowEmptyHint}"
-                     VerticalAlignment="Center" TextWrapping="Wrap"/>
-
-          <!-- Mehrfachauswahl mit Strg und Umschalt, Strg+A waehlt alles.
-               Grosse Tabellen haben oft ganze Gruppen gleichartiger Spalten;
-               die sollen sich in einem Zug entscheiden lassen. -->
-          <ListBox Grid.Row="1" x:Name="FieldList" ItemsSource="{Binding Fields}"
-                   IsVisible="{Binding !ShowEmptyHint}"
-                   SelectedItem="{Binding SelectedField}"
-                   SelectionMode="Multiple"
-                   SelectionChanged="OnFieldSelectionChanged"
-                   ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:FieldRuleViewModel">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                  <!-- Statuspunkt: gefuellt und in der Akzentfarbe heisst
-                       entschieden; ein offener Kreis in Warnfarbe heisst, dass
-                       ein Lauf an diesem Feld abbrechen wuerde. Zwei getrennte
-                       Elemente statt einer umgefaerbten Anzeige — so bleibt die
-                       Farbe an den Zustand gebunden. -->
-                  <TextBlock Grid.Column="0" Text="●" FontSize="13"
-                             VerticalAlignment="Center"
-                             Foreground="{DynamicResource BrushAccent}"
-                             IsVisible="{Binding IsDecided}"/>
-                  <TextBlock Grid.Column="0" Text="○" FontSize="13"
-                             VerticalAlignment="Center"
-                             Foreground="{DynamicResource BrushError}"
-                             IsVisible="{Binding !IsDecided}"/>
-
-                  <TextBlock Grid.Column="1" Text="{Binding FieldName}"
-                             TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                             VerticalAlignment="Center"/>
-
-                  <TextBlock Grid.Column="2" Text="{Binding Summary}"
-                             Classes="muted small" VerticalAlignment="Center"
-                             TextWrapping="NoWrap"/>
-                </Grid>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </Grid>
-      </Border>
-
-      <!-- Regel zum ausgewaehlten Feld -->
-      <Border Grid.Column="2" Classes="card" Margin="0">
-        <Grid RowDefinitions="Auto,*">
-          <TextBlock Grid.Row="0" Text="{Binding SelectedFieldTitle}" Classes="card-title"/>
-
-          <TextBlock Grid.Row="1" Classes="muted" VerticalAlignment="Center"
-                     IsVisible="{Binding !HasSelectedField}"
-                     Text="Links ein Feld wählen, um seine Behandlung festzulegen."/>
-
-          <ScrollViewer Grid.Row="1" IsVisible="{Binding HasSelectedField}">
-            <StackPanel Spacing="12">
-
-              <!-- Bei Mehrfachauswahl gilt jede Einstellung fuer alle
-                   gewaehlten Felder; ohne diesen Satz waere nicht zu sehen,
-                   wie weit eine Aenderung reicht. -->
-              <Border Classes="card card-raised" Padding="10"
-                      IsVisible="{Binding IsMultiSelection}">
-                <TextBlock Text="{Binding MultiSelectionHint}" Classes="accent small"
-                           TextWrapping="Wrap"/>
-              </Border>
-
-              <!-- Feldinhalt vor der Aktionswahl (Befund N-2): erst sehen, was
-                   im Feld steht, dann entscheiden, welcher Generator noetig
-                   ist, nicht umgekehrt. Nur bei einem einzelnen gewaehlten
-                   Feld: ein Beispielwert aus einem von zwoelf Feldern liesse
-                   offen, wozu er gehoert.
-                   Die Karte haengt an HasSampleValues, nicht an HasPreview:
-                   ein Feld, das noch auf "error" steht oder dessen Generator
-                   keine Vorschau liefert, braucht die Anzeige des Inhalts am
-                   dringendsten, genau dort ist die Entscheidung ja noch
-                   offen. Pfeil und Pseudonym bleiben an HasPreview gebunden
-                   und bleiben einfach aus, wenn es (noch) keine Vorschau gibt. -->
-              <StackPanel IsVisible="{Binding IsSingleSelection}">
-              <Border Classes="card card-raised" Padding="10"
-                      IsVisible="{Binding SelectedField.HasSampleValues}">
-                <StackPanel Spacing="6">
-                  <TextBlock Text="{Binding SelectedField.SampleCardTitle}" Classes="card-title" Margin="0"/>
-
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <!-- Bis zu drei Werte aus der Datei; der erste ist
-                         zugleich der, an dem sich rechts die Vorschau zeigt. -->
-                    <ItemsControl ItemsSource="{Binding SelectedField.SampleValues}">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                          <TextBlock Text="{Binding}" Classes="mono muted"
-                                     TextTrimming="CharacterEllipsis"/>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <TextBlock Text="→" Classes="accent"
-                               IsVisible="{Binding SelectedField.HasPreview}"/>
-                    <TextBlock Text="{Binding SelectedField.Preview}"
-                               Classes="mono accent" TextTrimming="CharacterEllipsis"
-                               IsVisible="{Binding SelectedField.HasPreview}"/>
-                  </StackPanel>
-
-                  <!-- Ohne bestehende Tabelle entsteht das Salt fluechtig; der
-                       spaetere echte Lauf liefert dann andere Werte. -->
-                  <TextBlock Classes="muted small"
-                             IsVisible="{Binding SelectedField.PreviewIsExample}"
-                             Text="Nur ein Beispiel — es gibt noch keine Ersetzungstabelle. Der erste echte Lauf legt sie an und bestimmt die endgültigen Werte."/>
-                </StackPanel>
-              </Border>
-              </StackPanel>
-
-              <Grid ColumnDefinitions="90,*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="8" ColumnSpacing="8">
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="Aktion"
-                           Classes="muted" VerticalAlignment="Center"/>
-                <ComboBox Grid.Row="0" Grid.Column="1" HorizontalAlignment="Stretch"
-                          ItemsSource="{Binding Actions}"
-                          SelectedItem="{Binding SelectedAction}">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:ActionOption">
-                      <TextBlock Text="{Binding Label}"/>
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
-
-                <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small"
-                           Text="{Binding SelectedAction.Hint}"
-                           TextWrapping="Wrap"/>
-
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Generator"
-                           Classes="muted" VerticalAlignment="Center"
-                           IsVisible="{Binding NeedsGenerator}"/>
-                <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
-                          ItemsSource="{Binding Generators}"
-                          SelectedItem="{Binding SelectedGenerator}"
-                          IsVisible="{Binding NeedsGenerator}">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:GeneratorOption">
-                      <!-- Der Name steht so in der Konfigurationsdatei; die
-                           Erklaerung daneben sagt, was dabei herauskommt. -->
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{Binding Name}" MinWidth="96"/>
-                        <TextBlock Text="{Binding Description}" Classes="muted"/>
-                      </StackPanel>
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
-
-                <!-- Nur sichtbar, wenn der gewaehlte Generator ueberhaupt
-                     Optionen kennt (siehe FieldRuleViewModel.HasOptions);
-                     die meisten (personName, iban, ...) haben keine. -->
-                <Button Grid.Row="2" Grid.Column="2" Content="Optionen…" Classes="flat"
-                        Command="{Binding ShowGeneratorOptionsCommand}"
-                        IsVisible="{Binding ShowGeneratorOptionsButton}"/>
-              </Grid>
-
-              <!-- Kennzeichnung (Feature F-3, Teil 2): nur bei Einzelauswahl
-                   und nur, wenn der gewaehlte Generator auf "token" beruht,
-                   denn jeder andere Generator liefert das Format seines
-                   Wertes; ein Praefix wuerde das zerstoeren (siehe
-                   ProfileValidator). Bleibt zusaetzlich zum Optionsdialog
-                   hier inline stehen, denn es ist die mit Abstand
-                   haeufigste Option. -->
-              <StackPanel IsVisible="{Binding IsSingleSelection}">
-                <StackPanel Spacing="4" IsVisible="{Binding SelectedField.ShowPrefix}">
-                  <TextBlock Text="Kennzeichnung" Classes="muted" VerticalAlignment="Center"/>
-                  <TextBox Text="{Binding SelectedField.Prefix}" PlaceholderText="z. B. Artikelkategorie~"/>
-                  <TextBlock Classes="muted small" TextWrapping="Wrap"
-                             Text="Wird jedem erzeugten Pseudonym vorangestellt, etwa aus TOK_A1B2C3D4 wird Artikelkategorie~TOK_A1B2C3D4. Gilt für alle Felder, die denselben Namensraum verwenden."/>
-                  <TextBlock Classes="accent small" TextWrapping="Wrap"
-                             IsVisible="{Binding SelectedField.NamespaceIsShared}"
-                             Text="{Binding SelectedField.NamespaceSharedWarning}"/>
-                </StackPanel>
-              </StackPanel>
-
-              <!-- Befunde der Profilpruefung -->
-              <StackPanel Spacing="4" IsVisible="{Binding HasIssues}">
-                <TextBlock Text="Hinweise zur Konfiguration" Classes="card-title" Margin="0"/>
-                <ItemsControl ItemsSource="{Binding Issues}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                      <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
-                        <TextBlock Grid.Column="0" Text="{Binding Path}"
-                                   Classes="mono small muted" VerticalAlignment="Top"/>
-                        <TextBlock Grid.Column="1" Text="{Binding Message}"
-                                   Classes="small" TextWrapping="Wrap"/>
-                      </Grid>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </StackPanel>
-
-            </StackPanel>
-          </ScrollViewer>
-        </Grid>
-      </Border>
+    <!-- ================================================= Inhalt ======== -->
+    <!-- Genau eine der drei Ansichten ist sichtbar. Alle drei binden auf ein
+         Ansichtsmodell, das vom Hauptansichtsmodell kommt (Dateiansicht
+         direkt darauf, unveraendert wie vor dem Umbau; Start- und Textansicht
+         ueber eigens dafuer erzeugte Instanzen). -->
+    <Grid Grid.Row="1">
+      <!-- IsVisible steht jeweils auf einem eigenen Panel statt direkt auf
+           der Ansicht: DataContext auf demselben Element umgeschaltet haette
+           auch IsVisible gegen das falsche Ansichtsmodell aufgeloest — die
+           Bindungskontexte eines Elements haengen alle an seinem eigenen
+           DataContext, nicht nur die der Kinder. -->
+      <Panel IsVisible="{Binding IsStartView}">
+        <views:StartView DataContext="{Binding Start}"/>
+      </Panel>
+      <views:FilesView IsVisible="{Binding IsFilesView}"/>
+      <Panel IsVisible="{Binding IsTextView}">
+        <views:TextView DataContext="{Binding Text}"/>
+      </Panel>
     </Grid>
-
-    <!-- ================================================ Ergebnis ======= -->
-    <Border Grid.Row="4" Classes="card" Margin="0,12,0,0"
-            IsVisible="{Binding HasResult}">
-      <StackPanel Spacing="8">
-        <Grid ColumnDefinitions="Auto,*">
-          <TextBlock Grid.Column="0" Text="{Binding LastResult.Headline}"
-                     FontWeight="SemiBold"/>
-          <TextBlock Grid.Column="1" Text="{Binding LastResult.Summary}"
-                     Classes="muted small" HorizontalAlignment="Right"
-                     VerticalAlignment="Center"/>
-        </Grid>
-
-        <ItemsControl ItemsSource="{Binding LastResult.RuleHits}"
-                      IsVisible="{Binding LastResult.HasRuleHits}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <WrapPanel/>
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="vm:NamedCount">
-              <Border Classes="card card-raised" Padding="8,3" Margin="0,0,6,6">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <TextBlock Text="{Binding Name}" Classes="small"/>
-                  <TextBlock Text="{Binding Count}" Classes="small accent"/>
-                </StackPanel>
-              </Border>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!-- Befunde der Pruefung -->
-        <StackPanel Spacing="4" IsVisible="{Binding LastResult.HasFindings}">
-          <TextBlock Text="Verdachtsfälle" Classes="error" FontWeight="SemiBold"/>
-          <ScrollViewer MaxHeight="140">
-            <ItemsControl ItemsSource="{Binding LastResult.Findings}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:FindingItem">
-                  <Grid ColumnDefinitions="200,120,*" Margin="0,1">
-                    <TextBlock Grid.Column="0" Text="{Binding Location}" Classes="mono small"/>
-                    <TextBlock Grid.Column="1" Text="{Binding Rule}" Classes="small muted"/>
-                    <TextBlock Grid.Column="2" Text="{Binding Kind}" Classes="small"/>
-                  </Grid>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
-          <TextBlock Text="{Binding LastResult.FindingsNote}" Classes="muted small"
-                     IsVisible="{Binding LastResult.HasFindingsNote}"/>
-        </StackPanel>
-
-        <ItemsControl ItemsSource="{Binding LastResult.Warnings}"
-                      IsVisible="{Binding LastResult.HasWarnings}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <TextBlock Text="{Binding}" Classes="warning small" Margin="0,1"/>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </StackPanel>
-    </Border>
-
-    <!-- ============================================ Aktionsleiste ====== -->
-    <Grid Grid.Row="5" ColumnDefinitions="Auto,*,Auto" Margin="0,12,0,0">
-
-      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-        <!-- Die Beschriftungen nennen das Ergebnis, nicht die Taetigkeit: aus
-             kunden.csv wird kunden.pseudo.csv. "Ersetzen" war doppeldeutig, denn
-             das Wort bezeichnet im Regelbereich daneben die Behandlung eines
-             einzelnen Feldes und legt ausserdem nahe, die Eingabedatei werde
-             ueberschrieben. Die Auslassungspunkte, weil beide erst einen
-             Speichern-Dialog oeffnen. -->
-        <Button Content="Pseudodatei erzeugen…" Classes="primary"
-                Command="{Binding ObfuscateCommand}"/>
-        <Button Content="Klartextdatei erzeugen…" Command="{Binding DeobfuscateCommand}"/>
-        <Button Content="Prüfen" Command="{Binding ScanCommand}"/>
-
-        <!-- Sammellaeufe: alle dem Profil bekannten, noch vorhandenen Dateien
-             auf einmal verarbeiten, mit genau einer Rueckfrage statt einer je
-             Datei. Als Flyout statt eigener Schaltflaechen, damit die Leiste
-             bei schmalem Fenster nicht ueberlaeuft. -->
-        <Button Content="Alle ▾">
-          <Button.Flyout>
-            <MenuFlyout>
-              <MenuItem Header="Alle Pseudodateien erzeugen…" Command="{Binding ObfuscateAllCommand}"
-                        ToolTip.Tip="Schreibt für jede bekannte Datendatei eine Pseudodatei neben die Eingabedatei."/>
-              <MenuItem Header="Alle Klartextdateien erzeugen…" Command="{Binding DeobfuscateAllCommand}"
-                        ToolTip.Tip="Schreibt für jede bekannte Datendatei eine Klartextdatei neben die Eingabedatei."/>
-            </MenuFlyout>
-          </Button.Flyout>
-        </Button>
-      </StackPanel>
-
-      <!-- Der Schritt vor der Weitergabe soll nicht untergehen. Der Hinweis
-           steht in der dehnbaren Spalte, nicht neben den Schaltflaechen: dort
-           gibt er bei schmalem Fenster nach, statt in die Spalte rechts
-           hineinzulaufen. Er teilt sich die Spalte mit der Fortschrittsanzeige
-           und weicht ihr waehrend eines Laufs (ShowScanHint). -->
-      <TextBlock Grid.Column="1" Text="↖ vor der Weitergabe prüfen"
-                 Classes="warning small" VerticalAlignment="Center"
-                 Margin="8,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                 IsVisible="{Binding ShowScanHint}"/>
-
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" Margin="16,0"
-                  VerticalAlignment="Center" IsVisible="{Binding IsBusy}">
-        <ProgressBar IsIndeterminate="True" Width="160" VerticalAlignment="Center"/>
-        <TextBlock Text="{Binding ProgressText}" Classes="muted small"
-                   VerticalAlignment="Center" MinWidth="120"/>
-        <Button Content="Abbrechen" Classes="flat" Command="{Binding CancelCommand}"/>
-      </StackPanel>
-
-      <TextBlock Grid.Column="2" Text="{Binding UndecidedText}"
-                 VerticalAlignment="Center" Classes="small"
-                 IsVisible="{Binding HasDataFile}"/>
-    </Grid>
-
-    <!-- Statuszeile ganz unten, ueber die volle Breite -->
-    <TextBlock Grid.Row="6" Text="{Binding StatusText}" Classes="muted small"
-               Margin="0,10,0,0" TextWrapping="Wrap" MaxLines="3"/>
 
   </Grid>
 </Window>

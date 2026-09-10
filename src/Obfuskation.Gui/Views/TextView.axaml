@@ -1,0 +1,125 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Obfuskation.Gui.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="640"
+             x:Class="Obfuskation.Gui.Views.TextView"
+             x:DataType="vm:TextViewModel">
+
+  <!--
+      Kein Feld, kein Generator, keine Regex ist hier sichtbar — die Regeln
+      kommen aus dem Profil im Hintergrund (siehe MainViewModel.EnsureTextProfile).
+      Zwischenablage, Dateiauswahl und Drag&Drop leben ausschliesslich hier im
+      Codebehind: das Ansichtsmodell kennt nur InputText als schlichten Wert
+      und bleibt damit ohne laufende Avalonia-Umgebung pruefbar.
+  -->
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Grid.Styles>
+      <Style Selector="Border.card">
+        <Setter Property="Margin" Value="0,0,0,12"/>
+      </Style>
+    </Grid.Styles>
+
+    <!-- ==================================== Richtungsumschalter ========= -->
+    <Border Grid.Row="0" Classes="card">
+      <StackPanel Spacing="8">
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <TextBlock Text="Richtung" Classes="muted" VerticalAlignment="Center"/>
+          <RadioButton GroupName="textRichtung" Content="Text säubern"
+                       IsChecked="{Binding IsForward}"/>
+          <RadioButton GroupName="textRichtung" Content="Antwort zurückübersetzen"
+                       IsChecked="{Binding IsReverse}"/>
+        </StackPanel>
+
+        <!-- Steht die Verlaesslichkeit des Gezeigten in Frage, gehoert das
+             nach oben und nicht in die Fundzeile: von hier aus wandert der
+             Text in eine fremde Hand. -->
+        <TextBlock Text="{Binding StoreWarning}" Classes="warning small"
+                   IsVisible="{Binding HasStoreWarning}" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
+
+    <!-- ========================================== Text | Ergebnis ======= -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,12,*">
+
+      <Border Grid.Column="0" Classes="card" Margin="0">
+        <Grid RowDefinitions="Auto,*">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Grid.Column="0" Text="Text" Classes="card-title" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="Einfügen" Classes="flat" Click="OnPaste"
+                    ToolTip.Tip="Text aus der Zwischenablage einfügen"/>
+            <Button Grid.Column="2" Content="Datei…" Classes="flat" Click="OnOpenFile"
+                    ToolTip.Tip="Textdatei öffnen"/>
+          </Grid>
+
+          <!-- AllowDrop traegt das Ziel fuer OnDrop im Codebehind; eine
+               gezogene Datei ersetzt den Text wie "Einfügen". -->
+          <TextBox Grid.Row="1" x:Name="InputBox" Text="{Binding InputText}"
+                   AcceptsReturn="True" TextWrapping="Wrap"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   DragDrop.AllowDrop="True"
+                   PlaceholderText="Text einfügen, tippen oder eine Datei hierher ziehen …"/>
+        </Grid>
+      </Border>
+
+      <Border Grid.Column="2" Classes="card" Margin="0">
+        <Grid RowDefinitions="Auto,*">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+            <TextBlock Grid.Column="0" Text="Ergebnis" Classes="card-title" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="Kopieren" Classes="primary" Click="OnCopyResult"
+                    ToolTip.Tip="Echten Lauf auslösen und das Ergebnis in die Zwischenablage legen"/>
+            <Button Grid.Column="2" Content="Speichern…" Classes="flat" Click="OnSaveResult"/>
+          </Grid>
+
+          <TextBox Grid.Row="1" Text="{Binding ResultText, Mode=OneWay}" Classes="mono"
+                   IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ==================================================== Funde ======= -->
+    <!-- Nur in Vorwaertsrichtung: die Rueckuebersetzung laeuft ueber die
+         Ersetzungstabelle, nicht ueber Textregeln, und kennt darum keine
+         einzeln abwaehlbaren Fundstellen (siehe TextViewModel.RefreshReverse). -->
+    <Border Grid.Row="2" Classes="card" Margin="0,0,0,0" IsVisible="{Binding IsForward}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding MatchSummary}" Classes="muted small"/>
+
+        <ScrollViewer MaxHeight="160" IsVisible="{Binding HasMatches}">
+          <ItemsControl ItemsSource="{Binding Matches}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:TextMatchViewModel">
+                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" ColumnSpacing="8" Margin="0,2">
+                  <CheckBox Grid.Column="0" IsChecked="{Binding IsIncluded}"
+                            IsEnabled="{Binding CanToggle}"
+                            ToolTip.Tip="Diesen Fund für diesen Durchgang abschalten"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Original}" Classes="mono small"
+                             TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Column="2" Text="→" Classes="accent small"/>
+                  <TextBlock Grid.Column="3" Text="{Binding Replacement}" Classes="mono small accent"
+                             TextTrimming="CharacterEllipsis"/>
+                  <Button Grid.Column="4" Content="immer…" Classes="flat"
+                          Command="{Binding AlwaysReplaceCommand}"
+                          ToolTip.Tip="Aus diesem Fund eine dauerhafte Ersetzungsregel anlegen"/>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Haupteinstieg: wirkt auf die im Text markierte Textstelle, die die
+             Codebehind-Datei aus dem TextBox liest (siehe OnAlwaysReplace);
+             dieses Ansichtsmodell kennt keine Markierung, nur Zeichenketten. -->
+        <Button Content="Auswahl immer ersetzen…" Classes="flat" Click="OnAlwaysReplace"
+                ToolTip.Tip="Aus der markierten Textstelle eine Regel anlegen, die auch künftig automatisch greift — ohne regulären Ausdruck"/>
+      </StackPanel>
+    </Border>
+
+    <Border Grid.Row="2" Classes="card" Margin="0" IsVisible="{Binding IsReverse}">
+      <TextBlock Text="{Binding MatchSummary}" Classes="muted"/>
+    </Border>
+
+  </Grid>
+</UserControl>

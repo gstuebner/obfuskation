@@ -8,6 +8,8 @@ The primary value lies in the return path: the AI's response — generated code,
 
 There are two interfaces to the same core: the command-line tool `obfuskation` for scripts and automation, and the graphical interface `obfuskation-gui` for everyday work. Both share the same underlying library and substitution table — whatever one replaces, the other can restore.
 
+The GUI opens on a start page with three entry points: clean up a single piece of text (paste, get real values swapped for pseudonyms, copy the result — no profile or table required up front), work with CSV/JSON files, or translate an AI's reply back. Recurring in-house terms — a hostname pattern, a customer ID — can be turned into a lasting rule from a highlighted word, in plain language, without writing a regular expression.
+
 ## Documentation
 
 - [User documentation](docs/anwenderdokumentation.md) (German) — for everyone
@@ -80,7 +82,11 @@ obfuskation-gui customers.csv          # open file immediately
 obfuskation-gui --config profile.json customers.csv
 ```
 
-When started without arguments, it looks for an `obfuskation-projekt.json` in the current working directory, falling back to the most recently used profile.
+When started without arguments and nothing is found — no profile given on the command line, none discovered in the working directory, none used before — the window opens on a **start page** with three cards: *clean up text*, *pseudonymize files*, and *translate a reply back*. A profile or file given on the command line, or one found automatically, skips the start page and opens the file view directly, as before.
+
+**Text view.** Paste, type, open a file, or drop one onto the window; a short debounce later the cleaned-up result appears on the right alongside a match list ("Found: 3× email · 1× iban"), each match individually deselectable via checkbox. Nothing is written to the substitution table until **Copy** is clicked — until then everything shown is a live, binding preview of the actual result, because the view creates the table on first entry instead of leaving it to spring into existence on the first real run. A direction switch toggles between cleaning up and translating a reply back; a profile loaded elsewhere carries over, so both views share the same table.
+
+**"Always Replace…" — house-specific terms without a regex.** Highlight a word in the text view (or pick it from the match list) and choose *Always Replace…*, or use the equivalent button next to *Auto-detect Fields…* in the file view. The dialog asks three things in plain language: *what* (prefilled from the selection), *how far* (the literal word, or — if it contains digits — "everything of this shape", e.g. `FW123456` becomes "„FW“ + 6 digits" instead of `\bFW\d{6}\b`, with a live match count against the current text), and *where* (this project's profile, or the extension file for every project — the dialog names the target path and warns before it overwrites hand-written comments there with a backup). *Edit patterns manually…* still reaches the full rule editor with its test field.
 
 **Layout:** At the top, the opened file with detected format, character encoding, and delimiter, next to it a "Recent ▾" button, shown once the profile already knows other files, to switch between them without the Open dialog. On the left, the fields, each with a status indicator — solid turquoise means *decided*, a red circle means *pending*, and as long as even one is pending, processing will abort. On the right, for a single selected field, up to three sample values from the file first — visible even while the handling is still pending — then the handling of the field, plus a live preview using an actual value (»Max Mustermann → Paul Gerber«) once it's being replaced. At the bottom, the three actions.
 
@@ -88,10 +94,12 @@ Wide tables can be handled in bulk: select several fields at once — Ctrl-click
 
 Accessible via **More**:
 
-- **Text Rules** — with an interactive test input. Test patterns against real sample text before running them on actual data; overbroad patterns become apparent immediately.
 - **Substitution Table** — path, record counts per namespace, and file permissions. Displays **no values**, identical to `mapping list`.
-- **Quick Help** (»Kurzhilfe…«) — six short cards covering what the tool is for, what a profile is and why it matters, and the path through the program, aimed at someone opening the interface for the first time.
+- **House Patterns…** — the extension file's location and, if one exists there, the generators, text rules, and column patterns it contributes to every profile; previously only visible via `obfuskation extensions path` on the command line.
+- **Quick Help** (»Kurzhilfe…«) — short cards covering what the tool is for, what a profile is and why it matters, the path through the program, and the single-text mode, aimed at someone opening the interface for the first time.
 - **About** — the five notices above and the paths in use.
+
+The former **Text Rules** entry is gone from this menu; the same editor (interactive test input included) is still reachable via *Always Replace… → Edit patterns manually…* above.
 
 **Light and Dark:** The toggle in the top right cycles through three states — system default (follows operating system setting), dark, light. The preference is remembered in `~/.config/obfuskation/gui.json`. That file only stores convenience settings: selected view, recently opened profiles, window dimensions — **no file contents and no processed data**.
 
@@ -339,7 +347,8 @@ value `scanText` for a free-text field that should be scanned with text
 rules instead of replaced outright. The first matching rule wins; order in
 the file decides.
 
-`init` (and "Muster erkennen…" in the GUI) offers a suggestion for every
+`init` (and "Felder automatisch erkennen…", formerly "Muster erkennen…", in
+the GUI) offers a suggestion for every
 field in three stages, in this order:
 
 1. the sample values fully match a known format (`ValueSuggester` — IBAN,

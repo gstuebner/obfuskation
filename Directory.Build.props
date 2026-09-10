@@ -109,8 +109,34 @@
          am Inhalt). Fuenftens der Nachzug der Dokumentation: die fuenf
          Generatoren aus 1.5.0 standen in keiner Doku, und die
          Entwicklerdokumentation behauptete noch, 'redact' zweckentfremde
-         'domain' als Platzhalter. -->
-    <Version>1.6.0</Version>
+         'domain' als Platzhalter.
+         1.7.0: Drei Zugaenge statt einem leeren Startfenster. Neu die
+         Startseite (drei Karten: Text saeubern, Dateien pseudonymisieren,
+         Antwort zurueckholen) und die Textansicht; Zwischenablage
+         einfuegen, Fundstellen mit Haekchen einzeln abwaehlbar, "Kopieren"
+         legt erst dann Eintraege in der Ersetzungstabelle an. Ohne
+         geladenes Profil legt die Textansicht ein Vorgabeprofil 'text' an;
+         MappingStore.EnsureCreated (neu, ObfuscationEngine.EnsureMappingStore
+         als duenne Huelle darum) sorgt dafuer, dass ein Probelauf exakt
+         dieselben Werte liefert wie der echte. Zweitens "Immer ersetzen…":
+         aus einem markierten Begriff (Textansicht) oder einem Feld-
+         Beispielwert (Dateiansicht, Knopf neben "Felder automatisch
+         erkennen…", vormals "Muster erkennen…") in drei Fragen ohne
+         regulaeren Ausdruck eine Regel ableiten; PatternFromSample (neu)
+         bildet aus 'FW123456' wahlweise "genau dieses Wort" oder "FW + 6
+         Ziffern"; gilt sie "immer, in allen Projekten", landet sie ueber
+         ExtensionLibrary.Save (neu, mit Sicherungskopie bei einer von Hand
+         kommentierten Datei) in der Erweiterungsdatei statt im Profil. Der
+         Menueintrag "Textregeln…" entfaellt, die Fachansicht bleibt aus
+         diesem Dialog ueber "Muster von Hand bearbeiten…" erreichbar; neu
+         dafuer "Hauseigene Muster…", das Fundort und geerbte Regeln der
+         Erweiterungsdatei zeigt, bisher nur ueber 'obfuskation extensions
+         path' zu erfahren. Drittens zwei kleine Korrekturen: eine geoeffnete
+         Fliesstextdatei zeigte in der Feldliste faelschlich "Keine Datei
+         geöffnet" statt eines Hinweises auf "Immer ersetzen…" samt Knopf "In
+         der Textansicht öffnen"; die Kurzhilfe nennt jetzt auch den
+         Textmodus. -->
+    <Version>1.7.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

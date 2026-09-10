@@ -1,0 +1,119 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="560"
+        x:Class="Obfuskation.Gui.Views.AlwaysReplaceWindow"
+        x:DataType="vm:AlwaysReplaceViewModel"
+        Title="Immer ersetzen"
+        Width="620" MinWidth="540" MaxHeight="700" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <!--
+      Drei Fragen in Anwendersprache (was, wie weit, wo), ohne dass an
+      irgendeiner Stelle ein regulaerer Ausdruck zu sehen ist. Die
+      Vorschaustreifen-Karte leistet dieselbe Absicherung wie das
+      Erprobungsfeld der Textregeln, nur ohne dass jemand Regex lesen muss.
+  -->
+  <Grid RowDefinitions="Auto,Auto" Margin="16">
+    <Border Grid.Row="0" Classes="card">
+      <StackPanel Spacing="14">
+
+        <!-- Was? -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Was?" Classes="muted"/>
+          <TextBox Text="{Binding Sample}" Classes="mono"
+                   PlaceholderText="markierter Begriff, z. B. FW123456"/>
+        </StackPanel>
+
+        <StackPanel Spacing="8" IsVisible="{Binding HasSample}">
+
+          <!-- Wie weit? -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Wie weit?" Classes="muted"/>
+            <RadioButton GroupName="reichweite" IsChecked="{Binding UseLiteral}">
+              <StackPanel Spacing="1">
+                <TextBlock Text="Nur genau dieses eine Wort"/>
+                <TextBlock Text="{Binding LiteralDescription}" Classes="muted small"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton GroupName="reichweite" IsChecked="{Binding UseShape}"
+                         IsVisible="{Binding CanUseShape}">
+              <StackPanel Spacing="1">
+                <TextBlock Text="Alles dieser Form"/>
+                <TextBlock Text="{Binding ShapeDescription}" Classes="muted small"/>
+              </StackPanel>
+            </RadioButton>
+          </StackPanel>
+
+          <!-- Vorschaustreifen -->
+          <Border Classes="card-raised" Padding="8">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding MatchSummary}" Classes="accent small"/>
+              <ScrollViewer MaxHeight="90" IsVisible="{Binding HasMatches}">
+                <ItemsControl ItemsSource="{Binding Matches}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:AlwaysReplaceMatch">
+                      <Grid ColumnDefinitions="60,*" Margin="0,1">
+                        <TextBlock Grid.Column="0" Classes="small muted"
+                                   Text="{Binding Line, StringFormat='Zeile {0}'}"/>
+                        <TextBlock Grid.Column="1" Classes="small mono" Text="{Binding Value}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </StackPanel>
+          </Border>
+
+          <!-- Ersetzen durch -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Ersetzen durch" Classes="muted"/>
+            <ComboBox HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding Generators}"
+                      SelectedItem="{Binding SelectedGenerator}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:GeneratorOption">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding Name}" MinWidth="96"/>
+                    <TextBlock Text="{Binding Description}" Classes="muted"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       IsVisible="{Binding HasPrefixHint}"
+                       Text="{Binding PrefixHint, StringFormat='Erhält die Kennzeichnung {0}, damit das Pseudonym erkennbar bleibt.'}"/>
+          </StackPanel>
+
+          <!-- Wo gilt das? -->
+          <StackPanel Spacing="4">
+            <TextBlock Text="Wo gilt das?" Classes="muted"/>
+            <RadioButton GroupName="ziel" Content="Nur in diesem Projekt" IsChecked="{Binding UseProfile}"/>
+            <RadioButton GroupName="ziel" IsChecked="{Binding UseExtension}">
+              <StackPanel Spacing="1">
+                <TextBlock Text="Immer, in allen Projekten"/>
+                <TextBlock Classes="muted small" TextWrapping="Wrap"
+                           Text="{Binding ExtensionPath, StringFormat='Wird geschrieben nach {0}.'}"/>
+              </StackPanel>
+            </RadioButton>
+            <TextBlock Classes="warning small" TextWrapping="Wrap"
+                       IsVisible="{Binding ExtensionHasComments}"
+                       Text="Diese Datei enthält von Hand gepflegte Kommentare — vor dem Schreiben entsteht eine Sicherungskopie (.bak)."/>
+          </StackPanel>
+
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
+                Spacing="8" Margin="0,12,0,0">
+      <Button Content="Muster von Hand bearbeiten…" Classes="flat" Command="{Binding EditManuallyCommand}"/>
+      <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
+      <Button Content="Übernehmen" Classes="primary" Command="{Binding ApplyCommand}"/>
+    </StackPanel>
+  </Grid>
+</Window>

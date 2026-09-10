@@ -168,6 +168,23 @@ public sealed class ObfuscationEngine
     /// </summary>
     public bool MappingStoreExists => File.Exists(ResolveMappingStorePath());
 
+    /// <summary>
+    /// Legt die Ersetzungstabelle an, falls es sie noch nicht gibt, und macht
+    /// damit jede folgende Vorschau verbindlich — siehe
+    /// <see cref="MappingStore.EnsureCreated"/>. Fuer die Textansicht der
+    /// Oberflaeche, die fortlaufend eine Vorschau zeigt, deren Werte der
+    /// Anwender anschliessend kopiert: was er sieht, muss das sein, was er
+    /// bekommt.
+    ///
+    /// Duenne Huelle, damit die Oberflaeche den Store nicht selbst oeffnen muss
+    /// und die Ablageregeln (Git-Sicherung, Rechte) an einer Stelle bleiben.
+    /// </summary>
+    public void EnsureMappingStore(bool allowUnsafeStore = false)
+    {
+        using var store = OpenStore(new RunOptions { AllowUnsafeStore = allowUnsafeStore }, readOnly: false);
+        store.EnsureCreated();
+    }
+
     /// <param name="progress">
     /// Empfaengt Zwischenstaende. Die Meldungen kommen aus dem Hintergrundfaden;
     /// wer sie anzeigt, muss selbst in seinen Faden zurueckwechseln — ein
@@ -311,12 +328,12 @@ public sealed class ObfuscationEngine
     }
 
     /// <summary>
-    /// Fuehrt die Textregeln der Erweiterungsdatei und des Profils zusammen:
-    /// eine Erweiterungsregel gilt, ausser eine gleichnamige Profilregel
-    /// ersetzt sie vollstaendig — sie faellt dann ganz weg, statt zusaetzlich
-    /// zu gelten. Prioritaeten bleiben unveraendert, die vorhandene
-    /// Ueberlappungsaufloesung in <see cref="Detection.TextRuleEngine"/>
-    /// braucht keine Anpassung.
+    /// Fuehrt die Textregeln der Erweiterungsdatei und des Profils zusammen —
+    /// die Vereinigung selbst steht bei <see cref="ExtensionLibrary.MergeTextRules"/>,
+    /// gemeinsam genutzt mit der Oberflaeche, damit dort nie etwas anderes
+    /// gefunden wird als das, was ein echter Lauf ersetzt. Prioritaeten
+    /// bleiben unveraendert, die vorhandene Ueberlappungsaufloesung in
+    /// <see cref="Detection.TextRuleEngine"/> braucht keine Anpassung.
     ///
     /// Ohne Erweiterungsregeln wird <paramref name="profile"/> unveraendert
     /// zurueckgegeben — der haeufige Fall bleibt damit ohne zusaetzliche Kopie.
@@ -326,12 +343,7 @@ public sealed class ObfuscationEngine
         if (extensions.TextRules.Count == 0)
             return profile;
 
-        var profileNames = new HashSet<string>(
-            profile.TextRules.Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
-
-        var merged = new List<TextRule>(extensions.TextRules.Count + profile.TextRules.Count);
-        merged.AddRange(extensions.TextRules.Where(rule => !profileNames.Contains(rule.Name)));
-        merged.AddRange(profile.TextRules);
+        var merged = extensions.MergeTextRules(profile.TextRules);
 
         // Nur die Textregeln aendern sich; alles andere bleibt dieselbe
         // Referenz wie im Original, damit z. B. CloneWithStrictDefaults und
@@ -345,7 +357,7 @@ public sealed class ObfuscationEngine
             Input = profile.Input,
             Defaults = profile.Defaults,
             Fields = profile.Fields,
-            TextRules = merged,
+            TextRules = merged.ToList(),
             Generators = profile.Generators,
         };
     }

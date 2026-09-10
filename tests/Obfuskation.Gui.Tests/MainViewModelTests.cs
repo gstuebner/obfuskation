@@ -152,6 +152,119 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Eine_Freitextdatei_zeigt_den_Freitexthinweis_statt_keine_Datei_geoeffnet()
+    {
+        // Teil D-1: Fields.Count == 0 allein unterscheidet nicht zwischen
+        // "keine Datei offen" und "Datei offen, aber Fliesstext" -- beide
+        // Faelle muessen unterschiedlichen Text und einen Weg in die
+        // Textansicht zeigen.
+        var profil = SchreibeProfil();
+        var txt = Path.Combine(_verzeichnis, "antwort.txt");
+        File.WriteAllText(txt, "Kontakt: max.mustermann@beispiel.de");
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, txt);
+
+        Assert.True(modell.HasDataFile);
+        Assert.True(modell.ShowEmptyHint);
+        Assert.True(modell.IsFreeTextFile);
+        Assert.Contains("Fließtext", modell.EmptyHint);
+        Assert.DoesNotContain("Keine Datei geöffnet", modell.EmptyHint);
+    }
+
+    [Fact]
+    public async Task In_der_Textansicht_oeffnen_uebernimmt_den_Inhalt_der_Freitextdatei()
+    {
+        var profil = SchreibeProfil();
+        var txt = Path.Combine(_verzeichnis, "antwort.txt");
+        File.WriteAllText(txt, "Kontakt: max.mustermann@beispiel.de");
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, txt);
+
+        Assert.True(modell.OpenInTextViewCommand.CanExecute(null));
+        modell.OpenInTextViewCommand.Execute(null);
+
+        Assert.Equal(AppView.Text, modell.CurrentView);
+        Assert.NotNull(modell.Text);
+        Assert.Equal("Kontakt: max.mustermann@beispiel.de", modell.Text!.InputText);
+    }
+
+    [Fact]
+    public async Task Immer_ersetzen_aus_der_Dateiansicht_legt_die_Regel_im_Profil_an()
+    {
+        // Teil C, zweiter Einstieg: der Knopf "Immer ersetzen…" neben "Felder
+        // automatisch erkennen…" nutzt den Beispielwert des gewaehlten Feldes
+        // als Vorbelegung.
+        var profil = SchreibeProfil();
+        var csv = SchreibeCsv();
+        var dialoge = new FakeDialogService { AlwaysReplaceConfirmed = true };
+
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, csv);
+
+        modell.SelectedField = modell.Fields.Single(f => f.FieldName == "Kundennummer");
+
+        await AusfuehrenUndWartenAsync(modell.ShowAlwaysReplaceCommand);
+
+        Assert.NotNull(dialoge.LastAlwaysReplaceViewModel);
+        Assert.Equal("4711", dialoge.LastAlwaysReplaceViewModel!.Sample);
+        Assert.True(dialoge.LastAlwaysReplaceViewModel.Confirmed);
+        Assert.Single(modell.Session!.Profile.TextRules);
+        Assert.True(modell.Session.HasUnsavedChanges);
+    }
+
+    [Fact]
+    public async Task Eine_Regel_fuer_alle_Projekte_wirkt_sofort()
+    {
+        // Der Hauptfall des Dialogs: ein hauseigenes Muster, das nicht im
+        // Projekt, sondern in der Erweiterungsdatei landet. Die Engine fuehrt
+        // Profil- und Erweiterungsregeln in ihrem Konstruktor zusammen -- wird
+        // die zwischengespeicherte nicht verworfen, zeigt die Fundstellenliste
+        // den Treffer zwar an (sie liest die Erweiterung unmittelbar), der
+        // Ergebnistext liesse den Wert aber im Klartext stehen.
+        var profil = SchreibeProfil();
+        var dialoge = new FakeDialogService { AlwaysReplaceConfirmed = true, AlwaysReplaceUseExtension = true };
+
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        modell.ShowTextCommand.Execute(null);
+        Assert.NotNull(modell.Text);
+
+        modell.Text!.InputText = "Zugriff über FW123456 gemeldet.";
+        modell.Text.RefreshPreview();
+        Assert.Contains("FW123456", modell.Text.ResultText, StringComparison.Ordinal);
+
+        try
+        {
+            // Der Einstieg aus der Textansicht laeuft nebenlaeufig los; das
+            // Doppel antwortet synchron, ein Durchlauf der Warteschlange
+            // genuegt also.
+            modell.Text.RequestAlwaysReplace("FW123456");
+            await Task.Yield();
+
+            Assert.True(dialoge.LastAlwaysReplaceViewModel!.Confirmed);
+
+            // Die Regel steht in der Erweiterungsdatei, nicht im Profil.
+            Assert.Empty(modell.Session!.Profile.TextRules);
+            Assert.Single(modell.Session.Extensions.TextRules);
+
+            modell.Text.RefreshPreview();
+            Assert.DoesNotContain("FW123456", modell.Text.ResultText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // Die Erweiterungsdatei liegt im umgeleiteten Konfigurationsordner
+            // (siehe TestUmgebung), gilt dort aber fuer die ganze Baugruppe --
+            // sie darf keinem folgenden Test in die Quere kommen.
+            var geschrieben = ExtensionLibrary.ResolveWritePath();
+            if (File.Exists(geschrieben))
+                File.Delete(geschrieben);
+        }
+    }
+
+    [Fact]
     public async Task Ohne_Profil_bleibt_die_Feldliste_leer()
     {
         var modell = Erzeugen();
@@ -160,6 +273,74 @@ public class MainViewModelTests : IDisposable
         Assert.False(modell.HasProfile);
         Assert.Empty(modell.Fields);
         Assert.True(modell.ShowEmptyHint);
+    }
+
+    [Fact]
+    public async Task Ohne_jedes_Profil_landet_der_Start_auf_der_Startseite()
+    {
+        // Der wirklich leere Fall (kein uebergebenes, kein gefundenes, kein
+        // zuletzt benutztes Profil) ist der einzige, der auf der Startseite
+        // landet -- siehe Teil A des Plans.
+        var modell = Erzeugen();
+        await modell.InitializeAsync(null, null);
+
+        Assert.Equal(AppView.Start, modell.CurrentView);
+        Assert.True(modell.IsStartView);
+        Assert.False(modell.IsFilesView);
+        Assert.False(modell.IsTextView);
+    }
+
+    [Fact]
+    public async Task Mit_uebergebenem_Profil_geht_es_direkt_in_die_Dateiansicht()
+    {
+        var profil = SchreibeProfil();
+        var modell = Erzeugen();
+        await modell.InitializeAsync(profil, null);
+
+        Assert.Equal(AppView.Files, modell.CurrentView);
+        Assert.True(modell.IsFilesView);
+        Assert.False(modell.IsStartView);
+    }
+
+    [Fact]
+    public async Task Ueber_Profile_geoeffnet_wechselt_die_Ansicht_zu_Dateien()
+    {
+        // Auch von der Startseite aus (kein Profil geladen) erreichbar: die
+        // Kopfzeile bietet "Profile…" in jeder Ansicht an.
+        var profil = SchreibeProfil();
+        var dialoge = new FakeDialogService
+        {
+            ProfilesResult = NeueZusammenfassung(profil, "test"),
+        };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(null, null);
+        Assert.Equal(AppView.Start, modell.CurrentView);
+
+        await modell.ShowProfilesAsync();
+
+        Assert.Equal(AppView.Files, modell.CurrentView);
+        Assert.True(modell.HasProfile);
+    }
+
+    [Fact]
+    public async Task Die_Karte_Dateien_pseudonymisieren_legt_ohne_Profil_ein_neues_an()
+    {
+        var csv = SchreibeCsv();
+        var dialoge = new FakeDialogService
+        {
+            DataFilesToOpen = new[] { csv },
+            NewProfileResult = new NewProfileResult(
+                "test", null, Path.Combine(_verzeichnis, ProfileStore.DefaultFileName), OpenExisting: false),
+        };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(null, null);
+        Assert.Equal(AppView.Start, modell.CurrentView);
+
+        await AusfuehrenUndWartenAsync(modell.Start.FilesCommand);
+
+        Assert.Equal(AppView.Files, modell.CurrentView);
+        Assert.True(modell.HasProfile);
+        Assert.True(modell.HasDataFile);
     }
 
     [Fact]

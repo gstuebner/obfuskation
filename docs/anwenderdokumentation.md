@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.6.0
+version: 1.7.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 09.09.2026
+date: 10.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.6.0 · Stand 9. September 2026
+Fassung 1.7.0 · Stand 10. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -23,7 +23,98 @@ Nachschlagewerk.
 Für Hintergründe zur Funktionsweise, zum Bauen aus dem Quelltext und für
 offene Befunde siehe `entwicklerdokumentation.md`.
 
-## 1. Wozu das Werkzeug da ist — und wozu nicht
+## 1. Nur ein Text
+
+Wer nur einen einzelnen Text säubern will — eine E-Mail, einen Absatz, die
+Antwort einer KI —, muss weder ein Profil noch eine Tabelle verstehen. Dieses
+Kapitel beschreibt den kürzesten Weg durch das Programm; wer mit CSV- oder
+JSON-Dateien arbeitet, findet den vertrauten, tabellenbezogenen Ablauf ab
+Kapitel 4.
+
+### Die Startseite
+
+`obfuskation-gui` ohne Profil und ohne Datei gestartet zeigt drei Karten:
+
+- **Text säubern** — führt in die Textansicht, Richtung „säubern“.
+- **Dateien pseudonymisieren** — führt in die Dateiansicht und stößt sofort
+  „Neu aus Datei…“ an (oder, ist bereits ein Profil geladen, „Öffnen…“).
+- **Antwort zurückholen** — dieselbe Textansicht, Richtung
+  „zurückübersetzen“.
+
+Darunter, sobald vorhanden, ein Verweis auf das zuletzt benutzte Profil und
+ein Verweis auf die Kurzhilfe. Ein Klick auf „Obfuskation“ oben links führt
+aus jeder Ansicht zurück hierher, ohne ein geladenes Profil zu verwerfen.
+
+Ist beim Start bereits ein Profil oder eine Datei über die Befehlszeile
+angegeben, oder findet sich eines im Arbeitsverzeichnis, öffnet sich
+stattdessen sofort die Dateiansicht wie gewohnt — die Startseite ist nur der
+Einstieg für den wirklich leeren Fall.
+
+### Die Textansicht
+
+Zwei Spalten, Text links, Ergebnis rechts:
+
+1. Text **einfügen** (aus der Zwischenablage), tippen, über **Datei…**
+   öffnen oder in das Fenster ziehen.
+2. Kurz nach der letzten Änderung erscheint rechts der gesäuberte Text,
+   darunter die Fundliste — „Gefunden: 3× email · 1× iban“ — mit jedem
+   einzelnen Fund und seinem Pseudonym. Ein Häkchen je Fund schaltet ihn für
+   diesen Durchgang ab; der Klartext bleibt dann an dieser Stelle stehen.
+3. **Kopieren** legt das angezeigte Ergebnis in die Zwischenablage. Erst
+   dieser Klick trägt neue Werte in die Ersetzungstabelle ein — bis dahin war
+   alles Vorschau.
+
+Die Vorschau ist dabei kein Näherungswert: beim Betreten der Textansicht legt
+sie die Ersetzungstabelle einmal an, falls noch keine besteht, und von da an
+liefert ein Probelauf exakt dieselben Pseudonyme wie der echte. Wer aus
+dieser Ansicht kopiert, kopiert genau das, was er gesehen hat.
+
+Der Richtungsumschalter oben („Text säubern“ / „Antwort zurückübersetzen“)
+tauscht `Obfuscate` gegen `Deobfuscate`; in der Rückrichtung gibt es keine
+Fundliste, weil die Rückübersetzung über die Ersetzungstabelle läuft, nicht
+über Muster.
+
+Ein Profil entsteht dabei im Hintergrund, ohne dass danach gefragt wird: ohne
+bereits geladenes Profil legt die Textansicht ein Vorgabeprofil namens `text`
+mit den eingebauten Textregeln (IBAN, E-Mail, BIC, Telefonnummer) an. Wer
+später von hier in die Dateiansicht wechselt, arbeitet im selben Profil
+weiter — dieselbe Ersetzungstabelle gilt für beides.
+
+### „Immer ersetzen…“ — eigene Begriffe ohne regulären Ausdruck
+
+Die eingebauten Textregeln erkennen allgemeine Muster. Für hauseigene
+Bezeichnungen — Hostnamen der Form `FW123456`, eine wiederkehrende
+Kundennummer, ein Produktname — braucht es eine eigene Regel. Bislang
+verlangte das einen regulären Ausdruck im Fenster „Textregeln…“; seit dieser
+Fassung übernimmt das ein Dialog, der drei Dinge in Alltagssprache fragt.
+
+Erreichbar ist er von zwei Stellen aus:
+
+- **Textansicht**: eine Stelle im Text markieren und **„Auswahl immer
+  ersetzen…“** wählen — auch direkt aus einem Eintrag der Fundliste heraus.
+- **Dateiansicht**: der Knopf **„Immer ersetzen…“** neben „Felder automatisch
+  erkennen…“, vorbelegt mit dem Beispielwert des gerade gewählten Feldes.
+
+Der Dialog fragt:
+
+1. **Was?** — vorbelegt mit der Auswahl, frei änderbar.
+2. **Wie weit?** — „nur genau dieses eine Wort“, oder, sofern der Wert
+   Ziffern enthält, „alles dieser Form“ (aus `FW123456` wird die Beschreibung
+   „FW“ + 6 Ziffern — in Worten, nicht als `\bFW\d{6}\b`). Ein
+   Vorschaustreifen zeigt sofort, wie oft das gewählte Muster im aktuellen
+   Text zuträfe, mit den Fundstellen.
+3. **Wo gilt das?** — „nur in diesem Projekt“ trägt die Regel in das offene
+   Profil ein, wie bisher über „Textregeln…“. „Immer, in allen Projekten“
+   schreibt sie stattdessen in die Erweiterungsdatei (Kapitel 11) — der
+   Dialog nennt den Zielpfad vorher im Klartext und weist darauf hin, wenn
+   dabei eine Sicherungskopie entsteht, weil die Datei von Hand gepflegte
+   Kommentare enthält.
+
+„Muster von Hand bearbeiten…“ führt bei Bedarf in die vollständige
+Fachansicht mit Erprobungsfeld — dieselbe, die früher unter „Mehr ▾ →
+Textregeln…“ lag und jetzt nur noch von hier aus erreichbar ist.
+
+## 2. Wozu das Werkzeug da ist — und wozu nicht
 
 Fünf Dinge vorab, ausführlicher in der `README.md`:
 
@@ -40,13 +131,13 @@ Fünf Dinge vorab, ausführlicher in der `README.md`:
    Telefonnummer lassen sich zuverlässig erkennen — Personennamen,
    Firmennamen und Adressen in Freitext praktisch nicht. Für Freitextfelder
    ist im Zweifel `redact` oder `drop` die richtige Wahl, nicht
-   `scanText` (siehe Abschnitt 6).
+   `scanText` (siehe Abschnitt 7).
 4. **`Prüfen` vor jeder Weitergabe ausführen.** Nicht optional.
 5. **Die Ausgabe erkennbar benennen** (`kunden.pseudo.csv`), damit Original
    und Pseudonymisat nicht verwechselt werden. Die Oberfläche schlägt diesen
    Namen beim Speichern von sich aus vor.
 
-## 2. Installation
+## 3. Installation
 
 Fertige Programme für Windows und Linux liegen unter den Releases des
 Projekts, je Plattform zwei Dateien ohne Installation: `obfuskation` (die
@@ -69,7 +160,7 @@ signiert ist — *Weitere Informationen* → *Trotzdem ausführen*.
 Um die Oberfläche unter Linux ins Anwendungsmenü (GNOME) aufzunehmen, siehe
 `packaging/README.md`. Dort steht die `.desktop`-Datei samt Symbol.
 
-## 3. Der erste Durchgang, bebildert
+## 4. Der erste Durchgang, bebildert
 
 Als durchgehendes Beispiel dient der Demo-Bestand aus `docs/beispiel/`:
 `stammdaten.csv` mit 120 Datensätzen, die Spalten Personennummer, Nachname,
@@ -79,7 +170,7 @@ Vorname, Straße, PLZ, Ort, EMail, Telefon, Geburtsdatum und Notiz.
 
 `obfuskation-gui` starten und über **Neu aus Datei…** `stammdaten.csv`
 wählen. Der Dateidialog erlaubt dabei eine **Mehrfachauswahl**: hängen
-mehrere Dateien über eine gemeinsame Spalte zusammen (Abschnitt 7), lassen
+mehrere Dateien über eine gemeinsame Spalte zusammen (Abschnitt 8), lassen
 sie sich auf einmal auswählen — das Regelgerüst entsteht dann aus den
 Feldern aller gewählten Dateien, der Namensvorschlag im folgenden Dialog
 kommt von der ersten. Für den ersten Durchgang reicht eine einzelne Datei.
@@ -88,7 +179,7 @@ Es folgt der Anlegen-Dialog: **Name** (vorbelegt aus dem Dateinamen,
 Namen live folgt, solange er nicht von Hand überschrieben wird. Für den
 ersten Durchgang reicht es, den Namen `demo` einzutragen und mit
 **Anlegen** zu bestätigen — Einzelheiten zu diesem Dialog stehen in
-Abschnitt 5. Die Oberfläche liest daraufhin die Spaltenköpfe und legt für
+Abschnitt 6. Die Oberfläche liest daraufhin die Spaltenköpfe und legt für
 jede eine Regel mit der Behandlung „offen“ an — noch ist nichts
 entschieden.
 
@@ -100,7 +191,7 @@ Zeichensatz und Trennzeichen wurden bereits erkannt.*
 
 Für jedes Feld links in der Liste rechts im Regelbereich eine Behandlung
 wählen: ersetzen, durchlassen, Freitext durchsuchen, schwärzen oder Feld
-entfernen (Einzelheiten in Abschnitt 6). Bei „ersetzen“ zeigt die Vorschau
+entfernen (Einzelheiten in Abschnitt 7). Bei „ersetzen“ zeigt die Vorschau
 sofort, wie ein echter Wert aus der Datei aussehen würde. Erst wenn alle
 Punkte türkis gefüllt sind, lässt sich die Pseudodatei erzeugen.
 
@@ -128,8 +219,8 @@ Bei der sauber pseudonymisierten Datei bleibt der Befund leer.
 ![„Keine Restbestände gefunden“ nach dem Prüfen der pseudonymisierten Datei.](bilder/gui-pruefen-sauber.png)
 *„Keine Restbestände gefunden“ nach dem Prüfen der pseudonymisierten Datei.*
 
-Fällt die Prüfung nicht sauber aus, siehe Abschnitt 6 zum Lehrbeispiel
-Freitext und Abschnitt 8 zu den Meldungen im Einzelnen.
+Fällt die Prüfung nicht sauber aus, siehe Abschnitt 7 zum Lehrbeispiel
+Freitext und Abschnitt 9 zu den Meldungen im Einzelnen.
 
 ### Schritt 5 — Weitergeben
 
@@ -152,19 +243,23 @@ wurde.*
 
 Dasselbe funktioniert mit einer Textdatei, die nur die Antwort der KI
 enthält — dann arbeitet `Klartextdatei erzeugen…` über den gesamten
-Fließtext, nicht spaltenweise. Das Verfahren dahinter zeigt Abschnitt 9 an
+Fließtext, nicht spaltenweise. Das Verfahren dahinter zeigt Abschnitt 10 an
 einem Kommandozeilenbeispiel mit echten Zahlen.
 
-## 4. Die Oberfläche im Einzelnen
+## 5. Die Oberfläche im Einzelnen
 
-**Kopfzeile.** Links Programmname und Profilname (oder „kein Profil“),
-rechts die Schaltflächen **Neu aus Datei…**, **Profile…**, **Speichern**,
-**Mehr** und der Themenumschalter. Direkt darunter die geöffnete Datei mit
-erkanntem Format, Zeichensatz und Trennzeichen.
+Dieses Kapitel beschreibt die **Dateiansicht** — erreichbar über die Karte
+„Dateien pseudonymisieren“ der Startseite (Kapitel 1) oder automatisch, wenn
+ein Profil oder eine Datei bereits beim Start angegeben ist. Die Kopfzeile
+mit Profilname, „Profile…“, „Mehr“ und dem Themenumschalter ist in allen drei
+Ansichten sichtbar; **Neu aus Datei…** und **Speichern** dagegen nur hier,
+weil sie sich auf eine geöffnete Datendatei beziehen, die es in der
+Text- oder Startansicht nicht gibt.
 
 ![Erststart ohne Profil: leere Feldliste mit Anleitung, alle drei Vorgänge abgeblendet.](bilder/gui-leer.png)
-*Erststart ohne Profil: leere Feldliste mit Anleitung, alle drei Vorgänge
-abgeblendet.*
+*Dieses Bild zeigt noch den Stand vor der Startseite (Kapitel 1) und wird
+durch eines der Dateiansicht nach bewusstem Wechsel von der Startseite aus
+ersetzt.*
 
 Neben dem Profilnamen steht bei geladenem Profil ein kleines **ⓘ**. Ein
 Klick öffnet ein Erklär-Flyout:
@@ -184,7 +279,7 @@ Ersetzungstabelle bereits ist, ohne dass dafür erst das Fenster
 **Dateikarte.** Zeigt Namen, Format, Zeichensatz und Trennzeichen der
 geöffneten Datei. Läuft eine Datei zum ersten Mal unter dem gerade
 geladenen Profil — sie steht also noch nicht im Nutzungs-Index dieses
-Profils (Abschnitt 5) —, erscheint darunter zusätzlich der Hinweis „Diese
+Profils (Abschnitt 6) —, erscheint darunter zusätzlich der Hinweis „Diese
 Datei war bisher nicht Teil des Profils — N neue Felder.“, sofern
 mindestens ein Feld ohne eigene Regel dabei ist. Er soll verhindern, dass
 ein neues Feld in einer bekannten Datenart unbemerkt auf die Vorgabe
@@ -212,9 +307,12 @@ bliebe sonst unerreichbar.
 **Feldliste mit Statuspunkten.** Links jedes Feld der geöffneten Datei mit
 einem Punkt davor: gefüllt und türkis heißt *entschieden*, ein roter,
 hohler Kreis heißt *offen*. Solange auch nur ein Feld offen ist, bricht
-jeder Lauf ab (Abschnitt 3, Schritt 2). Daneben steht die Schaltfläche
-**»Muster erkennen…«**, die für offene Felder anhand der tatsächlichen
-Werte einen passenden Generator vorschlägt (Kapitel 10).
+jeder Lauf ab (Abschnitt 4, Schritt 2). Daneben stehen zwei Schaltflächen:
+**»Immer ersetzen…«** legt aus dem Beispielwert des gewählten Feldes eine
+dauerhafte Ersetzungsregel an, ohne regulären Ausdruck (Kapitel 1 beschreibt
+den Dialog ausführlich); **»Felder automatisch erkennen…«** (vormals „Muster
+erkennen…“) schlägt für offene Felder anhand der tatsächlichen Werte einen
+passenden Generator vor (Kapitel 11).
 
 **Mehrfachauswahl.** Breite Tabellen haben oft ganze Gruppen gleichartiger
 Spalten. Sie lassen sich zusammen wählen — Strg-Klick für einzelne Felder,
@@ -257,13 +355,13 @@ beiden nennen das Ergebnis statt der Tätigkeit: aus `kunden.csv` wird
 `kunden.pseudo.csv`, die Eingabedatei bleibt dabei unangetastet. Der
 frühere Name „Ersetzen“ war doppeldeutig, weil dasselbe Wort im
 Regelbereich daneben bereits die Behandlung eines einzelnen Feldes
-bezeichnet (Abschnitt 6) und außerdem nahelegte, die geöffnete Datei werde
+bezeichnet (Abschnitt 7) und außerdem nahelegte, die geöffnete Datei werde
 überschrieben. Bei einer laufenden großen Datei weichen sie einem
 Fortschrittsbalken samt Zählung und der Schaltfläche **Abbrechen**.
 
 Daneben das Flyout **Alle ▾** mit den Einträgen **Alle Pseudodateien
 erzeugen…** und **Alle Klartextdateien erzeugen…** — der Sammellauf über
-alle dem Profil bekannten, noch vorhandenen Dateien (Abschnitt 7). Anders
+alle dem Profil bekannten, noch vorhandenen Dateien (Abschnitt 8). Anders
 als bei den Einzelläufen erscheint dabei **nur eine einzige Rückfrage**
 für den ganzen Lauf, nicht eine je Datei; sie nennt die Anzahl der Dateien,
 das Namensmuster der Ausgabe und ausdrücklich, wie viele schon vorhandene
@@ -296,20 +394,26 @@ Ersetzungstabelle — nur die Statuszeile vermerkt ihn.
 geschieht oder zuletzt geschah — vom schlichten „Bereit.“ bis zur Meldung
 über offene Felder oder Verdachtsfälle.
 
-**Die vier Nebenfenster**, über **Mehr** erreichbar:
+**Die Nebenfenster**, über **Mehr** erreichbar:
 
-- **Textregeln…** — die Muster für Freitext, mit einem Erprobungsfeld: ein
-  Muster an echtem Text ausprobieren, bevor es auf Daten losgelassen wird.
 - **Ersetzungstabelle…** — Pfad, Anzahl je Namensraum und die Dateirechte.
   Zeigt keinen einzigen Wert, genau wie `obfuskation mapping list`.
-- **Kurzhilfe…** — sechs kurze Karten für den schnellen Einstieg, im Menü
-  durch einen Trenner von den beiden vorigen Einträgen abgesetzt.
-- **Über…** — Fassung, die fünf Hinweise aus Abschnitt 1 im Wortlaut und
+- **Hauseigene Muster…** — Fundort der Erweiterungsdatei (Kapitel 11) und,
+  sofern dort eine liegt, die geerbten Generatoren, Textregeln und die
+  Anzahl der Spaltenmuster. Zuvor ließ sich der Fundort nur über
+  `obfuskation extensions path` auf der Kommandozeile erfahren.
+- **Kurzhilfe…** — kurze Karten für den schnellen Einstieg, im Menü durch
+  einen Trenner von den beiden vorigen Einträgen abgesetzt.
+- **Über…** — Fassung, die fünf Hinweise aus Abschnitt 2 im Wortlaut und
   die verwendeten Pfade.
 
-![Das Mehr-Menü: Textregeln…, Ersetzungstabelle…, Kurzhilfe… und Über Obfuskation….](bilder/gui-mehr-menue.png)
-*Das Mehr-Menü: Textregeln…, Ersetzungstabelle…, Kurzhilfe… und Über
-Obfuskation….*
+Der frühere Eintrag „Textregeln…“ ist entfallen: eigene Muster legt seit
+dieser Fassung „Immer ersetzen…“ an (Kapitel 1), die Fachansicht mit
+Erprobungsfeld bleibt darüber unter „Muster von Hand bearbeiten…“ erreichbar.
+
+![Das Mehr-Menü: Textregeln…, Ersetzungstabelle…, Kurzhilfe… und Über Obfuskation…. Seit dieser Fassung entfällt „Textregeln…“, dafür kommt „Hauseigene Muster…“ hinzu — das Bild zeigt noch den alten Stand.](bilder/gui-mehr-menue.png)
+*Das Mehr-Menü, hier noch im Stand vor dieser Fassung: „Textregeln…“ ist
+entfallen, „Hauseigene Muster…“ ist neu hinzugekommen.*
 
 ![Die Ersetzungstabelle: Profil, Pfad und Dateirechte oben, darunter die Anzahl der Einträge je Namensraum — kein einziger Wert sichtbar.](bilder/gui-ersetzungstabelle.png)
 *Die Ersetzungstabelle: Profil, Pfad und Dateirechte oben, darunter die
@@ -344,14 +448,14 @@ Dunkel, Hell. Die Wahl merkt sich die Oberfläche zwischen zwei Starts.
 *Dunkles Thema: Vorschau und Statuspunkte bleiben lesbar, die Akzentfarbe
 wechselt auf Hellblau.*
 
-## 5. Profile verwalten
+## 6. Profile verwalten
 
 Ein Profil bündelt zwei Dinge, die zusammengehören: die Feldregeln (was mit
 welcher Spalte geschieht) und den Bezug zur Ersetzungstabelle (welche
 Pseudonyme dabei entstehen). Solange mehrere Dateien unter demselben Profil
 laufen, bekommt derselbe Klartext überall dasselbe Pseudonym — das ist der
 ganze Witz an einem Profil, und der Grund, warum es in der Kopfzeile eigens
-erklärt wird (Abschnitt 4).
+erklärt wird (Abschnitt 5).
 
 **Wo ein Profil liegt.** Neu angelegte Profile landen als Vorgabe unter
 `~/.config/obfuskation/profile/<name>.json` — ein fester, zentraler Ort, den
@@ -381,7 +485,7 @@ zwei Wege: **Stattdessen öffnen** lädt das vorhandene Profil, oder Name
 beziehungsweise Ort werden geändert. Ein Klick auf **Anlegen** speichert das
 neue Profil sofort — es hat damit von Anfang an einen Pfad, erscheint in der
 Übersicht, und die Feldregeln stehen weiterhin alle auf „offen“, bis sie
-durchgegangen werden (Abschnitt 3, Schritt 2).
+durchgegangen werden (Abschnitt 4, Schritt 2).
 
 ![Der Anlegen-Dialog: Name, Beschreibung, Ablageort mit Erklärzeile zur Ersetzungstabelle.](bilder/gui-profil-neu.png)
 *Der Anlegen-Dialog: Name, Beschreibung, Ablageort mit Erklärzeile zur
@@ -475,7 +579,7 @@ gilt die vorsichtige Richtung: wie **Abbrechen**, nie wie **Verwerfen**.
 *Die Rückfrage bei ungespeicherten Änderungen: Speichern, Verwerfen oder
 Abbrechen.*
 
-## 6. Behandlungen und Generatoren
+## 7. Behandlungen und Generatoren
 
 Jedes Feld bekommt genau eine Behandlung:
 
@@ -510,7 +614,7 @@ Generatoren stehen zur Auswahl, sobald ein Feld auf „ersetzen“ steht:
 | `dateShift` | alle Daten um denselben Betrag verschoben — Reihenfolge und Abstände bleiben |
 | `dateRange` | zufälliges Datum aus einem Zeitraum; ohne Angabe bleibt das Kalenderjahr des Originals erhalten |
 | `dateGeneralize` | auf Monats-, Quartals- oder Jahresanfang gerundet — **nicht umkehrbar** |
-| `pattern` | Wert nach Zeichenmaske, ohne Angabe formaterhaltend aus dem Original abgeleitet — Einzelheiten in Kapitel 10 |
+| `pattern` | Wert nach Zeichenmaske, ohne Angabe formaterhaltend aus dem Original abgeleitet — Einzelheiten in Kapitel 11 |
 | `wordlist` | Wert aus einer eigenen Werteliste |
 | `partialMask` | teilweise maskiert, Anfang und Ende bleiben sichtbar — **nicht umkehrbar** |
 | `street`, `city`, `postalCode` | Anschriftsbestandteile aus Wortlisten |
@@ -587,7 +691,7 @@ Verknüpfung zu den anderen Dateien bleibt bestehen. Als Faustregel: Freitext
 mit möglichem Personenbezug auf `redact` oder `drop`, `scanText` nur für
 Felder, in denen wirklich nur Muster wie IBAN oder E-Mail vorkommen können.
 
-## 7. Mehrere zusammenhängende Dateien
+## 8. Mehrere zusammenhängende Dateien
 
 Der übliche Fall: Stammdaten, Konten und Buchungen liegen in getrennten
 Dateien und hängen über eine Personennummer zusammen. Diese Nummer muss in
@@ -597,9 +701,9 @@ allen Dateien gleich ersetzt werden, sonst zerfallen die Verknüpfungen.
 verarbeitet werden: Profil einmal öffnen, dann die Dateien nacheinander
 über **Öffnen…** hereinholen und je **Pseudodatei erzeugen…**. Das Profil
 bleibt dabei geladen. Wurde das Profil über **Neu aus Datei…** mit
-Mehrfachauswahl aus genau diesen Dateien angelegt (Abschnitt 3), sind sie
+Mehrfachauswahl aus genau diesen Dateien angelegt (Abschnitt 4), sind sie
 bereits alle bekannt und stehen sofort unter **Zuletzt ▾** bereit. Für den
-ganzen Stapel auf einmal siehe **Alle ▾** in Abschnitt 4: **Alle
+ganzen Stapel auf einmal siehe **Alle ▾** in Abschnitt 5: **Alle
 Pseudodateien erzeugen…** verarbeitet dann alle dem Profil bekannten,
 noch vorhandenen Dateien mit einer einzigen Rückfrage.
 
@@ -645,7 +749,7 @@ danach als eigener Eintrag, gekennzeichnet als eigener Namensraum.
 dasselbe Profil, weil es aus derselben Ersetzungstabelle liest. Ein anderes
 Profil heißt: andere Tabelle, anderes Salt, keine Zuordnung.
 
-## 8. Wenn etwas schiefgeht
+## 9. Wenn etwas schiefgeht
 
 Die folgende Tabelle sammelt die Meldungen, die bei falscher Bedienung oder
 fehlerhafter Konfiguration tatsächlich beobachtet wurden. Die Meldungstexte
@@ -659,8 +763,8 @@ der Statuszeile, meist kürzer.
 | „Der Mapping-Store soll unter … abgelegt werden, das liegt in einem Git-Arbeitsverzeichnis …“ | Die Ersetzungstabelle würde in ein Git-Verzeichnis geschrieben | Pfad der Ersetzungstabelle im Profil ändern (nicht `--allow-unsafe-store` setzen, außer bewusst) |
 | „Der Mapping-Store wird bereits verwendet: …lock. Läuft ein anderer Vorgang, oder ist eine verwaiste Sperrdatei übrig?“ | Ein zweiter Lauf greift gleichzeitig auf dieselbe Ersetzungstabelle zu | Warten, bis der erste Lauf fertig ist; bei einer verwaisten Sperrdatei nach einem Absturz die `.lock`-Datei von Hand löschen |
 | „Eingabedatei nicht gefunden: …“ | Der angegebene Pfad existiert nicht | Pfad prüfen |
-| „X Verdachtsfälle. Die Datei nicht weitergeben, bevor sie geklärt sind.“ | `Prüfen` hat Restbestände gefunden | Ursache klären (siehe Lehrbeispiel Abschnitt 6); bei echtem Fund die betroffene Regel ändern, bei einem harmlosen Zufallstreffer (etwa ein Betrag, der zufällig wie eine vergebene Nummer aussieht) das Feld bei Bedarf auf `drop` stellen |
-| „Das Profil „…“ hat ungespeicherte Änderungen. Speichern, bevor fortgefahren wird?“ | Fenster schließen oder Profil wechseln, während noch nicht gespeicherte Regeländerungen offen sind | Eine der drei Schaltflächen wählen: Speichern, Verwerfen oder Abbrechen (Abschnitt 5) |
+| „X Verdachtsfälle. Die Datei nicht weitergeben, bevor sie geklärt sind.“ | `Prüfen` hat Restbestände gefunden | Ursache klären (siehe Lehrbeispiel Abschnitt 7); bei echtem Fund die betroffene Regel ändern, bei einem harmlosen Zufallstreffer (etwa ein Betrag, der zufällig wie eine vergebene Nummer aussieht) das Feld bei Bedarf auf `drop` stellen |
+| „Das Profil „…“ hat ungespeicherte Änderungen. Speichern, bevor fortgefahren wird?“ | Fenster schließen oder Profil wechseln, während noch nicht gespeicherte Regeländerungen offen sind | Eine der drei Schaltflächen wählen: Speichern, Verwerfen oder Abbrechen (Abschnitt 6) |
 | Profilzeile in Fehlerfarbe mit der Fehlermeldung im Klartext (Übersicht) | Die Profildatei ist nicht mehr lesbar — gelöscht, kein gültiges JSON, oder von Hand fehlerhaft bearbeitet | `Öffnen` ist gesperrt; entweder die Datei außerhalb reparieren oder den Eintrag über `Aus Liste entfernen` dauerhaft ausblenden (rührt die Datei selbst nicht an) |
 | „Es gibt bereits ein Profil an diesem Ort.“ | Beim Anlegen ist der gewählte Name im Ablageort schon vergeben | `Anlegen` bleibt gesperrt; entweder `Stattdessen öffnen` wählen oder einen anderen Namen beziehungsweise Ort setzen |
 
@@ -681,7 +785,7 @@ Eine Eigenheit verdient besondere Aufmerksamkeit:
 *Belegnummer korrekt auf den eigenen Namensraum „belegNummer“ gestellt
 (Vorschau 13535 → 84512), die Generatorauswahl zeigt dabei nichts an.*
 
-## 9. Für die Kommandozeile
+## 10. Für die Kommandozeile
 
 Wer Abläufe automatisieren will, findet auf der Kommandozeile dieselbe
 Bibliothek unter einer anderen Hülle — Oberfläche und Kommandozeile liefern
@@ -732,7 +836,7 @@ diesen Ort, oder beide geprüften Orte, wenn keiner eine Datei hergibt. Die
 Option **`--no-extensions`** lässt einen Lauf ohne die Erweiterungsdatei
 arbeiten, etwa zur Fehlersuche oder für ein Ergebnis, das unabhängig von
 der lokalen Konfiguration des Rechners reproduzierbar bleibt. Einzelheiten
-und das Inventarnummer-Rezept in Kapitel 10.
+und das Inventarnummer-Rezept in Kapitel 11.
 
 **`obfuskation init --central`** legt das Regelgerüst nicht mehr als
 `obfuskation-projekt.json` im aktuellen Verzeichnis an, sondern direkt am zentralen
@@ -768,7 +872,7 @@ Vollständige Beschreibung der Befehle, Optionen und Rückgabewerte in
 
 ---
 
-## 10. Eigene Muster (Erweiterungsdatei)
+## 11. Eigene Muster (Erweiterungsdatei)
 
 Wer in einem festen Umfeld arbeitet, hat oft wiederkehrende hauseigene
 Muster: interne Inventarnummern, Ticketnummern, eigene Kennungen, und dazu, welche
@@ -799,14 +903,21 @@ Beleg- oder Auftragsnummern, ohne dass dafür eine eigene Maske nötig wäre.
 
 ### Rezept: ein eigener Namensraum für ein hauseigenes Muster
 
+Für einen Wert wie `FW123456`, der als Textregel gelten soll, übernimmt
+seit dieser Fassung „Immer ersetzen…“ (Kapitel 1) alle Schritte dieses
+Rezepts — Muster ableiten, Namensraum mit Präfix anlegen, in die
+Erweiterungsdatei schreiben — geführt und ohne Texteditor. Das Rezept hier
+bleibt für die Fälle, die dieser Dialog nicht abdeckt: Spaltenmuster
+(`fieldRules`) und ein Generator, dessen Feinheiten über Präfix und Form
+eines Beispielwerts hinausgehen.
+
 Am Beispiel einer internen Inventarnummer der Form `INV123456` (drei feste
 Buchstaben, sechs Ziffern), die sowohl in einer eigenen Spalte als auch im
 Fließtext vorkommen kann:
 
 1. **Erweiterungsdatei anlegen oder öffnen**, entweder neben der
-   Programmdatei oder unter `~/.config/obfuskation/obfuskation.json` (mit
-   einem beliebigen Texteditor — ein eigener Editor in der Oberfläche ist
-   für diese Fassung nicht vorgesehen).
+   Programmdatei oder unter `~/.config/obfuskation/obfuskation.json`, mit
+   einem beliebigen Texteditor.
 2. **Generator und Textregel eintragen:**
 
    ```jsonc
@@ -917,7 +1028,7 @@ an den eigenen Datenbestand an.
   Ersetzungstabelle stehen und lassen sich weiterhin zurückübersetzen — ab
   dem Zeitpunkt der Änderung erzeugt der Generator aber Werte in der neuen
   Form. Der Bestand liest sich danach gemischt, ähnlich wie beim
-  nachträglichen Setzen eines Präfix (Kapitel 6).
+  nachträglichen Setzen eines Präfix (Kapitel 7).
 - **Die Erweiterungsdatei bleibt privat und gehört nicht ins Repository
   eines Projekts.** Sie kann unternehmensinterne Namensschemata enthalten,
   die außerhalb des eigenen Hauses nichts zu suchen haben — genau wie die
@@ -931,10 +1042,10 @@ an den eigenen Datenbestand an.
   Programmdatei als auch unter `~/.config/obfuskation` eine
   `obfuskation.json`, gilt ausschließlich die erste — nichts wird
   zusammengemischt. Eine Datei, die an einem der beiden Orte wie ein Profil
-  aussieht, wird dort übergangen (siehe Kapitel 5).
+  aussieht, wird dort übergangen (siehe Kapitel 6).
 - `--no-extensions` auf der Kommandozeile läuft ohne die Erweiterungsdatei,
   `extensions list` zeigt ihren Inhalt, `extensions path` ihren Ablageort
-  (Kapitel 9).
+  (Kapitel 10).
 
 ---
 
