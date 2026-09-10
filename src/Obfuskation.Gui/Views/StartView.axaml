@@ -38,6 +38,26 @@
     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Stretch"
                 MaxWidth="920" Spacing="16" Margin="24">
 
+      <!-- Der Weg zurueck an die eigene Arbeit steht oben und ist eine
+           Absichtskarte wie die drei darunter, keine Fussnote: seit die
+           Startseite auch mit geladenem Profil erscheint, ist dies fuer jeden,
+           der das Programm schon kennt, der haeufigste erste Klick. Ohne
+           bekanntes Profil faellt sie weg, und die drei Karten ruecken nach
+           oben — ein Neuling soll hier nichts sehen, was ihm nichts sagt. -->
+      <Button Classes="intent-card" Command="{Binding OpenRecentProfileCommand}"
+              IsVisible="{Binding HasRecentProfile}">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Spacing="6">
+            <TextBlock Text="{Binding ContinueTitle}" FontWeight="SemiBold"
+                       FontSize="{DynamicResource FontSizeLarge}"/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Dateien und Regeln des zuletzt benutzten Projekts"/>
+          </StackPanel>
+          <TextBlock Grid.Column="1" Text="→" Classes="accent"
+                     FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+        </Grid>
+      </Button>
+
       <Grid ColumnDefinitions="*,16,*,16,*" MinHeight="160">
         <Button Grid.Column="0" Classes="intent-card" Command="{Binding TextCommand}">
           <StackPanel Spacing="8">
@@ -66,19 +86,6 @@
           </StackPanel>
         </Button>
       </Grid>
-
-      <!-- Schmaler Schnellzugriff auf das zuletzt benutzte Profil — nur
-           sichtbar, wenn es eines gibt, das auch noch existiert. -->
-      <Border Classes="card" IsVisible="{Binding HasRecentProfile}">
-        <Grid ColumnDefinitions="*,Auto">
-          <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
-            <TextBlock Text="Zuletzt benutzt" Classes="card-title" Margin="0"/>
-            <TextBlock Text="{Binding RecentProfileName}" FontWeight="SemiBold"/>
-          </StackPanel>
-          <Button Grid.Column="1" Content="Öffnen…" Classes="primary"
-                  Command="{Binding OpenRecentProfileCommand}" VerticalAlignment="Center"/>
-        </Grid>
-      </Border>
 
       <Button Classes="flat" Content="Kurzhilfe…" Command="{Binding HelpCommand}"
               HorizontalAlignment="Center"/>

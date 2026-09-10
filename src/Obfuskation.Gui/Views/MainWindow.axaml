@@ -30,6 +30,17 @@
 
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6"
                     VerticalAlignment="Center">
+          <!-- Ausserhalb der Startseite ein benannter Weg zurueck. Der
+               anklickbare Programmname darunter tut dasselbe, aber niemand
+               erkennt eine Ueberschrift als Schaltflaeche — und ohne
+               sichtbaren Rueckweg waere die Startseite nach dem ersten
+               Verlassen praktisch verschwunden. -->
+          <Button Classes="flat" Command="{Binding ShowStartCommand}"
+                  IsVisible="{Binding !IsStartView}" VerticalAlignment="Center"
+                  ToolTip.Tip="Zur Startseite">
+            <TextBlock Text="← Start" Classes="small"/>
+          </Button>
+
           <!-- Als Schaltflaeche statt TextBlock: von jeder Ansicht aus mit
                einem Klick zurueck zur Startseite. Das geladene Profil bleibt
                dabei im Hintergrund bestehen — es wird nur die Ansicht

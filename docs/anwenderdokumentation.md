@@ -2,7 +2,7 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.7.0
+version: 1.7.1
 author: Gregor Stübner & Claude (Anthropic)
 date: 10.09.2026
 lang: de
@@ -11,7 +11,7 @@ preset: modern
 
 # Anwenderdokumentation
 
-Fassung 1.7.0 · Stand 10. September 2026
+Fassung 1.7.1 · Stand 10. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -33,7 +33,7 @@ Kapitel 4.
 
 ### Die Startseite
 
-`obfuskation-gui` ohne Profil und ohne Datei gestartet zeigt drei Karten:
+`obfuskation-gui` öffnet auf der Startseite. Sie zeigt drei Karten:
 
 - **Text säubern** — führt in die Textansicht, Richtung „säubern“.
 - **Dateien pseudonymisieren** — führt in die Dateiansicht und stößt sofort
@@ -41,14 +41,19 @@ Kapitel 4.
 - **Antwort zurückholen** — dieselbe Textansicht, Richtung
   „zurückübersetzen“.
 
-Darunter, sobald vorhanden, ein Verweis auf das zuletzt benutzte Profil und
-ein Verweis auf die Kurzhilfe. Ein Klick auf „Obfuskation“ oben links führt
-aus jeder Ansicht zurück hierher, ohne ein geladenes Profil zu verwerfen.
+Wurde schon einmal mit einem Profil gearbeitet, steht darüber als erste Karte
+**„Weiter mit …“** samt seinem Namen: ein Klick, und die Dateiansicht steht
+mit dem gewohnten Projekt offen. Das Profil ist zu diesem Zeitpunkt bereits
+geladen — die Karte wechselt nur die Ansicht und verwirft nichts, auch keine
+geöffnete Datei.
 
-Ist beim Start bereits ein Profil oder eine Datei über die Befehlszeile
-angegeben, oder findet sich eines im Arbeitsverzeichnis, öffnet sich
-stattdessen sofort die Dateiansicht wie gewohnt — die Startseite ist nur der
-Einstieg für den wirklich leeren Fall.
+Zurück zur Startseite führt aus jeder Ansicht „← Start“ oben links (oder ein
+Klick auf „Obfuskation“ daneben), ebenfalls ohne ein geladenes Profil zu
+verwerfen.
+
+Übersprungen wird die Startseite nur dort, wo jemand ausdrücklich gesagt hat,
+was er will: bei einem Profil oder einer Datei auf der Befehlszeile. Dann
+öffnet sich sofort die Dateiansicht wie gewohnt.
 
 ### Die Textansicht
 

@@ -120,12 +120,12 @@ obfuskation-gui --config profil.json kunden.csv
 Ohne Angabe sucht sie eine `obfuskation-projekt.json` im aktuellen Verzeichnis und
 fällt sonst auf das zuletzt benutzte Profil zurück.
 
-Findet sich dabei weder eine angegebene, noch eine gefundene, noch eine
-zuletzt benutzte Konfiguration, öffnet das Fenster stattdessen auf einer
-**Startseite** mit drei Karten: *Text säubern*, *Dateien pseudonymisieren*
-und *Antwort zurückholen*. Ein über die Befehlszeile angegebenes oder
-automatisch gefundenes Profil überspringt die Startseite wie bisher und
-öffnet direkt die Dateiansicht.
+Das Fenster öffnet auf einer **Startseite** mit drei Karten: *Text säubern*,
+*Dateien pseudonymisieren* und *Antwort zurückholen*. Wurde schon einmal mit
+einem Profil gearbeitet, steht darüber *Weiter mit …* samt seinem Namen — es
+ist bereits geladen, die Karte wechselt nur die Ansicht. Übersprungen wird die
+Startseite allein bei einem Profil oder einer Datei auf der Befehlszeile; „←
+Start“ oben links führt aus jeder Ansicht zurück.
 
 **Textansicht.** Text einfügen, tippen, über eine Datei öffnen oder ins
 Fenster ziehen; kurz nach der letzten Änderung erscheint rechts der

@@ -59,6 +59,13 @@ public sealed class StartViewModel : ObservableObject
     public bool HasRecentProfile => _recentProfilePath is not null;
 
     /// <summary>
+    /// Aufschrift der obersten Karte, etwa "Weiter mit kunden". Nennt das
+    /// Profil beim Namen statt "zuletzt benutzt": wer sein Projekt
+    /// wiedererkennt, muss nicht erst lesen, was die Karte bedeutet.
+    /// </summary>
+    public string ContinueTitle => $"Weiter mit {RecentProfileName}";
+
+    /// <summary>
     /// Liest das zuletzt benutzte, noch vorhandene Profil neu ein. Aufgerufen
     /// jedesmal, wenn die Startseite (wieder) angezeigt wird -- so faellt eine
     /// zwischenzeitliche Aenderung (ein neu angelegtes oder anderswo
@@ -72,6 +79,7 @@ public sealed class StartViewModel : ObservableObject
 
         OnPropertyChanged(nameof(RecentProfileName));
         OnPropertyChanged(nameof(HasRecentProfile));
+        OnPropertyChanged(nameof(ContinueTitle));
         OpenRecentProfileCommand.RaiseCanExecuteChanged();
     }
 }

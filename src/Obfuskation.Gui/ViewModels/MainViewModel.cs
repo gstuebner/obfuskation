@@ -830,6 +830,17 @@ public sealed class MainViewModel : ObservableObject
         if (!File.Exists(path))
             return;
 
+        // Ist genau dieses Profil bereits geladen -- der Regelfall beim Start,
+        // seit die Startseite auch mit geladenem Profil erscheint --, waere ein
+        // Neuladen nicht nur ueberfluessig: es verwuerfe eine bereits
+        // geoeffnete Datei und die Feldauswahl. Dann wechselt nur die Ansicht.
+        if (_session?.Path is not null
+            && string.Equals(_session.Path, Path.GetFullPath(path), StringComparison.Ordinal))
+        {
+            CurrentView = AppView.Files;
+            return;
+        }
+
         if (!await EnsureChangesHandledAsync())
             return;
 
@@ -874,10 +885,25 @@ public sealed class MainViewModel : ObservableObject
         if (dataPath is not null && File.Exists(dataPath) && _session is not null)
             await GuardedAsync(() => LoadDataFileAsync(dataPath));
 
-        // Nur der wirklich leere Fall landet auf der Startseite: ein
-        // uebergebenes Profil, ein gefundenes (ProfileStore.Discover) oder das
-        // zuletzt benutzte fuehren wie bisher direkt in die Dateiansicht.
-        CurrentView = _session is not null ? AppView.Files : AppView.Start;
+        // Die Startseite ist der Einstieg, auch wenn oben bereits ein Profil
+        // geladen wurde -- es bleibt im Hintergrund bestehen und steht dort
+        // als erste Karte ("Weiter mit …") einen Klick entfernt.
+        //
+        // Die urspruengliche Regel "nur der wirklich leere Fall landet auf der
+        // Startseite" kehrte die Absicht um: wer schon einmal ein Profil
+        // benutzt hat, hat ab dann immer eines unter
+        // GuiSettings.RecentProfiles und saehe die Startseite nie wieder --
+        // also gerade jeder Bestandsanwender, dem die Textansicht neu ist.
+        //
+        // Uebergangen wird sie nur, wo jemand ausdruecklich gesagt hat, was er
+        // will: ein Profil oder eine Datei auf der Befehlszeile. Ein bloss
+        // gefundenes Profil (ProfileStore.Discover) oder das zuletzt benutzte
+        // zaehlt nicht dazu -- da hat niemand etwas gesagt.
+        var ausdruecklich = profilePath is not null || dataPath is not null;
+        CurrentView = ausdruecklich && _session is not null ? AppView.Files : AppView.Start;
+
+        if (CurrentView == AppView.Start)
+            Start.Refresh();
     }
 
     // ------------------------------------------------------------- Profile

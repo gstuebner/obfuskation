@@ -82,7 +82,7 @@ obfuskation-gui customers.csv          # open file immediately
 obfuskation-gui --config profile.json customers.csv
 ```
 
-When started without arguments and nothing is found — no profile given on the command line, none discovered in the working directory, none used before — the window opens on a **start page** with three cards: *clean up text*, *pseudonymize files*, and *translate a reply back*. A profile or file given on the command line, or one found automatically, skips the start page and opens the file view directly, as before.
+The window opens on a **start page** with three cards: *clean up text*, *pseudonymize files*, and *translate a reply back*. If a profile has been used before, a *Continue with …* card sits above them naming it — the profile is already loaded, so the card only switches the view and discards nothing, not even an open file. Only a profile or file given on the command line skips the start page; *← Start* in the header returns to it from any view.
 
 **Text view.** Paste, type, open a file, or drop one onto the window; a short debounce later the cleaned-up result appears on the right alongside a match list ("Found: 3× email · 1× iban"), each match individually deselectable via checkbox. Nothing is written to the substitution table until **Copy** is clicked — until then everything shown is a live, binding preview of the actual result, because the view creates the table on first entry instead of leaving it to spring into existence on the first real run. A direction switch toggles between cleaning up and translating a reply back; a profile loaded elsewhere carries over, so both views share the same table.
 

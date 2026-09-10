@@ -135,8 +135,24 @@
          Fliesstextdatei zeigte in der Feldliste faelschlich "Keine Datei
          geöffnet" statt eines Hinweises auf "Immer ersetzen…" samt Knopf "In
          der Textansicht öffnen"; die Kurzhilfe nennt jetzt auch den
-         Textmodus. -->
-    <Version>1.7.0</Version>
+         Textmodus.
+         1.7.1: Die Startseite aus 1.7.0 bekam kaum jemand zu sehen. Sie
+         erschien nur, wenn weder ein Profil uebergeben noch eines gefunden
+         noch eines zuletzt benutzt worden war — wer schon einmal mit einem
+         Profil gearbeitet hat, hat aber ab dann immer einen Eintrag in
+         GuiSettings.RecentProfiles und landete darum wie vor 1.7.0 sofort in
+         der Dateiansicht. Betroffen war damit genau jeder Bestandsanwender,
+         also jeder, dem Textansicht und "Immer ersetzen…" neu sind. Die
+         Startseite ist jetzt der Einstieg; uebersprungen wird sie allein bei
+         einem Profil oder einer Datei auf der Befehlszeile, wo jemand
+         ausdruecklich gesagt hat, was er will. Ein zuletzt benutztes Profil
+         wird weiterhin geladen und steht dort als erste Karte "Weiter mit …"
+         bereit, die nur die Ansicht wechselt (kein zweites Laden, eine
+         geoeffnete Datei bleibt offen). Dazu ein sichtbarer Rueckweg
+         "← Start" in der Kopfzeile: der anklickbare Programmname tat das
+         schon, wurde aber als Ueberschrift gelesen, nicht als
+         Schaltflaeche. -->
+    <Version>1.7.1</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

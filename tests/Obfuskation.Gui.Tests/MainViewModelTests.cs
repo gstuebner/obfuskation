@@ -291,6 +291,57 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Ein_zuletzt_benutztes_Profil_fuehrt_trotzdem_auf_die_Startseite()
+    {
+        // Der gemeldete Fall: wer schon einmal ein Profil benutzt hat, hat ab
+        // dann immer einen Eintrag in GuiSettings.RecentProfiles. Wuerde der
+        // wie ein ausdruecklich genanntes Profil zaehlen, saehe genau jeder
+        // Bestandsanwender die Startseite nie -- also jeder, dem die
+        // Textansicht neu ist. Das Profil wird trotzdem geladen und steht auf
+        // der Startseite als "Weiter mit …" einen Klick entfernt bereit.
+        var profil = SchreibeProfil();
+        _settings.RecentProfiles.Add(profil);
+
+        var modell = Erzeugen();
+        await modell.InitializeAsync(null, null);
+
+        Assert.Equal(AppView.Start, modell.CurrentView);
+        Assert.True(modell.HasProfile);
+        Assert.True(modell.Start.HasRecentProfile);
+        Assert.Contains("Weiter mit", modell.Start.ContinueTitle, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Von_der_Startseite_aus_wechselt_das_geladene_Profil_nur_die_Ansicht()
+    {
+        // Die Karte "Weiter mit …" zeigt auf dasselbe Profil, das beim Start
+        // bereits geladen wurde. Ein Neuladen waere nicht nur ueberfluessig,
+        // es verwuerfe eine geoeffnete Datei -- hier wechselt nur die Ansicht.
+        var profil = SchreibeProfil();
+        var csv = SchreibeCsv();
+        _settings.RecentProfiles.Add(profil);
+
+        var dialoge = new FakeDialogService { DataFileToOpen = csv };
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(null, null);
+
+        // Ueber die Karte in die Dateiansicht, dort eine Datei oeffnen ...
+        await AusfuehrenUndWartenAsync(modell.Start.OpenRecentProfileCommand);
+        await AusfuehrenUndWartenAsync(modell.OpenDataFileCommand);
+        Assert.Equal(Path.GetFileName(csv), modell.DataFileName);
+
+        // ... dann zurueck zur Startseite und wieder herein.
+        modell.ShowStartCommand.Execute(null);
+        Assert.Equal(AppView.Start, modell.CurrentView);
+
+        await AusfuehrenUndWartenAsync(modell.Start.OpenRecentProfileCommand);
+
+        Assert.Equal(AppView.Files, modell.CurrentView);
+        Assert.NotEmpty(modell.Fields);
+        Assert.Equal(Path.GetFileName(csv), modell.DataFileName);
+    }
+
+    [Fact]
     public async Task Mit_uebergebenem_Profil_geht_es_direkt_in_die_Dateiansicht()
     {
         var profil = SchreibeProfil();
