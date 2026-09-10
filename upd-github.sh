@@ -140,7 +140,14 @@ fi
 # --- 3. Tests ausfuehren ------------------------------------------------------
 if [[ "${SKIP_TESTS}" == "false" ]]; then
   echo "--> Führe Tests aus..."
-  dotnet test --verbosity normal
+
+  # Roll-Forward auf eine neuere Hauptversion: das Projekt zielt auf net8.0,
+  # auf Entwicklungsrechnern ohne installierte 8.0-Laufzeitumgebung findet der
+  # Testlaeufer sonst keine passende und bricht ab, obwohl 'dotnet build' und
+  # 'dotnet publish' laufen (das SDK zieht das Referenzpaket ueber NuGet).
+  # Ist die 8.0-Laufzeitumgebung vorhanden, wird sie weiterhin bevorzugt --
+  # die Einstellung greift nur, wenn ohne sie gar nichts liefe.
+  DOTNET_ROLL_FORWARD=Major dotnet test --verbosity normal
 fi
 
 # --- 4. Release kompilieren ---------------------------------------------------
