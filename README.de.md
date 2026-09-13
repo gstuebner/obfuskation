@@ -138,19 +138,35 @@ wechselt zwischen Säubern und Zurückübersetzen; ein anderswo geladenes
 Profil bleibt dabei erhalten, sodass beide Ansichten dieselbe Tabelle
 benutzen.
 
-**„Immer ersetzen…“ — hauseigene Begriffe ohne regulären Ausdruck.** Eine
-Stelle im Text markieren (oder einen Eintrag der Fundliste wählen) und
-„Auswahl immer ersetzen…“ wählen, oder in der Dateiansicht den
-gleichnamigen Knopf neben „Felder automatisch erkennen…“ nutzen. Der Dialog
-fragt drei Dinge in Alltagssprache: *was* (vorbelegt aus der Auswahl), *wie
-weit* (wörtlich, oder — enthält der Wert Ziffern — „alles dieser Form“, aus
-`FW123456` wird die Beschreibung „FW“ + 6 Ziffern statt `\bFW\d{6}\b`, mit
-einer laufenden
-Trefferzahl im aktuellen Text) und *wo* (im Profil dieses Projekts, oder in
-der Erweiterungsdatei für alle Projekte — der Dialog nennt den Zielpfad und
-warnt vorher, wenn dabei eine Sicherungskopie über von Hand gepflegte
-Kommentare entsteht). „Muster von Hand bearbeiten…“ führt weiterhin zum
-vollständigen Regeleditor mit Erprobungsfeld.
+**Farbe zeigt, was erkannt wurde.** Eingefügter Text erscheint links in der
+Prüffassung: grün, was erkannt und ersetzt wird, orange, was per Häkchen
+bewusst im Klartext bleibt; rechts dieselben Stellen am Ersatzwert. **Ohne
+Farbe** heißt: von keiner Regel erfasst — das ginge unverändert hinaus. Die
+eingebaute Erkennung kennt IBAN, E-Mail, BIC und Telefonnummern; Namen,
+Anschriften, Geburtsdaten, Steuer-IDs und Kundennummern sieht sie nicht, und
+keine Regex fängt sie zuverlässig. „Bearbeiten“ schaltet auf ein gewöhnliches
+Eingabefeld um, „Fertig“ zurück.
+
+**Übersehenes markieren — ohne regulären Ausdruck.** Steht noch etwas
+Vertrauliches ohne Farbe da, die Stelle markieren und mit der rechten
+Maustaste **„»…« immer ersetzen…“** wählen — der Eintrag nennt den markierten
+Wert. Alternativ **Strg+M**. Der Dialog fragt drei Dinge in Alltagssprache:
+*was* (vorbelegt aus der Markierung), *wie weit* (wörtlich, oder — enthält der
+Wert Ziffern — „alles dieser Form“, aus `FW123456` wird die Beschreibung
+„FW“ + 6 Ziffern statt `\bFW\d{6}\b`, mit einer laufenden Trefferzahl im
+aktuellen Text) und *wo* (im Profil dieses Projekts, oder in der
+Erweiterungsdatei für alle Projekte — der Dialog nennt den Zielpfad und warnt
+vorher, wenn dabei eine Sicherungskopie über von Hand gepflegte Kommentare
+entsteht). In der Dateiansicht liegt derselbe Dialog als „Immer ersetzen…“
+neben „Felder automatisch erkennen…“.
+
+Eine Regel erfasst dabei oft mehrere Stellen auf einmal; für mehrere
+verschiedene Begriffe hintereinander gibt es „Übernehmen und weiter“, das den
+Dialog offen lässt. Eine selbst angelegte Regel lässt sich in der Fundliste
+über „Regel entfernen“ wieder löschen — bereits vergebene Pseudonyme bleiben
+dabei in der Ersetzungstabelle, der Weg zurück geht also nicht verloren.
+„Muster von Hand bearbeiten…“ führt weiterhin zum vollständigen Regeleditor
+mit Erprobungsfeld.
 
 **Aufbau:** oben die geöffnete Datei mit erkanntem Format, Zeichensatz und
 Trennzeichen, daneben bei Bedarf „Zuletzt ▾" zum Wechseln zwischen den dem

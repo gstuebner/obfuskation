@@ -586,6 +586,15 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _statusText, value);
     }
 
+    /// <summary>
+    /// Meldet einen Fehler, den das globale Sicherheitsnetz aufgefangen hat
+    /// (siehe <c>App.OnFrameworkInitializationCompleted</c>). Oeffentlich, weil
+    /// der Behandler ausserhalb dieser Klasse haengt -- und die Statuszeile ist
+    /// die einzige Stelle, an der ein Anwender ueberhaupt erfaehrt, dass etwas
+    /// schiefging, statt dass die Anwendung wortlos verschwindet.
+    /// </summary>
+    public void ReportCaughtError(string message) => StatusText = message;
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -676,7 +685,11 @@ public sealed class MainViewModel : ObservableObject
 
         Text = new TextViewModel(
             _session!, reverse ? TextDirection.Reverse : TextDirection.Forward, RefreshMappingSummary,
-            onAlwaysReplaceRequested: sample => _ = ShowAlwaysReplaceAsync(sample, Text?.InputText ?? ""));
+            // Ein Titel fuer alle Einstiege: der Menueeintrag der Textansicht
+            // sagt bereits, worum es geht ("»…« immer ersetzen…"), und zwei
+            // Namen fuer dasselbe Fenster stiften nur Verwirrung.
+            onAlwaysReplaceRequested: sample => _ = ShowAlwaysReplaceAsync(sample, Text?.InputText ?? ""),
+            onRemoveRuleRequested: ruleName => _ = RemoveTextRuleAsync(ruleName));
 
         SwitchView(AppView.Text);
     }
@@ -728,7 +741,9 @@ public sealed class MainViewModel : ObservableObject
     /// beruecksichtigen, unabhaengig davon, ob sie gerade sichtbar ist oder
     /// nur im Hintergrund weiterlebt (siehe <see cref="Text"/>).
     /// </summary>
-    private async Task ShowAlwaysReplaceAsync(string initialSample, string contextText)
+    private async Task ShowAlwaysReplaceAsync(
+        string initialSample, string contextText,
+        string windowTitle = "Immer ersetzen", string? introText = null)
     {
         if (_session is null)
             return;
@@ -764,7 +779,9 @@ public sealed class MainViewModel : ObservableObject
                 RefreshGenerators();
                 RefreshIssues();
             },
-            () => CreateTextRulesViewModel()!);
+            () => CreateTextRulesViewModel()!,
+            windowTitle,
+            introText);
 
         var bestaetigt = await _dialogs().ShowAlwaysReplaceAsync(viewModel);
         if (!bestaetigt)
@@ -772,9 +789,71 @@ public sealed class MainViewModel : ObservableObject
 
         Text?.RefreshPreview();
 
-        StatusText = viewModel.UseExtension
-            ? $"Regel „{viewModel.RuleName}“ angelegt in {viewModel.ExtensionPath}."
-            : $"Regel „{viewModel.RuleName}“ im Profil angelegt.";
+        // Mehrere Regeln entstehen ueber "Übernehmen und weiter". Dann sagt
+        // die Sammelform, was insgesamt angelegt wurde -- der Ablageort steht
+        // nur im Einzelfall dabei, sonst geriete die Zeile zu lang.
+        StatusText = viewModel.CreatedRuleNames.Count switch
+        {
+            1 when viewModel.UseExtension => $"Regel „{viewModel.RuleName}“ angelegt in {viewModel.ExtensionPath}.",
+            1 => $"Regel „{viewModel.RuleName}“ im Profil angelegt.",
+            var anzahl => $"{anzahl} Regeln angelegt: {string.Join(", ", viewModel.CreatedRuleNames)}.",
+        };
+    }
+
+    /// <summary>
+    /// Loescht eine selbst angelegte Textregel wieder -- der Rueckweg aus der
+    /// Fundliste der Textansicht (siehe <see cref="TextMatchViewModel.IsUserRule"/>).
+    /// Ohne ihn kaeme aus einer zu weit geratenen Regel nur heraus, wer den
+    /// Regex-Editor oder die Erweiterungsdatei zu bedienen weiss -- also
+    /// gerade nicht die Zielgruppe des schlichten Dialogs.
+    ///
+    /// Gesucht wird in Profil <b>und</b> Erweiterung: der Dialog schreibt je
+    /// nach Wahl in das eine oder das andere, und welches es war, weiss hier
+    /// niemand mehr.
+    /// </summary>
+    private async Task RemoveTextRuleAsync(string ruleName)
+    {
+        if (_session is null)
+            return;
+
+        var imProfil = _session.Profile.TextRules.FirstOrDefault(
+            rule => string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase));
+        var inErweiterung = _extensions.TextRules.FirstOrDefault(
+            rule => string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase));
+
+        if (imProfil is null && inErweiterung is null)
+            return;
+
+        var bestaetigt = await _dialogs().AskRemoveTextRuleAsync(
+            ruleName, inErweiterung is not null ? ExtensionLibrary.ResolveWritePath() : null);
+
+        if (!bestaetigt)
+            return;
+
+        if (imProfil is not null)
+        {
+            _session.Profile.TextRules.Remove(imProfil);
+            _session.MarkChanged();
+            OnPropertyChanged(nameof(ProfileTitle));
+            OnPropertyChanged(nameof(HasUnsavedChanges));
+        }
+
+        if (inErweiterung is not null)
+        {
+            _extensions.TextRules.Remove(inErweiterung);
+            _extensions.Save(ExtensionLibrary.ResolveWritePath());
+        }
+
+        // Die Engine fuehrt Profil- und Erweiterungsregeln in ihrem Konstruktor
+        // zusammen und kennte die geloeschte sonst weiter (dieselbe Ueberlegung
+        // wie beim Anlegen, siehe ShowAlwaysReplaceAsync).
+        _session.InvalidateEngine();
+
+        RefreshGenerators();
+        RefreshIssues();
+        Text?.RefreshPreview();
+
+        StatusText = $"Regel „{ruleName}“ gelöscht.";
     }
 
     /// <summary>

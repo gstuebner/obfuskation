@@ -152,7 +152,19 @@
          "← Start" in der Kopfzeile: der anklickbare Programmname tat das
          schon, wurde aber als Ueberschrift gelesen, nicht als
          Schaltflaeche. -->
-    <Version>1.7.1</Version>
+    <!-- 1.7.2: Farbe in der Textansicht. Der eingefuegte Text steht links in
+         einer Prueffassung, in der erkannte Stellen hinterlegt sind: gruen,
+         was ersetzt wird, orange, was ein geleertes Haekchen im Klartext
+         behaelt; rechts dieselben Stellen am Ersatzwert. Ohne Farbe heisst
+         "von keiner Regel erfasst": die Aussage, die der Ansicht bisher
+         fehlte, und der Grund, warum ein Knopf "nicht erkannte Daten"
+         unverstaendlich blieb. Uebersehenes wird jetzt markiert und ueber das
+         Kontextmenue weitergereicht, dessen Eintrag den markierten Wert nennt.
+         Dazu ein globales Sicherheitsnetz: unbehandelte Ausnahmen aus
+         Dispatcher, Task und AppDomain landen in absturz.log neben gui.json,
+         und die Anwendung laeuft weiter, statt einen ungespeicherten Text
+         mitzunehmen. -->
+    <Version>1.7.2</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

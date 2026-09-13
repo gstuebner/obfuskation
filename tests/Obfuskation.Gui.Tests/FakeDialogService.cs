@@ -56,6 +56,13 @@ internal sealed class FakeDialogService : IDialogService
     /// </summary>
     public bool AlwaysReplaceUseExtension { get; set; }
 
+    /// <summary>
+    /// Weitere Begriffe, die vor dem abschliessenden "Uebernehmen" ueber
+    /// "Uebernehmen und weiter" angelegt werden. Leer heisst: eine Regel, wie
+    /// bisher.
+    /// </summary>
+    public IReadOnlyList<string> AlwaysReplaceAdditionalSamples { get; set; } = Array.Empty<string>();
+
     /// <summary>Das zuletzt erzeugte Ansichtsmodell, damit ein Test es unmittelbar bedienen kann.</summary>
     public AlwaysReplaceViewModel? LastAlwaysReplaceViewModel { get; private set; }
 
@@ -112,9 +119,30 @@ internal sealed class FakeDialogService : IDialogService
             if (AlwaysReplaceUseExtension)
                 viewModel.UseExtension = true;
 
+            // Jeder Wert ausser dem letzten ueber "Uebernehmen und weiter":
+            // so entsteht im Test derselbe Ablauf wie am offenen Fenster, an
+            // dem jemand mehrere Begriffe hintereinander eintraegt.
+            foreach (var weiterer in AlwaysReplaceAdditionalSamples)
+            {
+                viewModel.ApplyAndContinueCommand.Execute(null);
+                viewModel.Sample = weiterer;
+            }
+
             viewModel.ApplyCommand.Execute(null);
         }
 
         return Task.FromResult(viewModel.Confirmed);
+    }
+
+    /// <summary>Die Antwort auf die Rueckfrage vorm Loeschen einer Textregel.</summary>
+    public bool RemoveTextRuleConfirmed { get; set; } = true;
+
+    /// <summary>Die zuletzt zum Loeschen angebotene Regel, samt Ablageort.</summary>
+    public (string RuleName, string? ExtensionPath)? LastRemoveTextRule { get; private set; }
+
+    public Task<bool> AskRemoveTextRuleAsync(string ruleName, string? extensionPath)
+    {
+        LastRemoveTextRule = (ruleName, extensionPath);
+        return Task.FromResult(RemoveTextRuleConfirmed);
     }
 }

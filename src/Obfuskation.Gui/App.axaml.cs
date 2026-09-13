@@ -26,6 +26,23 @@ public partial class App : Application
             var viewModel = new MainViewModel(settings, () => new DialogService(window));
             window.DataContext = viewModel;
 
+            // Das wichtigste der drei Netze (die beiden anderen in
+            // Program.Main): eine Ausnahme aus einem Ereignisbehandler, einer
+            // Bindung oder einem modalen Dialog laeuft ueber den Dispatcher,
+            // nicht ueber Main -- und beendete den Prozess bisher hart, mitsamt
+            // einem womoeglich ungespeicherten Text in der Ansicht. Der ist
+            // mehr wert als ein sauberer Abgang, also wird weitergelaufen.
+            Dispatcher.UIThread.UnhandledException += (_, e) =>
+            {
+                CrashLog.Write("Dispatcher", e.Exception);
+                e.Handled = true;
+
+                viewModel.ReportCaughtError(
+                    $"Ein Fehler wurde abgefangen: {e.Exception.Message} "
+                    + $"Einzelheiten stehen in {CrashLog.Path}. "
+                    + "Bitte das Ergebnis vor der Weitergabe prüfen.");
+            };
+
             // Erst nach dem Oeffnen: der Dateidialog und die Fehleranzeige
             // brauchen ein Fenster, das schon da ist.
             window.Opened += async (_, _) =>

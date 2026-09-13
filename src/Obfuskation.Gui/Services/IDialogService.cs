@@ -75,6 +75,19 @@ public interface IDialogService
     /// dabei eine Regel entstanden ist, <c>false</c> bei Abbruch.
     /// </summary>
     Task<bool> ShowAlwaysReplaceAsync(AlwaysReplaceViewModel viewModel);
+
+    /// <summary>
+    /// Rueckfrage vor dem Loeschen einer selbst angelegten Textregel aus der
+    /// Fundliste. Sagt ausdruecklich, dass bereits vergebene Pseudonyme in der
+    /// Ersetzungstabelle stehen bleiben -- die naheliegende Sorge ist, sich
+    /// damit den Rueckweg zu verbauen, und sie ist unbegruendet.
+    /// </summary>
+    /// <param name="ruleName">Die Regel, zur Anzeige.</param>
+    /// <param name="extensionPath">
+    /// Pfad der Erweiterungsdatei, wenn die Regel dort steht und also in allen
+    /// Projekten entfaellt -- sonst <c>null</c>.
+    /// </param>
+    Task<bool> AskRemoveTextRuleAsync(string ruleName, string? extensionPath);
 }
 
 /// <summary>Antwort auf die Rueckfrage vorm Loeschen eines Profils.</summary>

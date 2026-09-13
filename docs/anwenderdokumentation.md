@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.7.1
+version: 1.7.2
 author: Gregor Stübner & Claude (Anthropic)
-date: 10.09.2026
+date: 13.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.7.1 · Stand 10. September 2026
+Fassung 1.7.2 · Stand 13. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -85,18 +85,33 @@ mit den eingebauten Textregeln (IBAN, E-Mail, BIC, Telefonnummer) an. Wer
 später von hier in die Dateiansicht wechselt, arbeitet im selben Profil
 weiter — dieselbe Ersetzungstabelle gilt für beides.
 
-### „Immer ersetzen…“ — eigene Begriffe ohne regulären Ausdruck
+### Farbe zeigt, was erkannt wurde
 
-Die eingebauten Textregeln erkennen allgemeine Muster. Für hauseigene
-Bezeichnungen — Hostnamen der Form `FW123456`, eine wiederkehrende
-Kundennummer, ein Produktname — braucht es eine eigene Regel. Bislang
-verlangte das einen regulären Ausdruck im Fenster „Textregeln…“; seit dieser
-Fassung übernimmt das ein Dialog, der drei Dinge in Alltagssprache fragt.
+Eingefügter Text erscheint links in der **Prüffassung**: grün hinterlegt, was
+erkannt und ersetzt wird, orange, was per Häkchen bewusst im Klartext bleibt.
+Rechts stehen dieselben Stellen in denselben Farben am Ersatzwert. **Ohne Farbe**
+heißt: von keiner Regel erfasst — das ginge unverändert hinaus.
 
-Erreichbar ist er von zwei Stellen aus:
+Das ist die eigentliche Aussage der Ansicht. Die eingebauten Textregeln erkennen
+allgemeine Muster: IBAN, E-Mail, BIC, Telefonnummer. Namen, Anschriften,
+Geburtsdaten, Steuer-IDs, Kennzeichen, Kunden- und Vertragsnummern sehen sie
+**nicht**, und keine Regex der Welt fängt sie zuverlässig. Ohne die Farbe stünde
+dort nur „Keine Funde im Text.“ — leicht als „nichts zu tun“ zu lesen.
 
-- **Textansicht**: eine Stelle im Text markieren und **„Auswahl immer
-  ersetzen…“** wählen — auch direkt aus einem Eintrag der Fundliste heraus.
+Zum Tippen und Ändern schaltet **„Bearbeiten“** auf ein gewöhnliches Eingabefeld
+um, **„Fertig“** zurück auf die farbige Ansicht. Text über „Einfügen“, „Datei…“
+oder Ziehen landet sofort in der Prüffassung.
+
+### Übersehenes markieren — eigene Begriffe ohne regulären Ausdruck
+
+Steht links noch etwas Vertrauliches ohne Farbe, wird daraus mit drei Fragen in
+Alltagssprache eine dauerhafte Regel; einen regulären Ausdruck bekommt dabei
+niemand zu sehen.
+
+- **Textansicht**: die Stelle in der Prüffassung markieren, **rechte Maustaste**,
+  Eintrag **„»…« immer ersetzen…“** — er nennt den markierten Wert. Alternativ
+  **Strg+M**. Ohne Markierung steht der Eintrag ausgegraut da. Derselbe Dialog
+  öffnet sich aus einem Eintrag der Fundliste heraus über „immer…“.
 - **Dateiansicht**: der Knopf **„Immer ersetzen…“** neben „Felder automatisch
   erkennen…“, vorbelegt mit dem Beispielwert des gerade gewählten Feldes.
 
@@ -118,6 +133,23 @@ Der Dialog fragt:
 „Muster von Hand bearbeiten…“ führt bei Bedarf in die vollständige
 Fachansicht mit Erprobungsfeld — dieselbe, die früher unter „Mehr ▾ →
 Textregeln…“ lag und jetzt nur noch von hier aus erreichbar ist.
+
+**Mehrere übersehene Stellen.** Eine Regel erledigt dabei oft mehr als eine
+Fundstelle: „alles dieser Form“ macht aus `FW123456` das Muster „FW + 6
+Ziffern“, und der Vorschaustreifen sagt vor dem Übernehmen, wie oft es im
+aktuellen Text greift. Für mehrere wirklich verschiedene Begriffe — ein Name,
+eine Kundennummer, ein Projektname — gibt es **„Übernehmen und weiter“**: die
+Regel wird angelegt, der Dialog bleibt offen und zeigt an, was in diesem
+Durchgang bereits entstanden ist.
+
+**Eine Regel wieder loswerden.** Ein zu weit geratenes Muster — „alles dieser
+Form“ auf einem Datum ersetzt fortan jedes Datum — lässt sich in der Fundliste
+über **„Regel entfernen“** wieder löschen; der Knopf erscheint dort anstelle
+von „immer…“, sobald ein Fund aus einer selbst angelegten Regel stammt. Die
+vier eingebauten Regeln bleiben davon unberührt: für sie ist das Häkchen der
+richtige Weg, denn es gilt nur für den einen Durchgang. Bereits vergebene
+Pseudonyme bleiben beim Löschen in der Ersetzungstabelle stehen — der Weg
+zurück zu den Echtwerten geht dadurch nicht verloren.
 
 ## 2. Wozu das Werkzeug da ist — und wozu nicht
 
@@ -413,8 +445,9 @@ geschieht oder zuletzt geschah — vom schlichten „Bereit.“ bis zur Meldung
   die verwendeten Pfade.
 
 Der frühere Eintrag „Textregeln…“ ist entfallen: eigene Muster legt seit
-dieser Fassung „Immer ersetzen…“ an (Kapitel 1), die Fachansicht mit
-Erprobungsfeld bleibt darüber unter „Muster von Hand bearbeiten…“ erreichbar.
+dieser Fassung das Kontextmenü der Prüffassung an (Kapitel 1), die
+Fachansicht mit Erprobungsfeld bleibt darüber unter „Muster von Hand
+bearbeiten…“ erreichbar.
 
 ![Das Mehr-Menü: Textregeln…, Ersetzungstabelle…, Kurzhilfe… und Über Obfuskation…. Seit dieser Fassung entfällt „Textregeln…“, dafür kommt „Hauseigene Muster…“ hinzu — das Bild zeigt noch den alten Stand.](bilder/gui-mehr-menue.png)
 *Das Mehr-Menü, hier noch im Stand vor dieser Fassung: „Textregeln…“ ist

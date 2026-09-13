@@ -1565,4 +1565,111 @@ public class MainViewModelTests : IDisposable
         Assert.Equal(inhaltVorher, await File.ReadAllTextAsync(pseudo));
         Assert.Contains("kunden.pseudo.csv", modell.StatusText);
     }
+
+    // ------------------------------- "Nicht erkannte vertrauliche Daten"
+
+    [Fact]
+    public async Task Der_Dialog_heisst_aus_jedem_Einstieg_gleich()
+    {
+        // Der Menueeintrag der Textansicht nennt bereits den markierten Wert
+        // ("»…« immer ersetzen…"); zwei Namen fuer dasselbe Fenster stifteten
+        // nur Verwirrung.
+        var profil = SchreibeProfil();
+        var dialoge = new FakeDialogService { AlwaysReplaceConfirmed = true };
+
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        modell.ShowTextCommand.Execute(null);
+        modell.Text!.RequestAlwaysReplace("FW123456");
+        await Task.Yield();
+
+        var dialog = dialoge.LastAlwaysReplaceViewModel!;
+        Assert.Equal("Immer ersetzen", dialog.WindowTitle);
+        Assert.False(dialog.HasIntroText);
+    }
+
+    [Fact]
+    public async Task Mehrere_Regeln_in_einem_Durchgang_ergeben_eine_Sammelmeldung()
+    {
+        var profil = SchreibeProfil();
+        var dialoge = new FakeDialogService
+        {
+            AlwaysReplaceConfirmed = true,
+            AlwaysReplaceAdditionalSamples = new[] { "KD4711" },
+        };
+
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        modell.ShowTextCommand.Execute(null);
+        modell.Text!.RequestAlwaysReplace("FW123456");
+        await Task.Yield();
+
+        Assert.Equal(2, modell.Session!.Profile.TextRules.Count);
+        Assert.Equal("2 Regeln angelegt: fw, kd.", modell.StatusText);
+    }
+
+    [Fact]
+    public async Task Eine_selbst_angelegte_Regel_laesst_sich_aus_der_Fundliste_wieder_entfernen()
+    {
+        // Der Rueckweg, den es sonst nur im Regex-Editor gaebe: ohne ihn bliebe
+        // eine zu weit geratene eigene Regel fuer die Zielgruppe dieses
+        // Dialogs unwiderruflich.
+        var profil = SchreibeProfil();
+        var dialoge = new FakeDialogService { AlwaysReplaceConfirmed = true };
+
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        modell.ShowTextCommand.Execute(null);
+        modell.Text!.InputText = "Zugriff über FW123456 gemeldet.";
+
+        modell.Text.RequestAlwaysReplace("FW123456");
+        await Task.Yield();
+
+        modell.Text.RefreshPreview();
+        var fund = Assert.Single(modell.Text.Matches);
+        Assert.True(fund.IsUserRule);
+        Assert.DoesNotContain("FW123456", modell.Text.ResultText, StringComparison.Ordinal);
+
+        fund.RemoveRuleCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Equal(("fw", (string?)null), dialoge.LastRemoveTextRule);
+        Assert.Empty(modell.Session!.Profile.TextRules);
+
+        // Und die Wirkung ist sofort weg, nicht erst beim naechsten
+        // Profilwechsel: die Engine wurde verworfen.
+        modell.Text.RefreshPreview();
+        Assert.Empty(modell.Text.Matches);
+        Assert.Contains("FW123456", modell.Text.ResultText, StringComparison.Ordinal);
+        Assert.Equal("Regel „fw“ gelöscht.", modell.StatusText);
+    }
+
+    [Fact]
+    public async Task Ohne_Bestaetigung_bleibt_die_Regel_stehen()
+    {
+        var profil = SchreibeProfil();
+        var dialoge = new FakeDialogService
+        {
+            AlwaysReplaceConfirmed = true,
+            RemoveTextRuleConfirmed = false,
+        };
+
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        modell.ShowTextCommand.Execute(null);
+        modell.Text!.InputText = "Zugriff über FW123456 gemeldet.";
+
+        modell.Text.RequestAlwaysReplace("FW123456");
+        await Task.Yield();
+
+        modell.Text.RefreshPreview();
+        Assert.Single(modell.Text.Matches).RemoveRuleCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Single(modell.Session!.Profile.TextRules);
+    }
 }

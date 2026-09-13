@@ -8,9 +8,11 @@ namespace Obfuskation.Gui.ViewModels;
 /// <summary>
 /// Der Dialog "Immer ersetzen…": legt aus einem Beispielwert eine
 /// Ersetzungsregel an, ohne dass der Anwender einen regulaeren Ausdruck sehen
-/// oder schreiben muss. Er fragt drei Dinge in Anwendersprache -- was, wie
-/// weit, wo -- und schreibt bei "Uebernehmen" unmittelbar in das Profil oder
-/// die Erweiterungsdatei, die beide als Referenz hereinkommen.
+/// oder schreiben muss.
+/// Er fragt drei Dinge in Anwendersprache -- was, wie weit, wo -- und schreibt
+/// bei "Uebernehmen" unmittelbar in das Profil oder die Erweiterungsdatei, die
+/// beide als Referenz hereinkommen. "Uebernehmen und weiter" tut dasselbe und
+/// bleibt offen, fuer mehrere Begriffe hintereinander.
 ///
 /// Wie <see cref="TextRulesViewModel"/> traegt dieses Ansichtsmodell direkten
 /// Zugriff auf <see cref="Profile"/> und <see cref="ExtensionLibrary"/> und
@@ -59,41 +61,83 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     /// verwendet, damit es nur eine einzige Verdrahtung von Profil, Erweiterung
     /// und Aenderungsmeldung gibt.
     /// </param>
+    /// <param name="windowTitle">
+    /// Fenstertitel. Alle heutigen Einstiege lassen es bei der Vorgabe: der
+    /// Menueeintrag der Textansicht nennt bereits den markierten Wert, und
+    /// zwei Namen fuer dasselbe Fenster stifteten nur Verwirrung. Der
+    /// Parameter bleibt fuer einen Aufrufer, der es einmal anders braucht.
+    /// </param>
+    /// <param name="introText">
+    /// Einleitender Satz ueber den Fragen, oder <c>null</c> fuer keinen.
+    /// </param>
     public AlwaysReplaceViewModel(
         Profile profile,
         ExtensionLibrary extensions,
         string initialSample,
         string contextText,
         Action<bool> onApplied,
-        Func<TextRulesViewModel> createTextRulesViewModel)
+        Func<TextRulesViewModel> createTextRulesViewModel,
+        string windowTitle = "Immer ersetzen",
+        string? introText = null)
     {
         _profile = profile;
         _extensions = extensions;
         _contextText = contextText;
         _onApplied = onApplied;
         _createTextRulesViewModel = createTextRulesViewModel;
-        _sample = initialSample.Trim();
+        _sample = initialSample?.Trim() ?? "";
+
+        WindowTitle = windowTitle;
+        IntroText = introText;
 
         Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(profile, extensions));
         _selectedGenerator = Generators.FirstOrDefault(
             g => string.Equals(g.Name, "token", StringComparison.OrdinalIgnoreCase));
 
         ApplyCommand = new RelayCommand(Apply, () => HasSample);
+        ApplyAndContinueCommand = new RelayCommand(ApplyAndContinue, () => HasSample);
         CancelCommand = new RelayCommand(() => CloseRequested?.Invoke());
         EditManuallyCommand = new RelayCommand(EditManually);
 
         RefreshPreview();
     }
 
-    private string Trimmed => _sample.Trim();
+    /// <summary>Fenstertitel, vom Aufrufer gesetzt (siehe Konstruktor).</summary>
+    public string WindowTitle { get; }
 
-    /// <summary>Das "Was?"-Feld, vorbelegt mit der Auswahl, aber frei aenderbar.</summary>
+    /// <summary>Einleitender Satz ueber den Fragen, oder <c>null</c>.</summary>
+    public string? IntroText { get; }
+
+    public bool HasIntroText => IntroText is not null;
+
+    /// <summary>
+    /// Steht anstelle der Fragen da, solange nichts eingetragen ist. Ohne ihn
+    /// wirkte der Dialog leer und kaputt. Die Textansicht sperrt ihren
+    /// Menueeintrag inzwischen ohne Markierung, der Fall kann aber weiterhin
+    /// eintreten -- etwa wenn jemand das Feld von Hand leert.
+    /// </summary>
+    public string EmptyHint =>
+        "Noch nichts markiert. Den Begriff hier eintippen — oder den Dialog schließen, "
+        + "die Stelle im Text markieren und mit der rechten Maustaste „… immer ersetzen…“ wählen.";
+
+    private string Trimmed => _sample?.Trim() ?? "";
+
+    /// <summary>
+    /// Das "Was?"-Feld, vorbelegt mit der Auswahl, aber frei aenderbar.
+    ///
+    /// Der Setter nimmt <c>null</c> an, obwohl der Typ es nicht zulaesst: die
+    /// zweiseitige Bindung des Eingabefeldes schreibt beim Leeren einen Wert
+    /// zurueck, ueber dessen Beschaffenheit die Oberflaeche entscheidet, nicht
+    /// diese Klasse. Ein <c>null</c> hier riss zuvor jeden Lesezugriff auf
+    /// <see cref="Trimmed"/> mit -- und eine Ausnahme im Aufbau eines modalen
+    /// Fensters beendet den Prozess.
+    /// </summary>
     public string Sample
     {
         get => _sample;
         set
         {
-            if (!SetProperty(ref _sample, value))
+            if (!SetProperty(ref _sample, value ?? ""))
                 return;
 
             OnPropertyChanged(nameof(HasSample));
@@ -103,6 +147,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
             OnPropertyChanged(nameof(HasPrefixHint));
             OnPropertyChanged(nameof(PrefixHint));
             ApplyCommand.RaiseCanExecuteChanged();
+            ApplyAndContinueCommand.RaiseCanExecuteChanged();
             RefreshPreview();
         }
     }
@@ -231,14 +276,33 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     }
 
     public RelayCommand ApplyCommand { get; }
+
+    /// <summary>Anlegen, ohne den Dialog zu schliessen (siehe <see cref="ApplyAndContinue"/>).</summary>
+    public RelayCommand ApplyAndContinueCommand { get; }
+
     public RelayCommand CancelCommand { get; }
     public RelayCommand EditManuallyCommand { get; }
 
-    /// <summary>Ob "Uebernehmen" gewaehlt wurde, statt abzubrechen.</summary>
+    /// <summary>
+    /// Ob mindestens eine Regel entstanden ist. Bleibt auch dann <c>true</c>,
+    /// wenn nach "Uebernehmen und weiter" mit "Abbrechen" geschlossen wird --
+    /// sonst rechnete der Aufrufer die Vorschau nicht neu, und die angelegten
+    /// Regeln blieben unsichtbar.
+    /// </summary>
     public bool Confirmed { get; private set; }
 
-    /// <summary>Der Name der angelegten Regel -- fuer die Statuszeile des Aufrufers.</summary>
+    /// <summary>Der Name der zuletzt angelegten Regel -- fuer die Statuszeile des Aufrufers.</summary>
     public string RuleName { get; private set; } = "";
+
+    private readonly List<string> _createdRuleNames = new();
+
+    /// <summary>Alle Regeln, die dieser Dialog angelegt hat, in der Reihenfolge ihrer Entstehung.</summary>
+    public IReadOnlyList<string> CreatedRuleNames => _createdRuleNames;
+
+    public bool HasCreatedRules => _createdRuleNames.Count > 0;
+
+    /// <summary>Was in diesem Durchgang schon entstanden ist -- die Rueckmeldung, die der offene Dialog sonst nicht gaebe.</summary>
+    public string CreatedSummary => "Angelegt: " + string.Join(", ", _createdRuleNames);
 
     public event Action? CloseRequested;
 
@@ -303,10 +367,15 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     private SamplePattern EffectivePattern()
         => UseShape && ShapeOption is not null ? ShapeOption : PatternFromSample.Literal(Trimmed);
 
-    private void Apply()
+    /// <summary>
+    /// Legt die Regel an und meldet sie dem Aufrufer. Liefert <c>false</c>,
+    /// wenn nichts einzutragen war -- die Schaltflaechen sind dann ohnehin
+    /// gesperrt, der Fall bleibt als Zusicherung stehen.
+    /// </summary>
+    private bool CreateRule()
     {
         if (!HasSample)
-            return;
+            return false;
 
         var pattern = EffectivePattern().Pattern;
         var ruleName = MakeUniqueRuleName(PatternFromSample.SuggestRuleName(Trimmed));
@@ -325,9 +394,41 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
         }
 
         RuleName = ruleName;
+        _createdRuleNames.Add(ruleName);
         Confirmed = true;
         _onApplied(!UseExtension);
-        CloseRequested?.Invoke();
+        return true;
+    }
+
+    private void Apply()
+    {
+        if (CreateRule())
+            CloseRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// Legt die Regel an und laesst den Dialog offen, mit geleertem
+    /// "Was?"-Feld: mehrere verschiedene Begriffe hintereinander, ohne ihn je
+    /// neu zu oeffnen. Markieren im Text geht so nicht -- der Dialog ist
+    /// modal --, wohl aber Eintippen, und wer seine eigenen Kennungen kennt,
+    /// ist damit schneller als ueber fuenfmaliges Oeffnen.
+    ///
+    /// Die Eindeutigkeit der Namen ueber mehrere Durchgaenge stellt sich von
+    /// selbst her: <see cref="MakeUniqueRuleName"/> liest Profil und
+    /// Erweiterung jedes Mal neu, und die eben angelegte Regel steht bereits
+    /// darin.
+    /// </summary>
+    private void ApplyAndContinue()
+    {
+        if (!CreateRule())
+            return;
+
+        // Ueber den Setter, nicht ueber das Feld: er zieht Vorschau,
+        // Beschreibungen und die Ausfuehrbarkeit der Schaltflaechen nach.
+        Sample = "";
+
+        OnPropertyChanged(nameof(HasCreatedRules));
+        OnPropertyChanged(nameof(CreatedSummary));
     }
 
     private void EditManually()

@@ -40,11 +40,23 @@ public sealed class TextViewModel : ObservableObject
     private readonly TextRuleEngine _ruleEngine = new();
     private readonly Action? _onRealRunCompleted;
     private readonly Action<string>? _onAlwaysReplaceRequested;
+    private readonly Action<string>? _onRemoveRuleRequested;
     private readonly TimeSpan _debounceDelay;
+
+    /// <summary>
+    /// Die Namen der eingebauten Regeln. Ein Fund, dessen Regel nicht dazu
+    /// gehoert, stammt aus einer selbst angelegten -- nur die laesst sich in
+    /// der Fundliste wieder entfernen (siehe <see cref="TextMatchViewModel.IsUserRule"/>).
+    /// </summary>
+    private static readonly HashSet<string> EingebauteRegeln =
+        new(ProfileScaffolder.DefaultTextRules().Select(rule => rule.Name), StringComparer.OrdinalIgnoreCase);
 
     private string _inputText = "";
     private string _resultText = "";
     private string _matchSummary = "";
+    private IReadOnlyList<TextSegment> _inputSegments = [];
+    private IReadOnlyList<TextSegment> _resultSegments = [];
+    private bool _isEditing = true;
     private TextDirection _direction;
     private CancellationTokenSource? _debounceCts;
     private string? _storeWarning;
@@ -77,12 +89,14 @@ public sealed class TextViewModel : ObservableObject
         TextDirection initialDirection = TextDirection.Forward,
         Action? onRealRunCompleted = null,
         Action<string>? onAlwaysReplaceRequested = null,
+        Action<string>? onRemoveRuleRequested = null,
         TimeSpan? debounceDelay = null)
     {
         _session = session;
         _direction = initialDirection;
         _onRealRunCompleted = onRealRunCompleted;
         _onAlwaysReplaceRequested = onAlwaysReplaceRequested;
+        _onRemoveRuleRequested = onRemoveRuleRequested;
         _debounceDelay = debounceDelay ?? TimeSpan.FromMilliseconds(300);
 
         // Eine Sammelbenachrichtigung statt an jeder einzelnen Clear()/Add()-
@@ -116,7 +130,8 @@ public sealed class TextViewModel : ObservableObject
     /// entweder liess sie sich beim Betreten nicht anlegen, oder Vorschau und
     /// echter Lauf sind auseinandergelaufen (siehe <see cref="RunReal"/>).
     /// Beides betrifft die Verlaesslichkeit des Gezeigten und darf nicht in
-    /// der Fundzeile untergehen.
+    /// der Fundzeile untergehen. Ueber <see cref="ReportViewError"/> landen
+    /// hier auch Fehler aus der Ansicht selbst (Zwischenablage, Datei-IO).
     /// </summary>
     public string? StoreWarning
     {
@@ -146,6 +161,13 @@ public sealed class TextViewModel : ObservableObject
         _onAlwaysReplaceRequested?.Invoke(sample);
     }
 
+    /// <summary>
+    /// Meldet einen Fehler aus dem Codebehind (Zwischenablage, Datei-IO) in der
+    /// Warnzeile der Ansicht. Der Weg ueber <see cref="StoreWarning"/> ist
+    /// bewusst gewaehlt: sie ist die einzige dauerhaft sichtbare Meldungszeile.
+    /// </summary>
+    public void ReportViewError(string message) => StoreWarning = message;
+
     public ObservableCollection<TextMatchViewModel> Matches { get; } = new();
 
     public bool HasMatches => Matches.Count > 0;
@@ -168,6 +190,104 @@ public sealed class TextViewModel : ObservableObject
     {
         get => _resultText;
         private set => SetProperty(ref _resultText, value);
+    }
+
+    /// <summary>
+    /// Der Eingabetext des letzten Laufs, zerlegt in hervorhebbare Abschnitte:
+    /// die Prueffassung der linken Seite. Erst sie beantwortet die Frage, an
+    /// der die ganze Ansicht haengt -- was wurde erkannt, und was eben nicht.
+    /// Farblos heisst: von keiner Regel erfasst, ginge so hinaus.
+    /// </summary>
+    public IReadOnlyList<TextSegment> InputSegments
+    {
+        get => _inputSegments;
+        private set => SetProperty(ref _inputSegments, value);
+    }
+
+    /// <summary><see cref="ResultText"/> in denselben Abschnitten, parallel gesetzt.</summary>
+    public IReadOnlyList<TextSegment> ResultSegments
+    {
+        get => _resultSegments;
+        private set => SetProperty(ref _resultSegments, value);
+    }
+
+    /// <summary>
+    /// Setzt Ergebnistext und beide Abschnittslisten in einem Zug. Jeder Pfad,
+    /// der <see cref="ResultText"/> aendert, laeuft hier durch -- sonst
+    /// zeigten die Farben einen Stand, den es nicht mehr gibt.
+    ///
+    /// Ohne uebergebene Abschnitte entsteht je ein einziger unauffaelliger:
+    /// der richtige Ausdruck fuer "hier wurde nichts erkannt oder nichts
+    /// zugeordnet".
+    /// </summary>
+    private void SetResult(
+        string text,
+        IReadOnlyList<TextSegment>? inputSegments = null,
+        IReadOnlyList<TextSegment>? resultSegments = null)
+    {
+        ResultText = text;
+        InputSegments = inputSegments ?? Plain(_lastRunInput);
+        ResultSegments = resultSegments ?? Plain(text);
+    }
+
+    private static IReadOnlyList<TextSegment> Plain(string text)
+        => text.Length == 0 ? [] : [new TextSegment(text, TextSegmentKind.Normal)];
+
+    /// <summary>
+    /// Ob die linke Seite gerade das beschreibbare Feld zeigt statt der
+    /// farbigen Prueffassung. Ein Eingabefeld kann in Avalonia keine
+    /// Hintergruende je Textabschnitt tragen, ein <c>SelectableTextBlock</c>
+    /// kein Tippen -- beides zugleich gibt es nicht, also gibt es zwei
+    /// Zustaende.
+    ///
+    /// Solange nichts dasteht, gilt das Bearbeiten: vor einer leeren, nicht
+    /// beschreibbaren Flaeche zu stehen waere das denkbar schlechteste
+    /// Willkommen.
+    /// </summary>
+    public bool IsEditing
+    {
+        get => _isEditing;
+        private set
+        {
+            if (SetProperty(ref _isEditing, value))
+                OnPropertyChanged(nameof(EditToggleLabel));
+        }
+    }
+
+    /// <summary>Aufschrift des Umschalters -- sagt, wohin er fuehrt, nicht wo man ist.</summary>
+    public string EditToggleLabel => IsEditing ? "Fertig" : "Bearbeiten";
+
+    /// <summary>
+    /// Wechselt zwischen Bearbeiten und Pruefen. Beim Verlassen des
+    /// Bearbeitens wird eine ausstehende Entprellung eingeholt (wie in
+    /// <see cref="RunReal"/>): sonst gehoerten die Farben zum Stand vor der
+    /// letzten Aenderung, waehrend daneben schon der neue Text steht.
+    /// </summary>
+    public void ToggleEditing()
+    {
+        if (!IsEditing)
+        {
+            IsEditing = true;
+            return;
+        }
+
+        _debounceCts?.Cancel();
+        RefreshPreview();
+        IsEditing = false;
+    }
+
+    /// <summary>
+    /// Uebernimmt Text von aussen (Einfuegen, Datei, Ziehen) und zeigt ihn
+    /// sofort geprueft an -- ohne Entprellung, denn hier hat niemand getippt,
+    /// auf dessen naechsten Tastenschlag zu warten waere.
+    /// </summary>
+    public void SetInputFromOutside(string text)
+    {
+        InputText = text;
+
+        _debounceCts?.Cancel();
+        RefreshPreview();
+        IsEditing = text.Length == 0;
     }
 
     /// <summary>Kurzfassung der Funde, etwa "Gefunden: 3× email · 1× iban".</summary>
@@ -248,7 +368,8 @@ public sealed class TextViewModel : ObservableObject
             _lastFound = Array.Empty<TextMatch>();
             _alignment = null;
             _lastRunResult = "";
-            ResultText = "";
+            _lastRunInput = "";
+            SetResult("");
             MatchSummary = "";
             return;
         }
@@ -256,7 +377,8 @@ public sealed class TextViewModel : ObservableObject
         if (!_session.TryGetEngine(out var engine, out _) || engine is null)
         {
             Matches.Clear();
-            ResultText = text;
+            _lastRunInput = text;
+            SetResult(text);
             MatchSummary = "Die Konfiguration ist fehlerhaft — siehe Profil.";
             return;
         }
@@ -284,7 +406,8 @@ public sealed class TextViewModel : ObservableObject
                                        or MappingLockedException or GenerationException)
         {
             Matches.Clear();
-            ResultText = text;
+            _lastRunInput = text;
+            SetResult(text);
             MatchSummary = ex.Message;
             return;
         }
@@ -316,13 +439,18 @@ public sealed class TextViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is ConfigurationException or MappingConflictException or MappingLockedException)
         {
-            ResultText = text;
+            _lastRunInput = text;
+            SetResult(text);
             MatchSummary = ex.Message;
             return;
         }
 
         _lastRunResult = Encoding.UTF8.GetString(result.Content);
-        ResultText = _lastRunResult;
+
+        // Die Rueckuebersetzung kennt keine Fundstellen zum Hervorheben (siehe
+        // unten): beide Seiten bleiben einfarbig.
+        _lastRunInput = text;
+        SetResult(_lastRunResult);
 
         // Die Rueckuebersetzung findet ueber die Ersetzungstabelle statt,
         // nicht ueber Textregeln -- es gibt darum keine Fundstellenliste zum
@@ -347,7 +475,9 @@ public sealed class TextViewModel : ObservableObject
             var replacement = canToggle ? _alignment![i] : match.Value;
 
             var eintrag = new TextMatchViewModel(
-                match.Value, replacement, match.Rule.Name, canToggle, RequestAlwaysReplace);
+                match.Value, replacement, match.Rule.Name, canToggle,
+                !EingebauteRegeln.Contains(match.Rule.Name),
+                RequestAlwaysReplace, _onRemoveRuleRequested);
             eintrag.IncludedChanged += RecomputeResultText;
             Matches.Add(eintrag);
         }
@@ -384,26 +514,53 @@ public sealed class TextViewModel : ObservableObject
     {
         if (_lastFound.Count == 0 || _alignment is null)
         {
-            ResultText = _lastRunResult;
+            // Ohne zugeordnete Ersatzwerte laesst sich nicht sagen, welches
+            // Stueck der Ausgabe zu welchem Fund gehoert -- dann lieber gar
+            // keine Farbe als eine falsche.
+            SetResult(_lastRunResult);
             return;
         }
 
         var text = _lastRunInput;
         var builder = new StringBuilder(text.Length);
+        var eingabe = new List<TextSegment>();
+        var ausgabe = new List<TextSegment>();
         var position = 0;
 
         for (var i = 0; i < _lastFound.Count; i++)
         {
             var match = _lastFound[i];
-            var ersatz = Matches[i].IsIncluded ? Matches[i].Replacement : match.Value;
+            var mitnehmen = Matches[i].IsIncluded;
+            var ersatz = mitnehmen ? Matches[i].Replacement : match.Value;
+            var art = mitnehmen ? TextSegmentKind.Replaced : TextSegmentKind.Excluded;
+
+            if (match.Start > position)
+            {
+                var dazwischen = text[position..match.Start];
+                eingabe.Add(new TextSegment(dazwischen, TextSegmentKind.Normal));
+                ausgabe.Add(new TextSegment(dazwischen, TextSegmentKind.Normal));
+            }
+
+            // Links steht der Originalwert, rechts der Ersatzwert -- dieselbe
+            // Farbe an beiden Stellen, damit sich die eine der anderen
+            // zuordnen laesst.
+            eingabe.Add(new TextSegment(match.Value, art));
+            ausgabe.Add(new TextSegment(ersatz, art));
 
             builder.Append(text, position, match.Start - position);
             builder.Append(ersatz);
             position = match.End;
         }
 
+        if (position < text.Length)
+        {
+            var rest = text[position..];
+            eingabe.Add(new TextSegment(rest, TextSegmentKind.Normal));
+            ausgabe.Add(new TextSegment(rest, TextSegmentKind.Normal));
+        }
+
         builder.Append(text, position, text.Length - position);
-        ResultText = builder.ToString();
+        SetResult(builder.ToString(), eingabe, ausgabe);
     }
 
     /// <summary>
@@ -521,7 +678,7 @@ public sealed class TextViewModel : ObservableObject
             if (IsReverse)
             {
                 _lastRunResult = text;
-                ResultText = text;
+                SetResult(text);
             }
             else
             {
@@ -557,6 +714,33 @@ public sealed class TextViewModel : ObservableObject
 }
 
 /// <summary>
+/// Wie ein Abschnitt der Textansicht hervorgehoben wird. Dieselbe Einteilung
+/// gilt fuer beide Seiten: links am Originalwert, rechts am Ersatzwert.
+/// </summary>
+public enum TextSegmentKind
+{
+    /// <summary>
+    /// Von keiner Regel erfasst -- also das, was ohne weiteres Zutun im
+    /// Klartext hinausginge. Bleibt ohne Farbe: die Abwesenheit von Farbe ist
+    /// hier die eigentliche Aussage.
+    /// </summary>
+    Normal,
+
+    /// <summary>Erkannt und ersetzt (Haekchen an).</summary>
+    Replaced,
+
+    /// <summary>Erkannt, aber bewusst im Klartext behalten (Haekchen aus).</summary>
+    Excluded,
+}
+
+/// <summary>
+/// Ein Abschnitt einer der beiden Textseiten. Die Verkettung aller
+/// <see cref="Text"/> ergibt wieder genau die jeweilige Seite -- darauf
+/// verlaesst sich die Anzeige, und ein Test haelt es fest.
+/// </summary>
+public sealed record TextSegment(string Text, TextSegmentKind Kind);
+
+/// <summary>
 /// Ein einzelner Fund in der Textansicht: Original, Ersatzwert, die Regel,
 /// die gegriffen hat, und ob er fuer diesen Durchgang mitgilt.
 /// </summary>
@@ -566,24 +750,36 @@ public sealed class TextMatchViewModel : ObservableObject
 
     public TextMatchViewModel(
         string original, string replacement, string ruleName, bool canToggle,
-        Action<string>? onAlwaysReplace = null)
+        bool isUserRule = false,
+        Action<string>? onAlwaysReplace = null,
+        Action<string>? onRemoveRule = null)
     {
         Original = original;
         Replacement = replacement;
         RuleName = ruleName;
         CanToggle = canToggle;
+        IsUserRule = isUserRule;
 
-        // Eigenes Kommando statt eines gebundenen Aufrufs auf das aeussere
+        // Eigene Kommandos statt gebundener Aufrufe auf das aeussere
         // Ansichtsmodell: die DataTemplate der Fundstellenliste hat als
         // DataContext genau diesen Fund, nicht die TextViewModel-Instanz --
-        // ohne dieses Kommando gaebe es aus der Liste heraus keinen Weg zu
-        // "Immer ersetzen…".
+        // ohne sie gaebe es aus der Liste heraus keinen Weg zu
+        // "Immer ersetzen…" und keinen zurueck.
         AlwaysReplaceCommand = new RelayCommand(() => onAlwaysReplace?.Invoke(Original));
+        RemoveRuleCommand = new RelayCommand(() => onRemoveRule?.Invoke(RuleName));
     }
 
     public string Original { get; }
     public string Replacement { get; }
     public string RuleName { get; }
+
+    /// <summary>
+    /// Ob dieser Fund aus einer selbst angelegten Regel stammt statt aus einer
+    /// der eingebauten. Nur dann laesst sie sich hier wieder entfernen -- eine
+    /// zu weit geratene eigene Regel (etwa "alles dieser Form" auf einem Datum)
+    /// braucht einen Rueckweg, der nicht ueber den Regex-Editor fuehrt.
+    /// </summary>
+    public bool IsUserRule { get; }
 
     /// <summary>
     /// Ob sich dieser Fund einzeln abwaehlen laesst. Ist er es nicht (die
@@ -594,6 +790,9 @@ public sealed class TextMatchViewModel : ObservableObject
 
     /// <summary>Legt aus diesem Fund eine dauerhafte Regel an (siehe <see cref="AlwaysReplaceViewModel"/>).</summary>
     public RelayCommand AlwaysReplaceCommand { get; }
+
+    /// <summary>Loescht die selbst angelegte Regel wieder; nur sinnvoll bei <see cref="IsUserRule"/>.</summary>
+    public RelayCommand RemoveRuleCommand { get; }
 
     public bool IsIncluded
     {

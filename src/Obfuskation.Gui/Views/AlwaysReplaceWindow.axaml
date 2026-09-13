@@ -6,7 +6,7 @@
         mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="560"
         x:Class="Obfuskation.Gui.Views.AlwaysReplaceWindow"
         x:DataType="vm:AlwaysReplaceViewModel"
-        Title="Immer ersetzen"
+        Title="{Binding WindowTitle}"
         Width="620" MinWidth="540" MaxHeight="700" SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         Icon="avares://obfuskation-gui/Assets/obfuskation.png"
@@ -22,11 +22,21 @@
     <Border Grid.Row="0" Classes="card">
       <StackPanel Spacing="14">
 
+        <!-- Nur der Einstieg aus der Textansicht setzt diesen Satz: dort
+             kommt jemand her, weil etwas uebersehen wurde, nicht weil er
+             etwas "immer ersetzen" will. -->
+        <TextBlock Text="{Binding IntroText}" Classes="muted" TextWrapping="Wrap"
+                   IsVisible="{Binding HasIntroText}"/>
+
         <!-- Was? -->
         <StackPanel Spacing="4">
           <TextBlock Text="Was?" Classes="muted"/>
           <TextBox Text="{Binding Sample}" Classes="mono"
                    PlaceholderText="markierter Begriff, z. B. FW123456"/>
+          <!-- Ohne diesen Hinweis saehe der Dialog ohne Markierung schlicht
+               leer und kaputt aus: alles unterhalb haengt an HasSample. -->
+          <TextBlock Text="{Binding EmptyHint}" Classes="muted small" TextWrapping="Wrap"
+                     IsVisible="{Binding !HasSample}"/>
         </StackPanel>
 
         <StackPanel Spacing="8" IsVisible="{Binding HasSample}">
@@ -109,11 +119,20 @@
       </StackPanel>
     </Border>
 
-    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right"
-                Spacing="8" Margin="0,12,0,0">
-      <Button Content="Muster von Hand bearbeiten…" Classes="flat" Command="{Binding EditManuallyCommand}"/>
-      <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
-      <Button Content="Übernehmen" Classes="primary" Command="{Binding ApplyCommand}"/>
+    <StackPanel Grid.Row="1" Spacing="8" Margin="0,12,0,0">
+
+      <!-- Die einzige Rueckmeldung, die der offen bleibende Dialog ueber
+           "Übernehmen und weiter" gibt: sonst weiss niemand, was schon steht. -->
+      <TextBlock Text="{Binding CreatedSummary}" Classes="accent small" TextWrapping="Wrap"
+                 IsVisible="{Binding HasCreatedRules}"/>
+
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+        <Button Content="Muster von Hand bearbeiten…" Classes="flat" Command="{Binding EditManuallyCommand}"/>
+        <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
+        <Button Content="Übernehmen und weiter" Command="{Binding ApplyAndContinueCommand}"
+                ToolTip.Tip="Regel anlegen und gleich die nächste eintragen — der Dialog bleibt offen"/>
+        <Button Content="Übernehmen" Classes="primary" Command="{Binding ApplyCommand}"/>
+      </StackPanel>
     </StackPanel>
   </Grid>
 </Window>

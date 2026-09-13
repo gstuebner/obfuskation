@@ -41,27 +41,82 @@
     </Border>
 
     <!-- ========================================== Text | Ergebnis ======= -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,12,*">
+    <Grid Grid.Row="1" ColumnDefinitions="*,12,*" RowDefinitions="*,Auto">
 
-      <Border Grid.Column="0" Classes="card" Margin="0">
+      <!-- AllowDrop sitzt an der Karte, nicht am Eingabefeld: gezogen werden
+           darf in beiden Zustaenden, auch in der Prueffassung. -->
+      <Border Grid.Column="0" Classes="card" Margin="0" DragDrop.AllowDrop="True">
         <Grid RowDefinitions="Auto,*">
-          <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
             <TextBlock Grid.Column="0" Text="Text" Classes="card-title" VerticalAlignment="Center"/>
-            <Button Grid.Column="1" Content="Einfügen" Classes="flat" Click="OnPaste"
+            <Button Grid.Column="1" Content="{Binding EditToggleLabel}" Classes="flat"
+                    Click="OnToggleEditing"
+                    ToolTip.Tip="Zwischen Bearbeiten und der farbigen Prüffassung wechseln"/>
+            <Button Grid.Column="2" Content="Einfügen" Classes="flat" Click="OnPaste"
                     ToolTip.Tip="Text aus der Zwischenablage einfügen"/>
-            <Button Grid.Column="2" Content="Datei…" Classes="flat" Click="OnOpenFile"
+            <Button Grid.Column="3" Content="Datei…" Classes="flat" Click="OnOpenFile"
                     ToolTip.Tip="Textdatei öffnen"/>
           </Grid>
 
-          <!-- AllowDrop traegt das Ziel fuer OnDrop im Codebehind; eine
-               gezogene Datei ersetzt den Text wie "Einfügen". -->
+          <!-- Zwei Zustaende an derselben Stelle. Ein Eingabefeld kann in
+               Avalonia keine Hintergruende je Textabschnitt tragen, ein
+               SelectableTextBlock kein Tippen — beides zugleich gibt es nicht.
+               Die Prueffassung ist der Regelfall (Text kommt fast immer ueber
+               Einfügen oder Datei herein), das Feld der Ausnahmefall. -->
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                        IsVisible="{Binding !IsEditing}">
+            <SelectableTextBlock x:Name="InputBlock" TextWrapping="Wrap"
+                                 ContextRequested="OnInputContextRequested">
+              <SelectableTextBlock.ContextFlyout>
+                <!-- Ein eigenes Menue verdraengt das eingebaute. Hier ist das
+                     unbedenklich: die Prueffassung ist schreibgeschuetzt, es
+                     faellt also nur Ausschneiden und Einfügen weg, was auf ihr
+                     ohnehin nichts zu suchen haette. Dasselbe Menue mit den
+                     nachgebauten Standardeintraegen traegt auch das
+                     Eingabefeld, damit "immer ersetzen…" in beiden Zustaenden
+                     am selben Ort liegt. -->
+                <MenuFlyout>
+                  <MenuItem Header="Kopieren" InputGesture="Ctrl+C" Click="OnCopySelection"/>
+                  <MenuItem Header="Alles auswählen" InputGesture="Ctrl+A" Click="OnSelectAll"/>
+                  <Separator/>
+                  <MenuItem x:Name="AlwaysReplaceItem" Click="OnAlwaysReplaceSelection"/>
+                </MenuFlyout>
+              </SelectableTextBlock.ContextFlyout>
+            </SelectableTextBlock>
+          </ScrollViewer>
+
           <TextBox Grid.Row="1" x:Name="InputBox" Text="{Binding InputText}"
+                   IsVisible="{Binding IsEditing}"
                    AcceptsReturn="True" TextWrapping="Wrap"
                    ScrollViewer.VerticalScrollBarVisibility="Auto"
-                   DragDrop.AllowDrop="True"
-                   PlaceholderText="Text einfügen, tippen oder eine Datei hierher ziehen …"/>
+                   ContextRequested="OnEditContextRequested"
+                   PlaceholderText="Text einfügen, tippen oder eine Datei hierher ziehen …">
+            <!-- Eigenes Menue verdraengt das eingebaute; hier ist das der
+                 Preis fuer "immer ersetzen…" an genau der Stelle, an der ein
+                 Anfaenger markiert. Die vier Standardeintraege rufen dieselben
+                 TextBox-Methoden wie das native Menue (Cut/Copy/Paste/SelectAll),
+                 es geht also nichts verloren. -->
+            <TextBox.ContextFlyout>
+              <MenuFlyout>
+                <MenuItem Header="Ausschneiden" InputGesture="Ctrl+X" Click="OnEditCut"/>
+                <MenuItem Header="Kopieren" InputGesture="Ctrl+C" Click="OnEditCopy"/>
+                <MenuItem Header="Einfügen" InputGesture="Ctrl+V" Click="OnEditPaste"/>
+                <MenuItem Header="Alles auswählen" InputGesture="Ctrl+A" Click="OnEditSelectAll"/>
+                <Separator/>
+                <MenuItem x:Name="AlwaysReplaceEditItem" Click="OnAlwaysReplaceSelection"/>
+              </MenuFlyout>
+            </TextBox.ContextFlyout>
+          </TextBox>
         </Grid>
       </Border>
+
+      <!-- Der Hinweis gehoert zur linken Seite und nicht in die Fundliste:
+           genau dort markiert ja, wer etwas nachreichen will. Dass die
+           eingebauten Kategorien nicht alles sehen, ist zudem das, was ein
+           Einsteiger nicht von selbst annimmt, darum steht es dauerhaft da. -->
+      <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted small" Margin="2,6,0,0"
+                 IsVisible="{Binding IsForward}" TextWrapping="Wrap"
+                 Text="Noch etwas Vertrauliches ohne Farbe? Links markieren, rechte Maustaste → „… immer ersetzen…“ (oder Strg+M) — der Dialog fragt in Klartext, kein regulärer Ausdruck nötig."/>
 
       <Border Grid.Column="2" Classes="card" Margin="0">
         <Grid RowDefinitions="Auto,*">
@@ -72,9 +127,9 @@
             <Button Grid.Column="2" Content="Speichern…" Classes="flat" Click="OnSaveResult"/>
           </Grid>
 
-          <TextBox Grid.Row="1" Text="{Binding ResultText, Mode=OneWay}" Classes="mono"
-                   IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                   ScrollViewer.VerticalScrollBarVisibility="Auto"/>
+          <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <SelectableTextBlock x:Name="ResultBlock" Classes="mono" TextWrapping="Wrap"/>
+          </ScrollViewer>
         </Grid>
       </Border>
     </Grid>
@@ -85,7 +140,31 @@
          einzeln abwaehlbaren Fundstellen (siehe TextViewModel.RefreshReverse). -->
     <Border Grid.Row="2" Classes="card" Margin="0,0,0,0" IsVisible="{Binding IsForward}">
       <StackPanel Spacing="6">
-        <TextBlock Text="{Binding MatchSummary}" Classes="muted small"/>
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <TextBlock Grid.Column="0" Text="{Binding MatchSummary}" Classes="muted small"
+                     VerticalAlignment="Center" TextWrapping="Wrap"/>
+
+          <!-- Die Legende erklaert die Ansicht ohne einen Satz Hilfetext: was
+               farbig ist, ist versorgt; was farblos bleibt, ginge im Klartext
+               hinaus. Das ist die eigentliche Aussage der ganzen Seite. -->
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                      VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+                      Background="#8C3EA25B" BorderThickness="1"
+                      BorderBrush="{DynamicResource BrushBorder}"/>
+              <TextBlock Text="ersetzt" Classes="muted small"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
+                      Background="#8CD97706" BorderThickness="1"
+                      BorderBrush="{DynamicResource BrushBorder}"/>
+              <TextBlock Text="bewusst behalten" Classes="muted small"/>
+            </StackPanel>
+            <TextBlock Text="ohne Farbe = nicht erkannt" Classes="muted small"/>
+          </StackPanel>
+        </Grid>
 
         <ScrollViewer MaxHeight="160" IsVisible="{Binding HasMatches}">
           <ItemsControl ItemsSource="{Binding Matches}">
@@ -100,20 +179,27 @@
                   <TextBlock Grid.Column="2" Text="→" Classes="accent small"/>
                   <TextBlock Grid.Column="3" Text="{Binding Replacement}" Classes="mono small accent"
                              TextTrimming="CharacterEllipsis"/>
+                  <!-- Zwei Knoepfe an derselben Stelle, je nach Herkunft der
+                       Regel. Bei einer selbst angelegten waere "immer…"
+                       gegenstandslos (sie gilt bereits immer); gebraucht wird
+                       dort der Rueckweg, den es sonst nur im Regex-Editor gibt
+                       — also genau dort, wovor der schlichte Dialog bewahren
+                       soll. Die vier eingebauten Regeln bleiben unantastbar:
+                       fuer sie ist das Haekchen der richtige Weg, denn es gilt
+                       nur fuer diesen einen Durchgang. -->
                   <Button Grid.Column="4" Content="immer…" Classes="flat"
+                          IsVisible="{Binding !IsUserRule}"
                           Command="{Binding AlwaysReplaceCommand}"
                           ToolTip.Tip="Aus diesem Fund eine dauerhafte Ersetzungsregel anlegen"/>
+                  <Button Grid.Column="4" Content="Regel entfernen" Classes="flat"
+                          IsVisible="{Binding IsUserRule}"
+                          Command="{Binding RemoveRuleCommand}"
+                          ToolTip.Tip="Die selbst angelegte Regel wieder löschen"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
-
-        <!-- Haupteinstieg: wirkt auf die im Text markierte Textstelle, die die
-             Codebehind-Datei aus dem TextBox liest (siehe OnAlwaysReplace);
-             dieses Ansichtsmodell kennt keine Markierung, nur Zeichenketten. -->
-        <Button Content="Auswahl immer ersetzen…" Classes="flat" Click="OnAlwaysReplace"
-                ToolTip.Tip="Aus der markierten Textstelle eine Regel anlegen, die auch künftig automatisch greift — ohne regulären Ausdruck"/>
       </StackPanel>
     </Border>
 

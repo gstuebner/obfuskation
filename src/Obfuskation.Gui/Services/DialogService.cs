@@ -244,6 +244,27 @@ public sealed class DialogService : IDialogService
         return viewModel.Confirmed;
     }
 
+    public async Task<bool> AskRemoveTextRuleAsync(string ruleName, string? extensionPath)
+    {
+        var geltung = extensionPath is null
+            ? "Sie gilt danach in diesem Projekt nicht mehr."
+            : $"Sie gilt danach in keinem Projekt mehr (entfällt aus {extensionPath}).";
+
+        var window = new ConfirmWindow(
+            "Regel löschen",
+            $"Die Regel „{ruleName}“ wird gelöscht. {geltung} "
+            + "Bereits vergebene Pseudonyme bleiben in der Ersetzungstabelle — "
+            + "zurückübersetzen lässt sich weiterhin alles.",
+            new (string Label, string Result)[]
+            {
+                ("Abbrechen", "cancel"),
+                ("Löschen", "delete"),
+            });
+
+        // Ohne Auswahl (Titelleiste geschlossen) gilt die vorsichtige Richtung.
+        return await window.ShowDialog<string?>(_owner) == "delete";
+    }
+
     /// <summary>
     /// Vorschlag fuer den Namen der Ausgabedatei. Der Zusatz macht auf einen
     /// Blick klar, welche der beiden Dateien das Pseudonymisat ist — die

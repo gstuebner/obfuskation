@@ -174,4 +174,154 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
         Assert.False(modell.Confirmed);
         Assert.Empty(profil.TextRules);
     }
+
+    // ------------------------------------------------------------------
+    // "Uebernehmen und weiter": mehrere Begriffe, ohne den Dialog je neu zu
+    // oeffnen.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Uebernehmen_und_weiter_legt_an_und_laesst_den_Dialog_offen()
+    {
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
+
+        var geschlossen = false;
+        modell.CloseRequested += () => geschlossen = true;
+
+        modell.ApplyAndContinueCommand.Execute(null);
+
+        Assert.False(geschlossen);
+        Assert.True(modell.Confirmed);
+        Assert.Equal("", modell.Sample);
+        Assert.False(modell.HasSample);
+        Assert.Single(profil.TextRules);
+        Assert.Equal(new[] { "fw" }, modell.CreatedRuleNames);
+        Assert.True(modell.HasCreatedRules);
+        Assert.Equal("Angelegt: fw", modell.CreatedSummary);
+    }
+
+    [Fact]
+    public void Zwei_Durchgaenge_ergeben_zwei_verschieden_benannte_Regeln()
+    {
+        // MakeUniqueRuleName liest Profil und Erweiterung bei jedem Durchgang
+        // neu -- die eben angelegte Regel steht dabei schon drin.
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
+
+        modell.ApplyAndContinueCommand.Execute(null);
+        modell.Sample = "FW987654";
+        modell.ApplyCommand.Execute(null);
+
+        Assert.Equal(2, profil.TextRules.Count);
+        Assert.Equal(new[] { "fw", "fw2" }, modell.CreatedRuleNames);
+        Assert.Equal("fw2", modell.RuleName);
+    }
+
+    [Fact]
+    public void Abbrechen_nach_Uebernehmen_und_weiter_haelt_die_Bestaetigung()
+    {
+        // Sonst rechnete der Aufrufer die Vorschau nicht neu, und die bereits
+        // angelegte Regel bliebe unsichtbar -- obwohl sie im Profil steht.
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
+
+        modell.ApplyAndContinueCommand.Execute(null);
+        modell.CancelCommand.Execute(null);
+
+        Assert.True(modell.Confirmed);
+        Assert.Single(profil.TextRules);
+    }
+
+    [Fact]
+    public void Ohne_Eintrag_ist_kein_Anlegen_moeglich()
+    {
+        var modell = Erzeugen(NeuesProfil(), ExtensionLibrary.Empty, "");
+
+        Assert.False(modell.HasSample);
+        Assert.False(modell.ApplyCommand.CanExecute(null));
+        Assert.False(modell.ApplyAndContinueCommand.CanExecute(null));
+        Assert.False(modell.HasCreatedRules);
+    }
+
+    [Fact]
+    public void Die_Beschriftung_richtet_sich_nach_dem_Aufrufer()
+    {
+        var profil = NeuesProfil();
+
+        var ausDerDateiansicht = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
+        Assert.Equal("Immer ersetzen", ausDerDateiansicht.WindowTitle);
+        Assert.False(ausDerDateiansicht.HasIntroText);
+
+        var ausDerTextansicht = new AlwaysReplaceViewModel(
+            profil, ExtensionLibrary.Empty, "FW123456", "", _ => { },
+            () => Textregeln(profil, ExtensionLibrary.Empty),
+            "Nicht erkannte vertrauliche Daten",
+            "Diese Stelle wurde nicht automatisch erkannt.");
+
+        Assert.Equal("Nicht erkannte vertrauliche Daten", ausDerTextansicht.WindowTitle);
+        Assert.True(ausDerTextansicht.HasIntroText);
+    }
+
+    // ------------------------------------------------------------------
+    // Der Absturzweg: ein Dialog ohne Beispielwert. Aus der Dateiansicht kam
+    // er nie leer herein, aus der Textansicht war er unerreichbar -- der Fall
+    // lief nie, bis ein Knopf ihn eroeffnete, und beendete dann den Prozess.
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Ein_Dialog_ohne_Beispielwert_traegt_jede_Abfrage(string beispiel)
+    {
+        var modell = Erzeugen(NeuesProfil(), ExtensionLibrary.Empty, beispiel);
+
+        // Jede oeffentliche Abfrage einmal lesen: eine Ausnahme aus einer
+        // Bindung beim Aufbau eines modalen Fensters beendet den Prozess, und
+        // welche davon die Oberflaeche abfragt, entscheidet das XAML.
+        var ex = Record.Exception(() =>
+        {
+            _ = modell.Sample;
+            _ = modell.HasSample;
+            _ = modell.CanUseShape;
+            _ = modell.LiteralDescription;
+            _ = modell.ShapeDescription;
+            _ = modell.UseShape;
+            _ = modell.UseLiteral;
+            _ = modell.UseExtension;
+            _ = modell.UseProfile;
+            _ = modell.PrefixHint;
+            _ = modell.HasPrefixHint;
+            _ = modell.ExtensionPath;
+            _ = modell.ExtensionHasComments;
+            _ = modell.MatchSummary;
+            _ = modell.HasMatches;
+            _ = modell.EmptyHint;
+            _ = modell.WindowTitle;
+            _ = modell.HasIntroText;
+            _ = modell.CreatedSummary;
+            _ = modell.HasCreatedRules;
+            _ = modell.ApplyCommand.CanExecute(null);
+            _ = modell.ApplyAndContinueCommand.CanExecute(null);
+        });
+
+        Assert.Null(ex);
+        Assert.False(modell.HasSample);
+    }
+
+    [Fact]
+    public void Ein_geleertes_Feld_reisst_den_Dialog_nicht_mit()
+    {
+        // Die zweiseitige Bindung des Eingabefeldes schreibt beim Leeren einen
+        // Wert zurueck, ueber dessen Beschaffenheit die Oberflaeche entscheidet
+        // -- null eingeschlossen. Frueher riss das jeden Lesezugriff mit.
+        var modell = Erzeugen(NeuesProfil(), ExtensionLibrary.Empty, "FW123456");
+
+        modell.Sample = null!;
+
+        Assert.Equal("", modell.Sample);
+        Assert.False(modell.HasSample);
+        Assert.Equal("", modell.LiteralDescription);
+        Assert.False(modell.ApplyCommand.CanExecute(null));
+    }
 }

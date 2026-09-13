@@ -15,8 +15,36 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        ParseArguments(args);
-        return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        // Zwei Netze, die vor dem Dispatcher gespannt sein muessen. Das dritte
+        // und wichtigste (Dispatcher.UIThread.UnhandledException) haengt in
+        // App.OnFrameworkInitializationCompleted, denn erst dort steht der
+        // Dispatcher.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            if (e.ExceptionObject is Exception ex)
+                CrashLog.Write("AppDomain", ex);
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            // Ohne das verschwindet ein Fehler aus der entprellten Vorschau
+            // (siehe TextViewModel.ScheduleRefresh -- ein verworfener Task)
+            // spurlos: die Vorschau hoerte einfach auf, sich zu erneuern, und
+            // niemand erfuehre, warum.
+            CrashLog.Write("Task", e.Exception);
+            e.SetObserved();
+        };
+
+        try
+        {
+            ParseArguments(args);
+            return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write("Start", ex);
+            return 1;
+        }
     }
 
     /// <summary>
