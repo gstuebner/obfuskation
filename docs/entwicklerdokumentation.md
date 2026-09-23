@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.6.0
+version: 1.8.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 09.09.2026
+date: 23.09.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.6.0 · Stand 9. September 2026
+Fassung 1.8.0 · Stand 23. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -473,6 +473,76 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
   (`src/Obfuskation.Gui/Services/ThemeService.cs`) setzt nur
   `Application.Current.RequestedThemeVariant`, die Farbumschaltung selbst
   übernimmt Avalonias `ThemeDictionaries`.
+- **Einstellungen (neu in 1.8.0):** `SettingsViewModel`
+  (`src/Obfuskation.Gui/ViewModels/SettingsViewModel.cs`) ersetzt das
+  frühere Fenster „Textregeln“ (`TextRulesWindow`, entfernt) und den rein
+  lesenden Dialog „Hauseigene Muster…“ (`ExtensionsWindow`/`ExtensionsViewModel`,
+  beide entfernt). Es arbeitet auf **Kopien**: `ProfileStore.DeepCopy<T>`
+  (JSON-Rundreise, neu) für das Profil, `ExtensionLibrary.Clone()` (dieselbe
+  Rundreise) für die Erweiterung. „Abbrechen“ verwirft die Kopien einfach.
+  „Übernehmen“ prüft zuerst mit `ProfileValidator.Validate(profileCopy,
+  extensionsCopy)` — ein `ValidationSeverity.Error` blockiert und erscheint
+  als Liste im Fenster — und schreibt bei Erfolg: eine geänderte Erweiterung
+  über `ExtensionLibrary.Save` auf die Platte und per
+  `ExtensionLibrary.ReplaceWith(other)` (neu) in **dieselbe**, von
+  `ProfileSession`, `TextViewModel` und `MainViewModel` geteilte Instanz
+  zurück — nicht in eine neu zugewiesene, die nur eine dieser Stellen
+  erreichte; ein geändertes Profil per Listen-Rücktransfer
+  (`TextRules`/`Generators`) in `ProfileSession.Profile`, gefolgt von
+  `ProfileSession.MarkChanged()`. `MainViewModel.ShowSettingsAsync` erledigt
+  danach, was für beide Fälle gleich ist: `InvalidateEngine()`,
+  `RefreshGenerators()`, `RefreshIssues()`, `Text?.RefreshPreview()` und die
+  Statuszeile. Schließen des Fensters mit ungespeicherten Änderungen (über
+  die Titelleiste, nicht über „Abbrechen“) fragt über ein `ConfirmWindow`
+  mit drei Schaltflächen nach (`DialogService.ShowSettingsAsync`, demselben
+  Closing-Umweg wie `App.axaml.cs`, siehe oben).
+
+  `TextRulesViewModel` wurde verallgemeinert statt verdoppelt: statt fest an
+  `Profile.TextRules` zu hängen, nimmt der Konstruktor die editierbare Liste
+  eines Bereichs (`List<TextRule>`), eine Funktion, die live die Regeln des
+  jeweils anderen Bereichs liefert (schreibgeschützt gespiegelt,
+  `TextRuleViewModel.IsOtherArea`, mit Knopf „Dort bearbeiten“), eine
+  Funktion für die Probe-Vereinigung (`ExtensionLibrary.MergeTextRules`,
+  unverändert dieselbe wie zuvor) sowie `isReadOnly` für einen komplett
+  gesperrten Bereich. `Views/TextRulesPanel.axaml` (neues `UserControl`,
+  Inhalt des früheren `TextRulesWindow.axaml`) bedient beide Reiter des
+  `Views/SettingsWindow.axaml` (`TabControl`, `SelectedTabIndex` statt eines
+  eigenen Konverters). Eine Regel lässt sich zwischen den Bereichen
+  verschieben (`SettingsViewModel.MoveRule`): ein eigener Generator, den sie
+  nutzt und den es im Ziel noch nicht gibt, wird **kopiert, nicht
+  verschoben** — die Quelle behält ihre eigene Fassung, falls dort noch
+  etwas anderes ihn braucht; der Name wird über den neuen, gemeinsamen
+  Helfer `TextRuleNaming.MakeUnique` eindeutig gehalten (auch von
+  `AlwaysReplaceViewModel` genutzt, das dieselbe Logik vorher für sich
+  allein hatte). `AlwaysReplaceViewModel.EditManuallyCommand` heißt jetzt
+  „In den Einstellungen bearbeiten…“ und löst statt der früheren Übergabe
+  eines fertigen `TextRulesViewModel` das Ereignis
+  `EditRulesRequested(SettingsTab)` aus — der Reiter folgt `UseExtension`;
+  `DialogService.ShowAlwaysReplaceAsync` schließt nur noch den Dialog,
+  `MainViewModel.ShowAlwaysReplaceAsync` öffnet danach die Einstellungen.
+  Dieselbe Quelle bedient `TextViewModel.EditRuleCommand`/`EditRulesCommand`
+  aus der Fundleiste der Textansicht (neuer Callback `onEditRuleRequested`,
+  analog zu `onRemoveRuleRequested`).
+
+  **Ersetzungstabelle bearbeitbar:** `MappingViewModel` bekommt neu
+  `Func<IDialogService> dialogs` und `Action onChanged`. Werte bleiben
+  verdeckt (`ValuesVisible`, immer `false` beim Öffnen); eingeblendet füllt
+  `RefreshEntries()` `Entries` gefiltert über `SearchText` (Klartext *und*
+  Pseudonym, `OrdinalIgnoreCase`) und `SelectedNamespaceFilter`. Löschen
+  (einzeln über Mehrfachauswahl oder ganze Namensräume über „Leeren…“) läuft
+  über `IDialogService.AskRemoveMappingEntriesAsync(count, namespaceName)`,
+  dann `MappingStore.Open(readOnly: false)`, die neuen Methoden
+  `MappingStore.Remove(namespaceName, plaintext)` und
+  `MappingStore.RemoveNamespace(namespaceName)`, `Save()`, `Dispose()`, ein
+  erneutes `Load()` und der `onChanged`-Aufruf (`MainViewModel`:
+  `RefreshMappingSummary()`, `Text?.RefreshPreview()`). Eine
+  `MappingLockedException` dabei wird mit „Die Tabelle ist gerade durch
+  einen Lauf gesperrt“ gemeldet statt weitergereicht. Mehrfachauswahl einer
+  `ListBox` bindet sich wie bei der Feldliste nicht direkt
+  (`MappingWindow.OnEntrySelectionChanged` → `MappingViewModel.UpdateSelection`).
+  Pseudonyme bleiben unveränderlich — nur `Remove`/`RemoveNamespace`, kein
+  Bearbeiten: ein geändertes Pseudonym hätte mit bereits erzeugten
+  Pseudodateien nichts mehr zu tun.
 
 Weil die Bedienlogik so von der laufenden Anwendung entkoppelt ist, lässt
 sie sich ohne Fenster prüfen — `tests/Obfuskation.Gui.Tests/MainViewModelTests.cs`
@@ -702,6 +772,28 @@ und wäre damit für „neben der Programmdatei" nutzlos.
 Tests gedacht, die nicht den echten Pfad des Testläufers ansprechen
 dürfen.
 
+**Schreibregel (`ExtensionLibrary.GetWriteState`, neu in 1.8.0, ersetzt
+`ResolveWritePath`):** liefert einen `ExtensionWriteState(Path, CanWrite,
+Reason)`. Ohne gefundene Datei gilt `PathHelper.ConfigDirectory` als Ziel,
+`CanWrite = true`. Eine gefundene, beschreibbare Datei (`IsWritable`, ein
+kurzer Schreibversuch mit `FileStream`/`FileAccess.ReadWrite`) bleibt Ziel
+an ihrem eigenen Ort. Eine gefundene, aber schreibgeschützte Datei liefert
+`CanWrite = false` mitsamt einer erklärenden `Reason` — und **anders als die
+frühere `ResolveWritePath`** weicht sie dabei nicht mehr stillschweigend auf
+`PathHelper.ConfigDirectory` aus. Das war Fehler 2 des Plans zu Fassung
+1.8.0: `ResolvePath` liest das Programmverzeichnis weiterhin zuerst (siehe
+oben); eine über den Konfigurationsordner vorgenommene Änderung an einer
+Erweiterungsdatei, die eigentlich im Programmverzeichnis liegt und dort
+schreibgeschützt ist, wäre nach dem nächsten Neustart also wirkungslos
+gewesen, weil `ResolvePath` weiterhin die (unveränderte) Datei im
+Programmverzeichnis gefunden hätte. Die Oberfläche sperrt stattdessen den
+betroffenen Bereich (der globale Reiter der Einstellungen, siehe Abschnitt
+7) und nennt den Grund, statt in eine Datei zu schreiben, die beim nächsten
+Start ohnehin nicht gilt. Alle Aufrufer wurden auf `GetWriteState`
+umgestellt (`AlwaysReplaceViewModel.ExtensionPath`/`CanUseExtension`,
+`MainViewModel.RemoveTextRuleAsync`, `SettingsViewModel`); `ResolveWritePath`
+existiert nicht mehr.
+
 **Abgrenzung zur Profildatei:** Die Projektdatei heißt seit dieser Fassung
 `obfuskation-projekt.json` (`ProfileStore.DefaultFileName`); der
 unqualifizierte, frühere Name `obfuskation.json`
@@ -757,11 +849,16 @@ zutrifft, dass dort statt einer Erweiterung ein Profil übergangen wurde.
 einzelnen Lauf.
 
 Oberfläche: Erweiterungseinträge erscheinen in der Generatorauswahl mit
-Herkunftszusatz, sind in dieser Fassung aber nur lesend — kein Editor dafür,
-gepflegt wird die Datei im Texteditor. Lässt sich die Erweiterungsdatei
-nicht laden, erscheint eine Statuszeile mit dem Pfad, und das Programm
-arbeitet ohne sie weiter — eine kaputte Erweiterungsdatei darf die
-Oberfläche nicht blockieren.
+Herkunftszusatz. Seit Fassung 1.8.0 lässt sich die Erweiterungsdatei auch
+ohne Texteditor bearbeiten, im globalen Reiter des Einstellungsfensters
+(Abschnitt 7) — der Texteditor bleibt weiterhin ein gleichberechtigter Weg,
+keiner verdrängt den anderen. Lässt sich die Erweiterungsdatei nicht laden,
+erscheint eine Statuszeile mit dem Pfad, das Programm arbeitet ohne sie
+weiter, und der globale Reiter bleibt gesperrt (Fehler 1 des Plans zu
+1.8.0: ohne diese Sperre hätte ein „Übernehmen“ die kaputte Datei mit nur
+den neu angelegten Einträgen überschrieben, statt sie unangetastet zu
+lassen, bis sie von Hand repariert ist) — eine kaputte Erweiterungsdatei
+darf die Oberfläche weder blockieren noch überschreiben.
 
 Ein lauffähiges Beispiel liegt unter
 `docs/beispiel/obfuskation-erweiterung-beispiel.json` — es bildet zugleich

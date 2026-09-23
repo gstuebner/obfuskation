@@ -103,13 +103,16 @@
           <StackPanel Spacing="4">
             <TextBlock Text="Wo gilt das?" Classes="muted"/>
             <RadioButton GroupName="ziel" Content="Nur in diesem Projekt" IsChecked="{Binding UseProfile}"/>
-            <RadioButton GroupName="ziel" IsChecked="{Binding UseExtension}">
+            <RadioButton GroupName="ziel" IsChecked="{Binding UseExtension}" IsEnabled="{Binding CanUseExtension}">
               <StackPanel Spacing="1">
                 <TextBlock Text="Immer, in allen Projekten"/>
                 <TextBlock Classes="muted small" TextWrapping="Wrap"
                            Text="{Binding ExtensionPath, StringFormat='Wird geschrieben nach {0}.'}"/>
               </StackPanel>
             </RadioButton>
+            <TextBlock Classes="warning small" TextWrapping="Wrap"
+                       IsVisible="{Binding HasExtensionBlockedReason}"
+                       Text="{Binding ExtensionBlockedReason}"/>
             <TextBlock Classes="warning small" TextWrapping="Wrap"
                        IsVisible="{Binding ExtensionHasComments}"
                        Text="Diese Datei enthält von Hand gepflegte Kommentare — vor dem Schreiben entsteht eine Sicherungskopie (.bak)."/>
@@ -127,7 +130,7 @@
                  IsVisible="{Binding HasCreatedRules}"/>
 
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-        <Button Content="Muster von Hand bearbeiten…" Classes="flat" Command="{Binding EditManuallyCommand}"/>
+        <Button Content="In den Einstellungen bearbeiten…" Classes="flat" Command="{Binding EditManuallyCommand}"/>
         <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
         <Button Content="Übernehmen und weiter" Command="{Binding ApplyAndContinueCommand}"
                 ToolTip.Tip="Regel anlegen und gleich die nächste eintragen — der Dialog bleibt offen"/>

@@ -164,7 +164,31 @@
          Dispatcher, Task und AppDomain landen in absturz.log neben gui.json,
          und die Anwendung laeuft weiter, statt einen ungespeicherten Text
          mitzunehmen. -->
-    <Version>1.7.2</Version>
+    <!-- 1.8.0: Einstellungen an einem Ort statt ueber Umwege. Neu das Fenster
+         "Einstellungen" (Knopf in der Kopfzeile, Strg+,) mit zwei Reitern:
+         das geladene Projekt und die hauseigene Erweiterungsdatei
+         nebeneinander, beide mit Textregeln, eigenen Generatoren und (global)
+         Spaltenmustern; eine Regel laesst sich zwischen beiden verschieben,
+         ihr eigener Generator wandert mit. Ersetzt "Muster von Hand
+         bearbeiten…", "Hauseigene Muster…" (nur lesend) und das eigene
+         Fenster "Textregeln". Das Fenster arbeitet auf Kopien: "Übernehmen"
+         prueft zuerst mit ProfileValidator, "Abbrechen" verwirft alles.
+         Zweitens die Ersetzungstabelle bearbeitbar: Werte bleiben verdeckt,
+         bis man sie ausdruecklich einblendet (immer aus beim Oeffnen), dann
+         Suche ueber Klartext und Pseudonym, Mehrfachauswahl und "Leeren…" je
+         Namensraum (MappingStore.Remove, RemoveNamespace, neu). Drittens drei
+         behobene Fehler: eine kaputte Erweiterungsdatei wurde beim naechsten
+         "immer, in allen Projekten" stillschweigend mit nur der neuen Regel
+         ueberschrieben (jetzt ExtensionLibrary.GetWriteState statt
+         ResolveWritePath, das nie mehr auf den Konfigurationsordner
+         auswich, waehrend ResolvePath weiter das Programmverzeichnis zuerst
+         liest); die Textvorschau blieb nach dem Schliessen der
+         Textregel-Bearbeitung stehen, obwohl sich die Regeln geaendert
+         hatten; der Knopf "Speichern" fehlte in der Textansicht, dort
+         entstehende Profilregeln wurden nur ueber die Rueckfrage beim
+         Beenden gesichert. Nebenversion, weil neue Funktionen dazugekommen
+         sind. -->
+    <Version>1.8.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

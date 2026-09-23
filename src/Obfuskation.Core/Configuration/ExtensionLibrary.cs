@@ -37,6 +37,21 @@ public sealed record ExtensionCandidate(string Path, ExtensionOrigin Origin, boo
 public sealed record ExtensionResolution(string? Path, ExtensionOrigin? Origin, IReadOnlyList<ExtensionCandidate> Candidates);
 
 /// <summary>
+/// Ob und wohin sich die Erweiterungsdatei gerade schreiben liesse, siehe
+/// <see cref="ExtensionLibrary.GetWriteState"/>.
+/// </summary>
+/// <param name="Path">
+/// Der Pfad, der gelten wuerde: entweder die gefundene Datei, oder --
+/// existiert keine -- <see cref="PathHelper.ConfigDirectory"/>.
+/// </param>
+/// <param name="CanWrite">Ob sich unter <see cref="Path"/> tatsaechlich schreiben liesse.</param>
+/// <param name="Reason">
+/// Erklaerung fuer den Anwender, wenn <see cref="CanWrite"/> falsch ist --
+/// sonst <c>null</c>.
+/// </param>
+public sealed record ExtensionWriteState(string Path, bool CanWrite, string? Reason);
+
+/// <summary>
 /// Hauseigene Generatoren, Textregeln und Spaltenmuster an einem von zwei
 /// festen Fundorten (siehe <see cref="ResolvePath"/>), die in jedes Profil
 /// einfliessen, ohne je in eine Profildatei geschrieben zu werden.
@@ -207,27 +222,42 @@ public sealed class ExtensionLibrary
     }
 
     /// <summary>
-    /// Wohin geschrieben wuerde: die vorhandene Datei, sonst
-    /// <see cref="PathHelper.ConfigDirectory"/>.
+    /// Ob und wohin sich die Erweiterungsdatei gerade schreiben liesse.
     ///
-    /// Bewusst nie das Programmverzeichnis, obwohl <see cref="ResolvePath"/> es
-    /// zuerst prueft: dort liegt bei einer Installation aus einem Paket eine
-    /// Datei, die dem Anwender nicht gehoert, und ein Schreibversuch scheiterte
-    /// entweder an den Rechten oder veraenderte die Auslieferung. Existiert
-    /// dort eine Erweiterungsdatei, wird sie weiterhin gelesen — geschrieben
-    /// wird sie nur, wenn sie sich ohnehin schon beschreiben laesst.
+    /// Anders als eine fruehere Fassung (<c>ResolveWritePath</c>) faellt das
+    /// Ergebnis bei einer schreibgeschuetzten, aber vorhandenen Datei nicht
+    /// mehr stillschweigend auf <see cref="PathHelper.ConfigDirectory"/>
+    /// zurueck: eine Programmverzeichnis-Datei, die den Vorrang gegen
+    /// <see cref="ResolvePath"/> haelt, wuerde sonst weiter gelesen, waehrend
+    /// jede Aenderung unbemerkt in eine zweite, nie gelesene Datei liefe --
+    /// nach dem naechsten Neustart waere sie wirkungslos. Stattdessen meldet
+    /// diese Auskunft den Schreibschutz, und die Oberflaeche sperrt die
+    /// betroffenen Bereiche, statt in die falsche Datei zu schreiben.
+    ///
+    /// Drei Faelle:
+    /// - Keine Datei gefunden: Ziel ist <see cref="PathHelper.ConfigDirectory"/>,
+    ///   <see cref="ExtensionWriteState.CanWrite"/> ist wahr.
+    /// - Eine Datei gefunden und beschreibbar: dieser Pfad, wahr.
+    /// - Eine Datei gefunden, aber nicht beschreibbar: dieser Pfad, falsch,
+    ///   mit einer erklaerenden <see cref="ExtensionWriteState.Reason"/>.
     /// </summary>
-    public static string ResolveWritePath(string? programDirectory = null)
+    public static ExtensionWriteState GetWriteState(string? programDirectory = null)
     {
         var resolution = ResolvePath(programDirectory);
         var configPath = Path.Combine(PathHelper.ConfigDirectory, FileName);
 
         if (resolution.Path is null)
-            return configPath;
+            return new ExtensionWriteState(configPath, CanWrite: true, Reason: null);
 
-        return resolution.Origin == ExtensionOrigin.ConfigDirectory || IsWritable(resolution.Path)
-            ? resolution.Path
-            : configPath;
+        if (IsWritable(resolution.Path))
+            return new ExtensionWriteState(resolution.Path, CanWrite: true, Reason: null);
+
+        var reason = resolution.Origin == ExtensionOrigin.ProgramDirectory
+            ? "Die geltende Datei liegt im Programmverzeichnis und ist schreibgeschützt. "
+              + "Änderungen nimmt dort der Administrator vor."
+            : "Die geltende Datei ist schreibgeschützt.";
+
+        return new ExtensionWriteState(resolution.Path, CanWrite: false, reason);
     }
 
     /// <summary>
@@ -294,6 +324,41 @@ public sealed class ExtensionLibrary
         var temporary = full + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(this, ProfileStore.JsonOptions));
         File.Move(temporary, full, overwrite: true);
+    }
+
+    /// <summary>
+    /// Eine unabhaengige Kopie per JSON-Rundreise -- fuer das Einstellungsfenster,
+    /// das auf einer Kopie arbeitet und sie erst bei "Übernehmen" in das
+    /// geteilte Original zurueckspielt (siehe <see cref="ReplaceWith"/>).
+    /// </summary>
+    public ExtensionLibrary Clone()
+    {
+        var json = JsonSerializer.Serialize(this, ProfileStore.JsonOptions);
+        return JsonSerializer.Deserialize<ExtensionLibrary>(json, ProfileStore.JsonOptions)!;
+    }
+
+    /// <summary>
+    /// Uebernimmt Generatoren, Textregeln und Spaltenmuster von
+    /// <paramref name="other"/> in dieselbe Instanz, statt eine neue
+    /// zurueckzugeben. Das ist wichtig: <see cref="Services.ProfileSession"/>
+    /// (in der Oberflaeche), <c>TextViewModel</c> und <c>MainViewModel</c>
+    /// teilen sich dieselbe <see cref="ExtensionLibrary"/>-Instanz -- eine
+    /// neu zugewiesene Kopie wuerde nur eine der Stellen erreichen, waehrend
+    /// die anderen weiter die alte saehen.
+    /// </summary>
+    public void ReplaceWith(ExtensionLibrary other)
+    {
+        Version = other.Version;
+
+        Generators.Clear();
+        foreach (var (name, settings) in other.Generators)
+            Generators[name] = settings;
+
+        TextRules.Clear();
+        TextRules.AddRange(other.TextRules);
+
+        FieldRules.Clear();
+        FieldRules.AddRange(other.FieldRules);
     }
 
     private static bool IsWritable(string path)

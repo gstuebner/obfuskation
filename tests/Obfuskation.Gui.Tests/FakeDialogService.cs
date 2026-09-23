@@ -145,4 +145,38 @@ internal sealed class FakeDialogService : IDialogService
         LastRemoveTextRule = (ruleName, extensionPath);
         return Task.FromResult(RemoveTextRuleConfirmed);
     }
+
+    /// <summary>Das zuletzt erzeugte Ansichtsmodell, damit ein Test es unmittelbar bedienen kann.</summary>
+    public SettingsViewModel? LastSettingsViewModel { get; private set; }
+
+    /// <summary>
+    /// Vorgabe ist die vorsichtige Richtung: die Einstellungen gelten als
+    /// abgebrochen. Ein Test, der "Übernehmen" pruefen will, ruft stattdessen
+    /// <see cref="SettingsViewModel.ApplyCommand"/> selbst auf dem
+    /// zurueckgegebenen <see cref="LastSettingsViewModel"/> auf -- dasselbe
+    /// Vorgehen wie bei <see cref="AlwaysReplaceViewModel"/>.
+    /// </summary>
+    public bool SettingsApplyConfirmed { get; set; }
+
+    public Task<bool> ShowSettingsAsync(SettingsViewModel viewModel)
+    {
+        LastSettingsViewModel = viewModel;
+
+        if (SettingsApplyConfirmed)
+            viewModel.ApplyCommand.Execute(null);
+
+        return Task.FromResult(viewModel.Applied);
+    }
+
+    /// <summary>Vorgabe ist die vorsichtige Richtung: nicht löschen.</summary>
+    public bool RemoveMappingEntriesConfirmed { get; set; }
+
+    /// <summary>Die zuletzt angefragte Löschung, samt Anzahl und Namensraum (falls "Leeren…").</summary>
+    public (int Count, string? NamespaceName)? LastRemoveMappingEntriesRequest { get; private set; }
+
+    public Task<bool> AskRemoveMappingEntriesAsync(int count, string? namespaceName)
+    {
+        LastRemoveMappingEntriesRequest = (count, namespaceName);
+        return Task.FromResult(RemoveMappingEntriesConfirmed);
+    }
 }

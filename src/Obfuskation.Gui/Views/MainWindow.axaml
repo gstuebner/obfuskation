@@ -21,6 +21,13 @@
       auch etwas bedeuten — "Neu aus Datei…" und "Speichern" beziehen sich
       auf eine Datei, die es ausserhalb der Dateiansicht nicht gibt.
   -->
+  <Window.KeyBindings>
+    <!-- Strg+, oeffnet die Einstellungen aus jeder Ansicht, wie in den
+         meisten Anwendungen ueblich: ohne Parameter, also den Projektreiter,
+         sofern ein Profil geladen ist. -->
+    <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding ShowSettingsCommand}"/>
+  </Window.KeyBindings>
+
   <Grid RowDefinitions="Auto,*" Margin="12">
 
     <!-- ============================================== Kopfzeile ======== -->
@@ -74,8 +81,18 @@
                   IsVisible="{Binding IsFilesView}"
                   ToolTip.Tip="Regelgeruest aus einer vorhandenen Datei ableiten"/>
           <Button Content="Profile…" Command="{Binding ShowProfilesCommand}"/>
+
+          <!-- Immer sichtbar, wie im Plan gefordert: die globale Erweiterung
+               ist unabhaengig von jedem Profil erreichbar. -->
+          <Button Content="⚙ Einstellungen" Command="{Binding ShowSettingsCommand}"
+                  ToolTip.Tip="Textregeln, eigene Generatoren und hauseigene Muster (Strg+,)"/>
+
+          <!-- In der Textansicht nur, sobald es etwas zu sichern gibt:
+               Profilregeln entstehen dort ohne eigenen Speichern-Knopf und
+               wurden bisher nur ueber die Rueckfrage beim Beenden gesichert
+               (Fehler 4). -->
           <Button Content="Speichern" Command="{Binding SaveProfileCommand}"
-                  IsVisible="{Binding IsFilesView}"/>
+                  IsVisible="{Binding ShowSaveButton}"/>
 
           <Button Content="Mehr ▾">
             <Button.Flyout>
@@ -83,9 +100,12 @@
                 <MenuItem Header="Ersetzungstabelle…" Command="{Binding ShowMappingCommand}"/>
                 <!-- Der fruehere Eintrag "Textregeln…" entfaellt: eigene Muster
                      legt "Immer ersetzen…" an (Textansicht und Dateiansicht),
-                     die Fachansicht bleibt darueber unter "Muster von Hand
-                     bearbeiten…" erreichbar. -->
-                <MenuItem Header="Hauseigene Muster…" Command="{Binding ShowExtensionsCommand}"/>
+                     die Fachansicht bleibt darueber unter "In den Einstellungen
+                     bearbeiten…" erreichbar. "Hauseigene Muster…" (nur lesend)
+                     entfaellt zugunsten des globalen Reiters der Einstellungen,
+                     der dasselbe zeigt und zusaetzlich bearbeitbar ist. -->
+                <MenuItem Header="Einstellungen…" Command="{Binding ShowSettingsCommand}"
+                          CommandParameter="{x:Static vm:SettingsTab.Global}"/>
                 <Separator/>
                 <MenuItem Header="Kurzhilfe…" Command="{Binding ShowHelpCommand}"/>
                 <MenuItem Header="Über Obfuskation…" Command="{Binding ShowAboutCommand}"/>

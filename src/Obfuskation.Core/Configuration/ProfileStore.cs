@@ -54,6 +54,19 @@ public static class ProfileStore
         }
     }
 
+    /// <summary>
+    /// Eine unabhaengige Kopie per JSON-Rundreise -- fuer das Einstellungsfenster
+    /// der Oberflaeche, das auf Kopien von Profil und Erweiterung arbeitet und
+    /// sie erst bei "Übernehmen" zurueckschreibt. Taugt fuer <see cref="Profile"/>
+    /// selbst genauso wie fuer einzelne Listen (<see cref="TextRule"/>,
+    /// <see cref="GeneratorSettings"/>, <see cref="FieldNameRule"/>).
+    /// </summary>
+    public static T DeepCopy<T>(T value)
+    {
+        var json = JsonSerializer.Serialize(value, JsonOptions);
+        return JsonSerializer.Deserialize<T>(json, JsonOptions)!;
+    }
+
     public static void Save(Profile profile, string path)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(path));

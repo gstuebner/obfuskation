@@ -88,6 +88,30 @@ public interface IDialogService
     /// Projekten entfaellt -- sonst <c>null</c>.
     /// </param>
     Task<bool> AskRemoveTextRuleAsync(string ruleName, string? extensionPath);
+
+    /// <summary>
+    /// Rueckfrage vorm Loeschen von Eintraegen der Ersetzungstabelle -- ob
+    /// einzeln ausgewaehlt oder ein ganzer Namensraum ueber "Leeren…". Sagt
+    /// ausdruecklich, dass bereits erzeugte Pseudodateien mit diesen
+    /// Pseudonymen an den betroffenen Stellen nicht mehr zurueckuebersetzbar
+    /// sind. Liefert <c>false</c> ohne Auswahl -- die vorsichtige Richtung.
+    /// </summary>
+    /// <param name="count">Anzahl der betroffenen Eintraege.</param>
+    /// <param name="namespaceName">
+    /// Der Namensraum, wenn er ganz geleert wird ("Leeren…"), sonst
+    /// <c>null</c> bei einzeln ausgewaehlten Eintraegen (moeglicherweise aus
+    /// mehreren Namensraeumen).
+    /// </param>
+    Task<bool> AskRemoveMappingEntriesAsync(int count, string? namespaceName);
+
+    /// <summary>
+    /// Das Einstellungsfenster (Plan Teil B): <paramref name="viewModel"/>
+    /// traegt bereits Kopien von Profil und Erweiterung sowie "Übernehmen"
+    /// und "Abbrechen"; hier entsteht nur das Fenster darum, samt der
+    /// Rueckfrage beim Schliessen mit ungespeicherten Aenderungen. Liefert
+    /// <see cref="SettingsViewModel.Applied"/>.
+    /// </summary>
+    Task<bool> ShowSettingsAsync(SettingsViewModel viewModel);
 }
 
 /// <summary>Antwort auf die Rueckfrage vorm Loeschen eines Profils.</summary>

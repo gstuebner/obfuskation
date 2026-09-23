@@ -19,7 +19,7 @@ namespace Obfuskation.Gui.ViewModels;
 /// mutiert sie selbst -- eine Rueckgabe an den Aufrufer braucht es nur fuer
 /// die Nacharbeit (Vorschau neu rechnen, Statuszeile). Fensterfrei: Fenster
 /// entstehen ausschliesslich in <see cref="Services.DialogService"/>, angestossen
-/// ueber <see cref="CloseRequested"/> und <see cref="EditManuallyRequested"/>.
+/// ueber <see cref="CloseRequested"/> und <see cref="EditRulesRequested"/>.
 /// </summary>
 public sealed class AlwaysReplaceViewModel : ObservableObject
 {
@@ -27,7 +27,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     private readonly ExtensionLibrary _extensions;
     private readonly string _contextText;
     private readonly Action<bool> _onApplied;
-    private readonly Func<TextRulesViewModel> _createTextRulesViewModel;
+    private readonly string? _extensionBlockedReason;
     private readonly TextRuleEngine _engine = new();
 
     private string _sample;
@@ -55,12 +55,6 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     /// als geaendert markieren), <c>false</c> bei der Erweiterungsdatei (die
     /// speichert sich selbst, siehe <see cref="Apply"/>).
     /// </param>
-    /// <param name="createTextRulesViewModel">
-    /// Baut das Ansichtsmodell der Fachansicht fuer "Muster von Hand
-    /// bearbeiten…" -- dieselbe Stelle, die auch <c>MainViewModel.CreateTextRulesViewModel</c>
-    /// verwendet, damit es nur eine einzige Verdrahtung von Profil, Erweiterung
-    /// und Aenderungsmeldung gibt.
-    /// </param>
     /// <param name="windowTitle">
     /// Fenstertitel. Alle heutigen Einstiege lassen es bei der Vorgabe: der
     /// Menueeintrag der Textansicht nennt bereits den markierten Wert, und
@@ -70,21 +64,26 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     /// <param name="introText">
     /// Einleitender Satz ueber den Fragen, oder <c>null</c> fuer keinen.
     /// </param>
+    /// <param name="extensionBlockedReason">
+    /// Gesetzt, wenn die Erweiterungsdatei kaputt geladen wurde (Fehler 1) --
+    /// dann steht "Immer, in allen Projekten" nicht zur Wahl, unabhaengig von
+    /// den Dateirechten. <c>null</c> im ueblichen Fall.
+    /// </param>
     public AlwaysReplaceViewModel(
         Profile profile,
         ExtensionLibrary extensions,
         string initialSample,
         string contextText,
         Action<bool> onApplied,
-        Func<TextRulesViewModel> createTextRulesViewModel,
         string windowTitle = "Immer ersetzen",
-        string? introText = null)
+        string? introText = null,
+        string? extensionBlockedReason = null)
     {
         _profile = profile;
         _extensions = extensions;
         _contextText = contextText;
         _onApplied = onApplied;
-        _createTextRulesViewModel = createTextRulesViewModel;
+        _extensionBlockedReason = extensionBlockedReason;
         _sample = initialSample?.Trim() ?? "";
 
         WindowTitle = windowTitle;
@@ -236,6 +235,11 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
         get => _useExtension;
         set
         {
+            // Gesperrt bleibt gesperrt: weder ein kaputt geladenes noch ein
+            // schreibgeschuetztes Ziel nimmt eine neue Regel auf (Fehler 1).
+            if (value && !CanUseExtension)
+                return;
+
             if (!SetProperty(ref _useExtension, value))
                 return;
 
@@ -255,7 +259,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     /// Wohin geschrieben wuerde, wenn <see cref="UseExtension"/> gilt --
     /// nennt der Dialog im Klartext, bevor er schreibt.
     /// </summary>
-    public string ExtensionPath => ExtensionLibrary.ResolveWritePath();
+    public string ExtensionPath => WriteState.Path;
 
     /// <summary>
     /// Ob die Zieldatei von Hand gepflegte Kommentare traegt -- dann entsteht
@@ -263,6 +267,28 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     /// und der Dialog soll das vorher sagen, nicht erst hinterher.
     /// </summary>
     public bool ExtensionHasComments => ExtensionLibrary.HasComments(ExtensionPath);
+
+    /// <summary>
+    /// Ob und wohin sich die Erweiterungsdatei gerade schreiben liesse (siehe
+    /// <see cref="ExtensionLibrary.GetWriteState"/>). Neu ermittelt bei jedem
+    /// Zugriff statt einmal zwischengespeichert: der Dialog bleibt waehrend
+    /// seiner Lebenszeit offen, und ein aeusserer Zustand (Dateirechte) kann
+    /// sich in der Zwischenzeit geaendert haben.
+    /// </summary>
+    private ExtensionWriteState WriteState => ExtensionLibrary.GetWriteState();
+
+    /// <summary>
+    /// Ob "Immer, in allen Projekten" ueberhaupt zur Wahl steht: weder darf
+    /// die Erweiterungsdatei kaputt geladen worden sein (Fehler 1, siehe
+    /// <see cref="_extensionBlockedReason"/>), noch darf sie schreibgeschuetzt
+    /// sein.
+    /// </summary>
+    public bool CanUseExtension => _extensionBlockedReason is null && WriteState.CanWrite;
+
+    /// <summary>Erklaerung, warum <see cref="CanUseExtension"/> falsch ist -- sonst <c>null</c>.</summary>
+    public string? ExtensionBlockedReason => _extensionBlockedReason ?? WriteState.Reason;
+
+    public bool HasExtensionBlockedReason => !CanUseExtension;
 
     /// <summary>Die Fundstellen im Vorschaustreifen.</summary>
     public ObservableCollection<AlwaysReplaceMatch> Matches { get; } = new();
@@ -307,12 +333,12 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     public event Action? CloseRequested;
 
     /// <summary>
-    /// "Muster von Hand bearbeiten…" wurde gewaehlt: das Ansichtsmodell der
-    /// vollstaendigen Fachansicht (<see cref="TextRulesViewModel"/>) entsteht
-    /// bereits hier, der Empfaenger (die Dialogumsetzung) muss es nur noch in
-    /// einem Fenster zeigen.
+    /// "In den Einstellungen bearbeiten…" wurde gewaehlt: der Aufrufer
+    /// (<see cref="MainViewModel"/>) oeffnet danach das Einstellungsfenster im
+    /// genannten Reiter -- Profil oder global, je nachdem, wohin diese Regel
+    /// laut <see cref="UseExtension"/> gerade gehen wuerde.
     /// </summary>
-    public event Action<TextRulesViewModel>? EditManuallyRequested;
+    public event Action<SettingsTab>? EditRulesRequested;
 
     /// <summary>
     /// Rechnet das gewaehlte Muster gegen <see cref="_contextText"/> aus und
@@ -433,7 +459,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
 
     private void EditManually()
     {
-        EditManuallyRequested?.Invoke(_createTextRulesViewModel());
+        EditRulesRequested?.Invoke(UseExtension ? SettingsTab.Global : SettingsTab.Project);
         CloseRequested?.Invoke();
     }
 
@@ -445,20 +471,8 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     /// <see cref="ExtensionLibrary.MergeTextRules"/>).
     /// </summary>
     private string MakeUniqueRuleName(string basisName)
-    {
-        var vergeben = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        vergeben.UnionWith(_profile.TextRules.Select(r => r.Name));
-        vergeben.UnionWith(_extensions.TextRules.Select(r => r.Name));
-
-        if (!vergeben.Contains(basisName))
-            return basisName;
-
-        var zaehler = 2;
-        while (vergeben.Contains(basisName + zaehler))
-            zaehler++;
-
-        return basisName + zaehler;
-    }
+        => TextRuleNaming.MakeUnique(
+            basisName, _profile.TextRules.Select(r => r.Name).Concat(_extensions.TextRules.Select(r => r.Name)));
 
     /// <summary>
     /// Der Generatorname fuer die neue Regel. Bleibt es beim vorgeschlagenen

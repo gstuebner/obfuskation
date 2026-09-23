@@ -258,10 +258,37 @@ public class MainViewModelTests : IDisposable
             // Die Erweiterungsdatei liegt im umgeleiteten Konfigurationsordner
             // (siehe TestUmgebung), gilt dort aber fuer die ganze Baugruppe --
             // sie darf keinem folgenden Test in die Quere kommen.
-            var geschrieben = ExtensionLibrary.ResolveWritePath();
+            var geschrieben = ExtensionLibrary.GetWriteState().Path;
             if (File.Exists(geschrieben))
                 File.Delete(geschrieben);
         }
+    }
+
+    [Fact]
+    public async Task Bearbeiten_aus_der_Textansicht_oeffnet_den_richtigen_Reiter()
+    {
+        // Plan Teil C-2: eine Profilregel oeffnet den Projektreiter, eine
+        // Erweiterungsregel den globalen -- mit ausgewaehlter Regel.
+        var profil = SchreibeProfil(p => p.TextRules.Add(
+            new TextRule { Name = "profilregel", Pattern = @"\bA\d+\b" }));
+
+        var dialoge = new FakeDialogService();
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        modell.ShowTextCommand.Execute(null);
+        Assert.NotNull(modell.Text);
+
+        modell.Text!.InputText = "A1";
+        modell.Text.RefreshPreview();
+
+        var eigenerFund = Assert.Single(modell.Text.Matches, m => m.RuleName == "profilregel");
+        eigenerFund.EditRuleCommand.Execute(null);
+
+        await Task.Yield();
+
+        Assert.Equal(SettingsTab.Project, dialoge.LastSettingsViewModel!.SelectedTab);
+        Assert.Equal("profilregel", dialoge.LastSettingsViewModel.ProjectRules!.Selected!.Name);
     }
 
     [Fact]
@@ -619,10 +646,12 @@ public class MainViewModelTests : IDisposable
     {
         var profil = SchreibeProfil(p => p.TextRules.AddRange(ProfileScaffolder.DefaultTextRules()));
 
-        var modell = Erzeugen();
+        var dialoge = new FakeDialogService();
+        var modell = Erzeugen(dialoge);
         await modell.InitializeAsync(profil, null);
 
-        var regeln = modell.CreateTextRulesViewModel();
+        await modell.ShowSettingsAsync();
+        var regeln = dialoge.LastSettingsViewModel!.ProjectRules;
         Assert.NotNull(regeln);
         Assert.Equal(4, regeln!.Rules.Count);
 
@@ -636,20 +665,37 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Eine_neue_Textregel_landet_im_Profil()
+    public async Task Eine_neue_Textregel_landet_nach_Uebernehmen_im_Profil()
     {
         var profil = SchreibeProfil();
-        var modell = Erzeugen();
+        var dialoge = new FakeDialogService();
+        var modell = Erzeugen(dialoge);
         await modell.InitializeAsync(profil, null);
 
-        var regeln = modell.CreateTextRulesViewModel()!;
+        await modell.ShowSettingsAsync();
+        var einstellungen = dialoge.LastSettingsViewModel!;
+        var regeln = einstellungen.ProjectRules!;
         regeln.AddCommand.Execute(null);
+        regeln.Selected!.Pattern = @"\bTEST\d+\b";
 
         Assert.Single(regeln.Rules);
+
+        einstellungen.ApplyCommand.Execute(null);
+
+        Assert.Empty(einstellungen.ValidationErrors);
+        Assert.True(einstellungen.Applied);
         Assert.Single(modell.Session!.Profile.TextRules);
         Assert.True(modell.Session.HasUnsavedChanges);
 
-        regeln.RemoveCommand.Execute(null);
+        // Wieder oeffnen und entfernen.
+        await modell.ShowSettingsAsync();
+        var zweiteEinstellungen = dialoge.LastSettingsViewModel!;
+        var regelnErneut = zweiteEinstellungen.ProjectRules!;
+        Assert.Single(regelnErneut.Rules);
+        regelnErneut.RemoveCommand.Execute(null);
+
+        zweiteEinstellungen.ApplyCommand.Execute(null);
+
         Assert.Empty(modell.Session.Profile.TextRules);
     }
 
@@ -1002,10 +1048,12 @@ public class MainViewModelTests : IDisposable
             });
         });
 
-        var modell = Erzeugen();
+        var dialoge = new FakeDialogService();
+        var modell = Erzeugen(dialoge);
         await modell.InitializeAsync(profil, SchreibeCsv());
 
-        var textregeln = modell.CreateTextRulesViewModel();
+        await modell.ShowSettingsAsync();
+        var textregeln = dialoge.LastSettingsViewModel!.ProjectRules;
         Assert.NotNull(textregeln);
 
         var regel = textregeln!.Rules.Single(r => r.Name == "beleg");

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Obfuskation.Core.Configuration;
 using Obfuskation.Core.Generation;
 
@@ -330,9 +331,11 @@ public sealed class ExtensionLibrarySaveTests : IDisposable
     [Fact]
     public void Ohne_vorhandene_Datei_wird_in_den_Konfigurationsordner_geschrieben()
     {
-        var ziel = ExtensionLibrary.ResolveWritePath(_programVerzeichnis);
+        var zustand = ExtensionLibrary.GetWriteState(_programVerzeichnis);
 
-        Assert.Equal(Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName), ziel);
+        Assert.Equal(Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName), zustand.Path);
+        Assert.True(zustand.CanWrite);
+        Assert.Null(zustand.Reason);
     }
 
     [Fact]
@@ -341,7 +344,10 @@ public sealed class ExtensionLibrarySaveTests : IDisposable
         var vorhanden = Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName);
         new ExtensionLibrary().Save(vorhanden);
 
-        Assert.Equal(vorhanden, ExtensionLibrary.ResolveWritePath(_programVerzeichnis));
+        var zustand = ExtensionLibrary.GetWriteState(_programVerzeichnis);
+
+        Assert.Equal(vorhanden, zustand.Path);
+        Assert.True(zustand.CanWrite);
     }
 
     [Fact]
@@ -353,7 +359,43 @@ public sealed class ExtensionLibrarySaveTests : IDisposable
         var neben = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
         new ExtensionLibrary().Save(neben);
 
-        Assert.Equal(neben, ExtensionLibrary.ResolveWritePath(_programVerzeichnis));
+        var zustand = ExtensionLibrary.GetWriteState(_programVerzeichnis);
+
+        Assert.Equal(neben, zustand.Path);
+        Assert.True(zustand.CanWrite);
+    }
+
+    [Fact]
+    public void Eine_schreibgeschuetzte_Datei_neben_der_Programmdatei_ist_nicht_beschreibbar()
+    {
+        // Genau der Fehlerfall aus Fehler 2 des Plans: die geltende Datei
+        // liegt neben der Programmdatei, ist dort aber schreibgeschuetzt --
+        // GetWriteState darf NICHT stillschweigend auf den
+        // Konfigurationsordner ausweichen (das war der Fehler von
+        // ResolveWritePath: ResolvePath liest das Programmverzeichnis
+        // weiterhin zuerst, eine Aenderung im Konfigurationsordner waere also
+        // nach dem naechsten Neustart wirkungslos gewesen).
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;  // Dateirechte gibt es dort in dieser Form nicht.
+
+        var neben = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        new ExtensionLibrary().Save(neben);
+        File.SetUnixFileMode(neben, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+        try
+        {
+            var zustand = ExtensionLibrary.GetWriteState(_programVerzeichnis);
+
+            Assert.Equal(neben, zustand.Path);
+            Assert.False(zustand.CanWrite);
+            Assert.NotNull(zustand.Reason);
+            Assert.Contains("Programmverzeichnis", zustand.Reason);
+        }
+        finally
+        {
+            // Sonst kann Dispose() die Testdatei nicht mehr loeschen.
+            File.SetUnixFileMode(neben, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 
     public void Dispose()

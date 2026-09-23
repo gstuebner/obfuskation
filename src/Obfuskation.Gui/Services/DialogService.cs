@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Obfuskation.Core.Configuration;
 using Obfuskation.Gui.ViewModels;
 using Obfuskation.Gui.Views;
@@ -232,13 +233,10 @@ public sealed class DialogService : IDialogService
         var window = new AlwaysReplaceWindow { DataContext = viewModel };
         viewModel.CloseRequested += () => window.Close();
 
-        // "Muster von Hand bearbeiten…" ersetzt diesen schlichten Dialog durch
-        // die vollstaendige Fachansicht: schliesst den einen, oeffnet den
-        // anderen -- beide als Dialog desselben Hauptfensters, nicht
-        // ineinander verschachtelt.
-        viewModel.EditManuallyRequested += textRules =>
-            new TextRulesWindow { DataContext = textRules }.ShowDialog(_owner);
-
+        // "In den Einstellungen bearbeiten…" schliesst diesen schlichten
+        // Dialog; MainViewModel oeffnet danach die Einstellungen selbst
+        // (siehe AlwaysReplaceViewModel.EditRulesRequested) -- hier ist nichts
+        // weiter zu tun.
         await window.ShowDialog(_owner);
 
         return viewModel.Confirmed;
@@ -263,6 +261,110 @@ public sealed class DialogService : IDialogService
 
         // Ohne Auswahl (Titelleiste geschlossen) gilt die vorsichtige Richtung.
         return await window.ShowDialog<string?>(_owner) == "delete";
+    }
+
+    public async Task<bool> AskRemoveMappingEntriesAsync(int count, string? namespaceName)
+    {
+        var mengenwort = namespaceName is not null
+            ? $"Alle {count} Einträge im Namensraum „{namespaceName}“"
+            : count == 1 ? "1 ausgewählter Eintrag" : $"{count} ausgewählte Einträge";
+
+        var window = new ConfirmWindow(
+            "Einträge löschen",
+            $"{mengenwort} werden gelöscht. Bereits erzeugte Pseudodateien, die diese Pseudonyme enthalten, "
+            + "lassen sich an diesen Stellen nicht mehr zurückübersetzen. Ein neuer Lauf vergibt für den "
+            + "Klartext voraussichtlich wieder dasselbe Pseudonym.",
+            new (string Label, string Result)[]
+            {
+                ("Abbrechen", "cancel"),
+                ("Löschen", "delete"),
+            });
+
+        return await window.ShowDialog<string?>(_owner) == "delete";
+    }
+
+    public async Task<bool> ShowSettingsAsync(SettingsViewModel viewModel)
+    {
+        var window = new SettingsWindow { DataContext = viewModel };
+
+        viewModel.OpenFolderRequested += path => OpenWithShell(path);
+        viewModel.OpenEditorRequested += path => OpenWithShell(path);
+
+        // Dasselbe Vorgehen wie beim Hauptfenster (siehe App.OnFrameworkInitializationCompleted):
+        // Closing kann nicht auf eine Task warten, darum wird beim ersten
+        // Aufruf abgebrochen und die Rueckfrage ueber den Dispatcher
+        // nachgeholt; faellt sie nicht auf "verwerfen" oder "übernehmen" aus,
+        // bleibt das Fenster offen.
+        var schliessenBestaetigt = false;
+
+        viewModel.CloseRequested += () =>
+        {
+            schliessenBestaetigt = true;
+            window.Close();
+        };
+
+        window.Closing += (_, e) =>
+        {
+            if (schliessenBestaetigt || !viewModel.HasUnsavedChanges)
+                return;
+
+            e.Cancel = true;
+
+            Dispatcher.UIThread.Post(async () =>
+            {
+                var confirm = new ConfirmWindow(
+                    "Ungespeicherte Änderungen",
+                    "Die Einstellungen haben ungespeicherte Änderungen. Übernehmen, bevor das Fenster schließt?",
+                    new (string Label, string Result)[]
+                    {
+                        ("Weiter bearbeiten", "continue"),
+                        ("Verwerfen", "discard"),
+                        ("Übernehmen", "apply"),
+                    });
+
+                var ergebnis = await confirm.ShowDialog<string?>(window);
+
+                switch (ergebnis)
+                {
+                    case "apply":
+                        viewModel.ApplyCommand.Execute(null);
+                        // Schlaegt die Pruefung fehl, bleibt HasUnsavedChanges
+                        // wahr und CloseRequested wurde nicht ausgeloest -- das
+                        // Fenster bleibt dann offen, mit der Fehlerliste.
+                        break;
+
+                    case "discard":
+                        schliessenBestaetigt = true;
+                        window.Close();
+                        break;
+                }
+            });
+        };
+
+        await window.ShowDialog(_owner);
+
+        return viewModel.Applied;
+    }
+
+    /// <summary>
+    /// Oeffnet einen Pfad mit dem, was das Betriebssystem dafuer vorsieht --
+    /// den Ordner der Erweiterungsdatei im Dateimanager, die Datei selbst im
+    /// hinterlegten Editor. Ein Fehlschlag (kein grafischer Handler
+    /// eingerichtet) ist kein Programmfehler und wird nur in der Statuszeile
+    /// des Einstellungsfensters sichtbar -- hier gibt es keine bessere
+    /// Reaktion als ihn zu schlucken.
+    /// </summary>
+    private static void OpenWithShell(string path)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or IOException)
+        {
+            // Kein Handler eingerichtet, oder der Pfad existiert (noch) nicht --
+            // beides kein Grund, das Fenster abzuwuergen.
+        }
     }
 
     /// <summary>

@@ -13,13 +13,10 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
 {
     private static Profile NeuesProfil() => new() { ProfileName = "test" };
 
-    private static TextRulesViewModel Textregeln(Profile profil, ExtensionLibrary erweiterung)
-        => new(profil, erweiterung, () => { });
-
     private static AlwaysReplaceViewModel Erzeugen(
         Profile profil, ExtensionLibrary erweiterung, string sample, string kontext = "",
         Action<bool>? onApplied = null)
-        => new(profil, erweiterung, sample, kontext, onApplied ?? (_ => { }), () => Textregeln(profil, erweiterung));
+        => new(profil, erweiterung, sample, kontext, onApplied ?? (_ => { }));
 
     /// <summary>
     /// Ein Test schreibt bewusst in die (fuer den ganzen Testlauf gemeinsame)
@@ -157,22 +154,40 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Muster_von_Hand_bearbeiten_liefert_die_Fachansicht_und_bricht_den_Dialog_ab()
+    public void In_den_Einstellungen_bearbeiten_meldet_den_Reiter_und_bricht_den_Dialog_ab()
     {
         var profil = NeuesProfil();
         var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
 
-        TextRulesViewModel? uebergeben = null;
+        SettingsTab? angeforderterReiter = null;
         var geschlossen = false;
-        modell.EditManuallyRequested += vm => uebergeben = vm;
+        modell.EditRulesRequested += tab => angeforderterReiter = tab;
         modell.CloseRequested += () => geschlossen = true;
 
         modell.EditManuallyCommand.Execute(null);
 
-        Assert.NotNull(uebergeben);
+        Assert.Equal(SettingsTab.Project, angeforderterReiter);
         Assert.True(geschlossen);
         Assert.False(modell.Confirmed);
         Assert.Empty(profil.TextRules);
+    }
+
+    [Fact]
+    public void In_den_Einstellungen_bearbeiten_meldet_den_globalen_Reiter_bei_gewaehlter_Reichweite()
+    {
+        // Der Reiter folgt UseExtension: waehlt der Anwender "immer, in allen
+        // Projekten" und geht dann auf "In den Einstellungen bearbeiten…",
+        // soll sich der globale Reiter oeffnen, nicht der Projektreiter.
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
+        modell.UseExtension = true;
+
+        SettingsTab? angeforderterReiter = null;
+        modell.EditRulesRequested += tab => angeforderterReiter = tab;
+
+        modell.EditManuallyCommand.Execute(null);
+
+        Assert.Equal(SettingsTab.Global, angeforderterReiter);
     }
 
     // ------------------------------------------------------------------
@@ -255,7 +270,6 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
 
         var ausDerTextansicht = new AlwaysReplaceViewModel(
             profil, ExtensionLibrary.Empty, "FW123456", "", _ => { },
-            () => Textregeln(profil, ExtensionLibrary.Empty),
             "Nicht erkannte vertrauliche Daten",
             "Diese Stelle wurde nicht automatisch erkannt.");
 
@@ -307,6 +321,28 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
 
         Assert.Null(ex);
         Assert.False(modell.HasSample);
+    }
+
+    [Fact]
+    public void Eine_kaputte_Erweiterungsdatei_sperrt_immer_in_allen_Projekten()
+    {
+        // Fehler 1 des Plans: MainViewModel arbeitet dann mit
+        // ExtensionLibrary.Empty weiter -- ohne diese Sperre ueberschriebe ein
+        // "Übernehmen" mit dieser Reichweite die kaputte Datei mit nur der
+        // neuen Regel, statt sie unangetastet zu lassen.
+        var profil = NeuesProfil();
+        var modell = new AlwaysReplaceViewModel(
+            profil, ExtensionLibrary.Empty, "FW123456", "", _ => { },
+            extensionBlockedReason: "Erweiterungsdatei ist kein gültiges JSON: /pfad/obfuskation.json");
+
+        Assert.False(modell.CanUseExtension);
+        Assert.True(modell.HasExtensionBlockedReason);
+        Assert.Equal(
+            "Erweiterungsdatei ist kein gültiges JSON: /pfad/obfuskation.json", modell.ExtensionBlockedReason);
+
+        modell.UseExtension = true;
+        Assert.False(modell.UseExtension);
+        Assert.True(modell.UseProfile);
     }
 
     [Fact]

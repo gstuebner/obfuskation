@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.7.2
+version: 1.8.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 13.09.2026
+date: 23.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.7.2 · Stand 13. September 2026
+Fassung 1.8.0 · Stand 23. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -124,15 +124,16 @@ Der Dialog fragt:
    Vorschaustreifen zeigt sofort, wie oft das gewählte Muster im aktuellen
    Text zuträfe, mit den Fundstellen.
 3. **Wo gilt das?** — „nur in diesem Projekt“ trägt die Regel in das offene
-   Profil ein, wie bisher über „Textregeln…“. „Immer, in allen Projekten“
-   schreibt sie stattdessen in die Erweiterungsdatei (Kapitel 11) — der
-   Dialog nennt den Zielpfad vorher im Klartext und weist darauf hin, wenn
-   dabei eine Sicherungskopie entsteht, weil die Datei von Hand gepflegte
-   Kommentare enthält.
+   Profil ein. „Immer, in allen Projekten“ schreibt sie stattdessen in die
+   Erweiterungsdatei (Kapitel 11) — der Dialog nennt den Zielpfad vorher im
+   Klartext und weist darauf hin, wenn dabei eine Sicherungskopie entsteht,
+   weil die Datei von Hand gepflegte Kommentare enthält. Ist die
+   Erweiterungsdatei kaputt oder schreibgeschützt, steht diese Wahl gar nicht
+   erst zur Verfügung — der Dialog nennt den Grund.
 
-„Muster von Hand bearbeiten…“ führt bei Bedarf in die vollständige
-Fachansicht mit Erprobungsfeld — dieselbe, die früher unter „Mehr ▾ →
-Textregeln…“ lag und jetzt nur noch von hier aus erreichbar ist.
+„In den Einstellungen bearbeiten…“ führt bei Bedarf in die vollständige
+Fachansicht mit Erprobungsfeld — das Fenster „Einstellungen“ (Kapitel 5),
+im Reiter, der zur Wahl unter „Wo gilt das?“ passt.
 
 **Mehrere übersehene Stellen.** Eine Regel erledigt dabei oft mehr als eine
 Fundstelle: „alles dieser Form“ macht aus `FW123456` das Muster „FW + 6
@@ -142,14 +143,16 @@ eine Kundennummer, ein Projektname — gibt es **„Übernehmen und weiter“**:
 Regel wird angelegt, der Dialog bleibt offen und zeigt an, was in diesem
 Durchgang bereits entstanden ist.
 
-**Eine Regel wieder loswerden.** Ein zu weit geratenes Muster — „alles dieser
-Form“ auf einem Datum ersetzt fortan jedes Datum — lässt sich in der Fundliste
-über **„Regel entfernen“** wieder löschen; der Knopf erscheint dort anstelle
-von „immer…“, sobald ein Fund aus einer selbst angelegten Regel stammt. Die
-vier eingebauten Regeln bleiben davon unberührt: für sie ist das Häkchen der
-richtige Weg, denn es gilt nur für den einen Durchgang. Bereits vergebene
-Pseudonyme bleiben beim Löschen in der Ersetzungstabelle stehen — der Weg
-zurück zu den Echtwerten geht dadurch nicht verloren.
+**Eine Regel wieder loswerden oder ändern.** Ein zu weit geratenes Muster —
+„alles dieser Form“ auf einem Datum ersetzt fortan jedes Datum — lässt sich in
+der Fundliste über **„Regel entfernen“** wieder löschen; über **„bearbeiten…“**
+öffnen sich stattdessen die Einstellungen mit ausgewählter Regel, um nur das
+Muster anzupassen. Beide Knöpfe erscheinen dort anstelle von „immer…“, sobald
+ein Fund aus einer selbst angelegten Regel stammt. Die vier eingebauten Regeln
+bleiben davon unberührt: für sie ist das Häkchen der richtige Weg, denn es
+gilt nur für den einen Durchgang. Bereits vergebene Pseudonyme bleiben beim
+Löschen in der Ersetzungstabelle stehen — der Weg zurück zu den Echtwerten
+geht dadurch nicht verloren.
 
 ## 2. Wozu das Werkzeug da ist — und wozu nicht
 
@@ -433,29 +436,96 @@ geschieht oder zuletzt geschah — vom schlichten „Bereit.“ bis zur Meldung
 
 **Die Nebenfenster**, über **Mehr** erreichbar:
 
-- **Ersetzungstabelle…** — Pfad, Anzahl je Namensraum und die Dateirechte.
-  Zeigt keinen einzigen Wert, genau wie `obfuskation mapping list`.
-- **Hauseigene Muster…** — Fundort der Erweiterungsdatei (Kapitel 11) und,
-  sofern dort eine liegt, die geerbten Generatoren, Textregeln und die
-  Anzahl der Spaltenmuster. Zuvor ließ sich der Fundort nur über
-  `obfuskation extensions path` auf der Kommandozeile erfahren.
+- **Einstellungen…** — öffnet dasselbe Fenster wie der Knopf „⚙ Einstellungen“
+  in der Kopfzeile (Strg+,), im globalen Reiter. Siehe unten.
+- **Ersetzungstabelle…** — Pfad, Anzahl je Namensraum und die Dateirechte,
+  seit dieser Fassung auch bearbeitbar. Siehe unten.
 - **Kurzhilfe…** — kurze Karten für den schnellen Einstieg, im Menü durch
   einen Trenner von den beiden vorigen Einträgen abgesetzt.
 - **Über…** — Fassung, die fünf Hinweise aus Abschnitt 2 im Wortlaut und
   die verwendeten Pfade.
 
-Der frühere Eintrag „Textregeln…“ ist entfallen: eigene Muster legt seit
-dieser Fassung das Kontextmenü der Prüffassung an (Kapitel 1), die
-Fachansicht mit Erprobungsfeld bleibt darüber unter „Muster von Hand
-bearbeiten…“ erreichbar.
+Die früheren Einträge „Textregeln…“ und „Hauseigene Muster…“ (nur lesend)
+sind entfallen: beides zeigt jetzt das eine Fenster „Einstellungen“, mit
+Reitern für das Projekt und die Erweiterungsdatei nebeneinander — und beide
+Reiter sind dort bearbeitbar, nicht nur der erste.
 
-![Das Mehr-Menü: Textregeln…, Ersetzungstabelle…, Kurzhilfe… und Über Obfuskation…. Seit dieser Fassung entfällt „Textregeln…“, dafür kommt „Hauseigene Muster…“ hinzu — das Bild zeigt noch den alten Stand.](bilder/gui-mehr-menue.png)
-*Das Mehr-Menü, hier noch im Stand vor dieser Fassung: „Textregeln…“ ist
-entfallen, „Hauseigene Muster…“ ist neu hinzugekommen.*
+![Das Mehr-Menü mit „Einstellungen…“ anstelle der früheren Einträge „Textregeln…“ und „Hauseigene Muster…“.](bilder/gui-mehr-menue.png)
+*Das Mehr-Menü, neu aufzunehmen: zeigt noch den Stand vor dieser Fassung
+(„Textregeln…“, „Hauseigene Muster…“) statt des neuen Eintrags
+„Einstellungen…“.*
 
-![Die Ersetzungstabelle: Profil, Pfad und Dateirechte oben, darunter die Anzahl der Einträge je Namensraum — kein einziger Wert sichtbar.](bilder/gui-ersetzungstabelle.png)
-*Die Ersetzungstabelle: Profil, Pfad und Dateirechte oben, darunter die
-Anzahl der Einträge je Namensraum — kein einziger Wert sichtbar.*
+### Einstellungen: Textregeln, eigene Generatoren und Spaltenmuster an einem Ort
+
+Erreichbar über den Knopf **„⚙ Einstellungen“** in der Kopfzeile (immer
+sichtbar), das Tastenkürzel **Strg+,** oder „Mehr → Einstellungen…“. Zwei
+Reiter:
+
+1. **„Dieses Projekt – ‹Profilname›“** — ohne geladenes Profil nur ein
+   Hinweis. Sonst: die **Textregeln** des Profils, bearbeitbar wie zuvor im
+   Fenster „Textregeln“; darunter, grau abgesetzt, die geerbten
+   Erweiterungsregeln mit dem Zusatz „gilt für alle Projekte“ und dem Knopf
+   **„Dort bearbeiten“**, der in den globalen Reiter wechselt und die Regel
+   dort auswählt. Dazu die **eigenen Generatoren** des Profils (Name, Typ,
+   Präfix) — „Entfernen“ ist gesperrt, solange noch eine Regel oder ein Feld
+   den Generator nutzt, mit einem Tooltip, der sie nennt.
+2. **„Alle Projekte (hauseigen)“** — Kopfzeile mit Pfad und Zustand: entweder
+   „bearbeitbar“ oder der Grund der Sperre (die Datei ist schreibgeschützt,
+   oder — Fehler behoben in dieser Fassung, siehe unten — kaputt). Die
+   Knöpfe **„Ordner öffnen“** und **„Im Editor öffnen“** führen direkt zur
+   Datei. Ist der Reiter gesperrt, sind alle Felder dort schreibgeschützt,
+   die Ursache steht oben. Trägt die Datei von Hand gepflegte Kommentare,
+   entsteht beim Speichern eine Sicherungskopie (`.bak`), wie beim Dialog
+   „Immer ersetzen…“. Inhalt: dieselben Textregeln und eigenen Generatoren
+   wie im Projektreiter, dazu die **Spaltenmuster** (`fieldRules`, Kapitel
+   11): Muster, Generator, „Groß-/Kleinschreibung egal“ und Kommentar.
+
+Eine Textregel lässt sich zwischen den Reitern **verschieben** — „In alle
+Projekte verschieben“ bzw. „Nur in dieses Projekt verschieben“. Nutzt sie
+einen eigenen Generator, der im Ziel noch nicht existiert, wird er
+mitkopiert (nicht verschoben), damit die Quelle funktionsfähig bleibt, falls
+dort noch etwas anderes ihn braucht.
+
+Das Fenster arbeitet auf **Kopien** von Profil und Erweiterung. **Abbrechen**
+verwirft sie einfach. **Übernehmen** prüft zuerst — Fehler erscheinen als
+Liste und blockieren — und schreibt bei Erfolg beide geänderten Bereiche
+zurück: die Erweiterungsdatei auf die Platte, das Profil in die laufende
+Sitzung (Sternchen im Titel wie bei jeder anderen Änderung). Schließen des
+Fensters mit ungespeicherten Änderungen (über die Titelleiste) fragt nach:
+„Übernehmen / Verwerfen / Weiter bearbeiten“.
+
+![Das Fenster „Einstellungen“: zwei Reiter für Projekt und hauseigene Erweiterung, mit Textregeln, eigenen Generatoren und (global) Spaltenmustern.](bilder/gui-textregeln.png)
+*Das Fenster „Einstellungen“, neu aufzunehmen — der Dateiname ist aus der
+Vorfassung übernommen (damals das Fenster „Textregeln“), das Bild selbst
+zeigt noch den alten, einreitrigen Stand.*
+
+### Ersetzungstabelle: Werte gezielt einsehen und löschen
+
+Wie zuvor stehen Pfad, Dateirechte und die Anzahl je Namensraum oben — kein
+Wert ist zu sehen, solange niemand ausdrücklich nachfragt. Neu:
+
+- An jedem Namensraum ein Knopf **„Leeren…“**, der alle seine Einträge auf
+  einmal löscht.
+- Der Knopf **„Werte anzeigen“** (immer aus beim Öffnen), davor der
+  Warnhinweis „Die Tabelle enthält alle Echtdaten. Nur einblenden, wenn
+  niemand mitliest.“ Eingeblendet erscheinen ein Suchfeld (filtert über
+  Klartext *und* Pseudonym, ohne Rücksicht auf Groß-/Kleinschreibung), eine
+  Namensraum-Auswahl („alle“ oder ein bestimmter) und die Tabelle selbst,
+  mit Mehrfachauswahl und dem Knopf **„Ausgewählte löschen…“**.
+
+Vor jedem Löschen (einzeln oder „Leeren…“) eine Rückfrage: bereits erzeugte
+Pseudodateien mit diesen Pseudonymen lassen sich an den betroffenen Stellen
+nicht mehr zurückübersetzen; ein neuer Lauf vergibt für denselben Klartext
+voraussichtlich wieder dasselbe Pseudonym, weil Salt und Berechnung
+unverändert bleiben. Pseudonyme selbst lassen sich **nicht ändern**, nur
+löschen — ein geändertes Pseudonym hätte mit bereits erzeugten Pseudodateien
+nichts mehr zu tun. Läuft parallel ein anderer Vorgang auf derselben
+Tabelle, meldet das Löschen „Die Tabelle ist gerade durch einen Lauf
+gesperrt“, statt etwas zu verändern.
+
+![Die Ersetzungstabelle mit eingeblendeten Werten: Suchfeld, Namensraum-Auswahl und die Liste mit Mehrfachauswahl.](bilder/gui-ersetzungstabelle.png)
+*Die Ersetzungstabelle, neu aufzunehmen: zeigt noch den älteren,
+rein lesenden Stand ohne „Werte anzeigen“, Suche und Löschen.*
 
 **Kurzhilfe.** Fenster mit dem Titel „Kurzhilfe“ und dem Untertitel „Das
 Wichtigste in zwei Minuten“, gegliedert in sechs Karten: wofür das Programm
@@ -926,6 +996,14 @@ Reihenfolge, die zuerst gefundene Datei gilt vollständig:
 Sie fließt beim Start automatisch in jedes Profil ein, wird aber **nie** in
 eine Profildatei zurückgeschrieben — eine Änderung an der Erweiterungsdatei
 betrifft also nie den Inhalt eines Profils.
+
+Bearbeiten lässt sie sich seit dieser Fassung auch ohne Texteditor, im
+globalen Reiter der **Einstellungen** (Kapitel 5). Geschrieben wird immer
+nur die geltende Datei selbst — liegt sie neben der Programmdatei und ist
+dort schreibgeschützt (etwa bei einer Installation aus einem Paket), bleibt
+der Reiter gesperrt, mit der Ursache in der Kopfzeile, statt heimlich eine
+zweite Datei im Konfigurationsordner anzulegen, die beim nächsten Start
+ohnehin nicht gelesen würde.
 
 ### Was eine Maske ist
 

@@ -32,6 +32,17 @@ public sealed class MainViewModel : ObservableObject
     private readonly ExtensionLibrary _extensions;
     private readonly string _extensionPath;
 
+    /// <summary>
+    /// Fehlermeldung, wenn die Erweiterungsdatei zwar existiert, sich aber
+    /// nicht laden liess (kaputtes JSON) -- <c>null</c>, solange sie sauber
+    /// las oder fehlte. Solange er gesetzt ist, darf kein Weg in diese Datei
+    /// schreiben (Fehler 1): <see cref="_extensions"/> arbeitet in diesem Fall
+    /// mit <see cref="ExtensionLibrary.Empty"/> weiter, und ein Speichern
+    /// ueberschriebe die kaputte Datei mit nur der neuen Regel, statt sie
+    /// unangetastet zu lassen, bis jemand sie von Hand repariert.
+    /// </summary>
+    private readonly string? _extensionLoadError;
+
     private ProfileSession? _session;
     private string? _dataFilePath;
     private byte[]? _dataContent;
@@ -79,6 +90,7 @@ public sealed class MainViewModel : ObservableObject
         {
             _extensions = ExtensionLibrary.Empty;
             _extensionPath = Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName);
+            _extensionLoadError = ex.Message;
             _statusText = ex.Message;
         }
 
@@ -109,10 +121,13 @@ public sealed class MainViewModel : ObservableObject
         ShowAboutCommand = new RelayCommand(() => AboutRequested?.Invoke());
         ShowHelpCommand = new RelayCommand(() => HelpRequested?.Invoke());
 
-        // "Hauseigene Muster…" ist unabhaengig vom geladenen Profil erreichbar
-        // -- die Erweiterungsdatei existiert unabhaengig von jedem Profil und
-        // wird schon im Konstruktor geladen (siehe oben).
-        ShowExtensionsCommand = new RelayCommand(() => ExtensionsRequested?.Invoke());
+        // Die Einstellungen sind unabhaengig vom geladenen Profil erreichbar --
+        // der globale Reiter existiert unabhaengig von jedem Profil und die
+        // Erweiterungsdatei wird schon im Konstruktor geladen (siehe oben).
+        // Ohne Parameter (Kopfzeile, Strg+,) oeffnet sich der Projektreiter,
+        // sofern ein Profil geladen ist -- SettingsViewModel faellt sonst
+        // selbst auf den globalen Reiter zurueck.
+        ShowSettingsCommand = new RelayCommand<SettingsTab?>(tab => _ = ShowSettingsAsync(tab ?? SettingsTab.Project));
 
         // "Immer ersetzen…" aus der Dateiansicht: Vorbelegung ist der
         // Beispielwert des gerade gewaehlten Feldes (falls eines gewaehlt
@@ -169,7 +184,13 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand ShowGeneratorOptionsCommand { get; }
     public RelayCommand ShowAboutCommand { get; }
     public RelayCommand ShowHelpCommand { get; }
-    public RelayCommand ShowExtensionsCommand { get; }
+
+    /// <summary>
+    /// Oeffnet die Einstellungen. Der Parameter waehlt den Reiter (Kopfzeile
+    /// und Strg+, lassen ihn weg -- Projekt, sofern eines geladen ist; das
+    /// Menue "Mehr" gibt ausdruecklich den globalen Reiter vor).
+    /// </summary>
+    public RelayCommand<SettingsTab?> ShowSettingsCommand { get; }
 
     /// <summary>Der Dialog "Immer ersetzen…" aus der Dateiansicht heraus (siehe Konstruktor).</summary>
     public AsyncRelayCommand ShowAlwaysReplaceCommand { get; }
@@ -199,19 +220,6 @@ public sealed class MainViewModel : ObservableObject
     public event Action? GeneratorOptionsRequested;
     public event Action? AboutRequested;
     public event Action? HelpRequested;
-    public event Action? ExtensionsRequested;
-
-    /// <summary>
-    /// Das Ansichtsmodell der Textregeln zum laufenden Profil -- weiterhin
-    /// erreichbar, seit der Menueintrag "Textregeln…" entfallen ist (siehe
-    /// Plan Teil C): "Immer ersetzen…" fuehrt ueber "Muster von Hand
-    /// bearbeiten…" auf genau dieses Ansichtsmodell.
-    /// </summary>
-    public TextRulesViewModel? CreateTextRulesViewModel()
-        => _session is null ? null : new TextRulesViewModel(_session.Profile, _extensions, OnTextRulesChanged);
-
-    /// <summary>Auskunft ueber die Erweiterungsdatei fuer "Hauseigene Muster…".</summary>
-    public ExtensionsViewModel CreateExtensionsViewModel() => new(_extensionPath, _extensions);
 
     /// <summary>
     /// Das Ansichtsmodell des Optionsdialogs fuer das fuehrende gewaehlte
@@ -222,13 +230,17 @@ public sealed class MainViewModel : ObservableObject
     public GeneratorOptionsViewModel? CreateGeneratorOptionsViewModel()
         => _selectedField is null ? null : new GeneratorOptionsViewModel(_selectedField);
 
-    /// <summary>Die Auskunft ueber die Ersetzungstabelle.</summary>
+    /// <summary>Die Auskunft ueber die Ersetzungstabelle, seit Plan Teil D auch bearbeitbar.</summary>
     public MappingViewModel? CreateMappingViewModel()
     {
         if (_session is null || !_session.TryGetEngine(out var engine, out _) || engine is null)
             return null;
 
-        return new MappingViewModel(engine, _session.Profile.ProfileName);
+        return new MappingViewModel(engine, _session.Profile.ProfileName, _dialogs, onChanged: () =>
+        {
+            RefreshMappingSummary();
+            Text?.RefreshPreview();
+        });
     }
 
     public string? MappingStorePath
@@ -242,14 +254,6 @@ public sealed class MainViewModel : ObservableObject
                 ? engine.ResolveMappingStorePath()
                 : null;
         }
-    }
-
-    private void OnTextRulesChanged()
-    {
-        _session?.MarkChanged();
-        RefreshIssues();
-        OnPropertyChanged(nameof(ProfileTitle));
-        OnPropertyChanged(nameof(HasUnsavedChanges));
     }
 
     // -------------------------------------------------------------- Listen
@@ -290,12 +294,21 @@ public sealed class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(IsStartView));
             OnPropertyChanged(nameof(IsTextView));
             OnPropertyChanged(nameof(IsFilesView));
+            OnPropertyChanged(nameof(ShowSaveButton));
         }
     }
 
     public bool IsStartView => _currentView == AppView.Start;
     public bool IsTextView => _currentView == AppView.Text;
     public bool IsFilesView => _currentView == AppView.Files;
+
+    /// <summary>
+    /// Fehler 4: der Knopf "Speichern" fehlte bisher in der Textansicht --
+    /// dort entstehende Profilregeln ("Immer ersetzen…" ins Profil, "Muster
+    /// von Hand bearbeiten…") wurden nur ueber die Rueckfrage beim Beenden
+    /// gesichert. In der Dateiansicht bleibt er wie bisher immer sichtbar.
+    /// </summary>
+    public bool ShowSaveButton => IsFilesView || (IsTextView && HasUnsavedChanges);
 
     public ProfileSession? Session => _session;
 
@@ -689,7 +702,8 @@ public sealed class MainViewModel : ObservableObject
             // sagt bereits, worum es geht ("»…« immer ersetzen…"), und zwei
             // Namen fuer dasselbe Fenster stiften nur Verwirrung.
             onAlwaysReplaceRequested: sample => _ = ShowAlwaysReplaceAsync(sample, Text?.InputText ?? ""),
-            onRemoveRuleRequested: ruleName => _ = RemoveTextRuleAsync(ruleName));
+            onRemoveRuleRequested: ruleName => _ = RemoveTextRuleAsync(ruleName),
+            onEditRuleRequested: ruleName => _ = EditTextRuleAsync(ruleName));
 
         SwitchView(AppView.Text);
     }
@@ -748,6 +762,8 @@ public sealed class MainViewModel : ObservableObject
         if (_session is null)
             return;
 
+        SettingsTab? einstellungenReiter = null;
+
         var viewModel = new AlwaysReplaceViewModel(
             _session.Profile, _extensions, initialSample, contextText,
             wentToProfile =>
@@ -761,6 +777,7 @@ public sealed class MainViewModel : ObservableObject
                     _session.MarkChanged();
                     OnPropertyChanged(nameof(ProfileTitle));
                     OnPropertyChanged(nameof(HasUnsavedChanges));
+                    OnPropertyChanged(nameof(ShowSaveButton));
                 }
                 else
                 {
@@ -779,11 +796,20 @@ public sealed class MainViewModel : ObservableObject
                 RefreshGenerators();
                 RefreshIssues();
             },
-            () => CreateTextRulesViewModel()!,
             windowTitle,
-            introText);
+            introText,
+            extensionBlockedReason: _extensionLoadError);
+
+        viewModel.EditRulesRequested += tab => einstellungenReiter = tab;
 
         var bestaetigt = await _dialogs().ShowAlwaysReplaceAsync(viewModel);
+
+        if (einstellungenReiter is { } reiter)
+        {
+            await ShowSettingsAsync(reiter);
+            return;
+        }
+
         if (!bestaetigt)
             return;
 
@@ -797,6 +823,46 @@ public sealed class MainViewModel : ObservableObject
             1 when viewModel.UseExtension => $"Regel „{viewModel.RuleName}“ angelegt in {viewModel.ExtensionPath}.",
             1 => $"Regel „{viewModel.RuleName}“ im Profil angelegt.",
             var anzahl => $"{anzahl} Regeln angelegt: {string.Join(", ", viewModel.CreatedRuleNames)}.",
+        };
+    }
+
+    /// <summary>
+    /// Oeffnet die Einstellungen (Plan Teil B): Textregeln, eigene Generatoren
+    /// und -- im globalen Reiter -- Spaltenmuster, fuer Projekt und
+    /// Erweiterungsdatei nebeneinander. Das Ansichtsmodell arbeitet auf
+    /// Kopien; erst nach erfolgreichem "Übernehmen"
+    /// (<see cref="SettingsViewModel.Applied"/>) muss hier irgendetwas
+    /// nachgezogen werden.
+    /// </summary>
+    /// <param name="tab">Der Reiter, mit dem sich das Fenster oeffnet.</param>
+    /// <param name="ruleName">Eine vorab auszuwaehlende Textregel, oder <c>null</c>.</param>
+    public async Task ShowSettingsAsync(SettingsTab tab = SettingsTab.Project, string? ruleName = null)
+    {
+        var schreibzustand = ExtensionLibrary.GetWriteState();
+        var viewModel = new SettingsViewModel(_session, _extensions, schreibzustand, _extensionLoadError, tab, ruleName);
+
+        var uebernommen = await _dialogs().ShowSettingsAsync(viewModel);
+        if (!uebernommen)
+            return;
+
+        // "Immer" laut Plan: die Engine kennt weder eine geaenderte
+        // Profilregel noch eine geaenderte Erweiterungsregel, solange sie
+        // nicht verworfen wird -- unabhaengig davon, welcher der beiden
+        // Bereiche tatsaechlich geschrieben wurde.
+        _session?.InvalidateEngine();
+        RefreshGenerators();
+        RefreshIssues();
+        Text?.RefreshPreview();
+        OnPropertyChanged(nameof(ProfileTitle));
+        OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(ShowSaveButton));
+
+        StatusText = (viewModel.ProjectChanged, viewModel.GlobalChanged) switch
+        {
+            (true, true) => "Einstellungen übernommen: Projekt und hauseigene Muster.",
+            (true, false) => "Profileinstellungen übernommen.",
+            (false, true) => $"Hauseigene Muster übernommen: {viewModel.GlobalPath}.",
+            _ => "Keine Änderungen zum Übernehmen.",
         };
     }
 
@@ -825,7 +891,7 @@ public sealed class MainViewModel : ObservableObject
             return;
 
         var bestaetigt = await _dialogs().AskRemoveTextRuleAsync(
-            ruleName, inErweiterung is not null ? ExtensionLibrary.ResolveWritePath() : null);
+            ruleName, inErweiterung is not null ? ExtensionLibrary.GetWriteState().Path : null);
 
         if (!bestaetigt)
             return;
@@ -836,12 +902,26 @@ public sealed class MainViewModel : ObservableObject
             _session.MarkChanged();
             OnPropertyChanged(nameof(ProfileTitle));
             OnPropertyChanged(nameof(HasUnsavedChanges));
+            OnPropertyChanged(nameof(ShowSaveButton));
         }
 
         if (inErweiterung is not null)
         {
-            _extensions.TextRules.Remove(inErweiterung);
-            _extensions.Save(ExtensionLibrary.ResolveWritePath());
+            // Fehler 1: eine kaputte oder schreibgeschuetzte Erweiterungsdatei
+            // darf hier nicht angefasst werden -- ein Speichern wuerde sie mit
+            // dem verbleibenden Rest ueberschreiben (kaputt) oder ohnehin an
+            // den Rechten scheitern.
+            var schreibzustand = ExtensionLibrary.GetWriteState();
+            if (_extensionLoadError is not null || !schreibzustand.CanWrite)
+            {
+                StatusText = _extensionLoadError ?? schreibzustand.Reason
+                             ?? "Die Erweiterungsdatei lässt sich nicht schreiben.";
+            }
+            else
+            {
+                _extensions.TextRules.Remove(inErweiterung);
+                _extensions.Save(schreibzustand.Path);
+            }
         }
 
         // Die Engine fuehrt Profil- und Erweiterungsregeln in ihrem Konstruktor
@@ -854,6 +934,28 @@ public sealed class MainViewModel : ObservableObject
         Text?.RefreshPreview();
 
         StatusText = $"Regel „{ruleName}“ gelöscht.";
+    }
+
+    /// <summary>
+    /// "bearbeiten…" bzw. "Regeln bearbeiten…" aus der Fundleiste der
+    /// Textansicht (Plan Teil C-2): oeffnet die Einstellungen im richtigen
+    /// Reiter -- Profil oder global, je nachdem, wo <paramref name="ruleName"/>
+    /// liegt -- mit dieser Regel ausgewaehlt. Ohne Regelnamen (der Knopf
+    /// "Regeln bearbeiten…" in der Kopfzeile der Fundleiste) oeffnet einfach
+    /// der Projektreiter, ohne Auswahl.
+    /// </summary>
+    private async Task EditTextRuleAsync(string? ruleName)
+    {
+        if (ruleName is null)
+        {
+            await ShowSettingsAsync(SettingsTab.Project);
+            return;
+        }
+
+        var inErweiterung = _extensions.TextRules.Any(
+            rule => string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase));
+
+        await ShowSettingsAsync(inErweiterung ? SettingsTab.Global : SettingsTab.Project, ruleName);
     }
 
     /// <summary>
@@ -1153,6 +1255,7 @@ public sealed class MainViewModel : ObservableObject
             StatusText = $"Gespeichert: {ziel}";
             OnPropertyChanged(nameof(ProfileTitle));
             OnPropertyChanged(nameof(HasUnsavedChanges));
+            OnPropertyChanged(nameof(ShowSaveButton));
             return Task.CompletedTask;
         });
     }
@@ -1179,6 +1282,7 @@ public sealed class MainViewModel : ObservableObject
 
         OnPropertyChanged(nameof(HasProfile));
         OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(ShowSaveButton));
         OnPropertyChanged(nameof(ProfileName));
         OnPropertyChanged(nameof(ProfileTitle));
         OnPropertyChanged(nameof(HasBlockingIssues));
@@ -1451,6 +1555,7 @@ public sealed class MainViewModel : ObservableObject
 
         OnPropertyChanged(nameof(ProfileTitle));
         OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(ShowSaveButton));
         OnPropertyChanged(nameof(UndecidedCount));
         OnPropertyChanged(nameof(UndecidedText));
         OnPropertyChanged(nameof(HasUndecided));

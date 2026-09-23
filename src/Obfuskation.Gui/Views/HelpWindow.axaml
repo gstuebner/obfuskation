@@ -46,9 +46,18 @@
             <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
                        Text="Steht noch etwas Vertrauliches ohne Farbe da, die Stelle markieren und mit der rechten Maustaste „… immer ersetzen…“ wählen (oder Strg+M drücken). Der Dialog fragt in Klartext, ob nur genau dieses Wort oder alles dieser Form gemeint ist, und ob die Regel nur für dieses eine Projekt oder für alle gelten soll. Kein regulärer Ausdruck nötig."/>
             <TextBlock TextWrapping="Wrap" Margin="0,4,0,0"
-                       Text="Eine Regel fasst dabei oft mehrere Stellen auf einmal: „Alles dieser Form“ macht aus FW123456 das Muster „FW + 6 Ziffern“, und der Dialog sagt vorher, wie oft es im aktuellen Text greift. Für mehrere verschiedene Begriffe hintereinander gibt es „Übernehmen und weiter“. Eine selbst angelegte Regel lässt sich in der Fundliste über „Regel entfernen“ wieder löschen. Zum Tippen und Ändern schaltet „Bearbeiten“ auf ein normales Eingabefeld um, „Fertig“ zurück auf die farbige Ansicht. Denselben Dialog gibt es in der Dateiansicht als Knopf „Immer ersetzen…“ neben der Feldliste."/>
+                       Text="Eine Regel fasst dabei oft mehrere Stellen auf einmal: „Alles dieser Form“ macht aus FW123456 das Muster „FW + 6 Ziffern“, und der Dialog sagt vorher, wie oft es im aktuellen Text greift. Für mehrere verschiedene Begriffe hintereinander gibt es „Übernehmen und weiter“. Eine selbst angelegte Regel lässt sich in der Fundliste über „Regel entfernen“ wieder löschen oder über „bearbeiten…“ in den Einstellungen anpassen. Zum Tippen und Ändern schaltet „Bearbeiten“ auf ein normales Eingabefeld um, „Fertig“ zurück auf die farbige Ansicht. Denselben Dialog gibt es in der Dateiansicht als Knopf „Immer ersetzen…“ neben der Feldliste."/>
             <TextBlock Classes="muted small" TextWrapping="Wrap" Margin="0,4,0,0"
                        Text="Wer aus dem Textmodus zu einer Tabelle wechselt, bleibt im selben Profil — dieselbe Ersetzungstabelle gilt dann für beides."/>
+          </StackPanel>
+        </Border>
+
+        <!-- ========================================= Einstellungen ===== -->
+        <Border Classes="card">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Alle Regeln an einem Ort" Classes="card-title" Margin="0"/>
+            <TextBlock TextWrapping="Wrap"
+                       Text="„⚙ Einstellungen“ in der Kopfzeile (oder Strg+,) zeigt Textregeln, eigene Generatoren und — im Reiter „Alle Projekte (hauseigen)“ — Spaltenmuster für das geladene Projekt und die hauseigene Erweiterungsdatei nebeneinander. Eine Regel lässt sich zwischen beiden verschieben; ist die Erweiterungsdatei schreibgeschützt oder kaputt, bleibt der globale Reiter gesperrt, mit dem Grund in der Kopfzeile. Geändert wird erst mit „Übernehmen“, „Abbrechen“ verwirft alles."/>
           </StackPanel>
         </Border>
 

@@ -277,6 +277,62 @@ public sealed class MappingStore : IDisposable
         NewEntries++;
     }
 
+    /// <summary>
+    /// Entfernt einen einzelnen Eintrag wieder -- aus der Ersetzungstabelle
+    /// selbst und aus dem Rueckwaertsindex. Ein dadurch leer werdender
+    /// Namensraum entfaellt ganz, statt als leerer Eintrag stehen zu bleiben.
+    ///
+    /// Bereits erzeugte Pseudodateien, die dieses Pseudonym enthalten, lassen
+    /// sich danach an dieser Stelle nicht mehr zurueckuebersetzen -- ein
+    /// neuer Lauf vergibt fuer denselben Klartext voraussichtlich wieder
+    /// dasselbe Pseudonym, weil Salt und Zaehlerstart unveraendert bleiben
+    /// (siehe <see cref="Pseudonymizer.Pseudonymize"/>).
+    /// </summary>
+    /// <returns>Ob ueberhaupt ein Eintrag entfernt wurde.</returns>
+    public bool Remove(string namespaceName, string plaintext)
+    {
+        if (!_document.Namespaces.TryGetValue(namespaceName, out var entries)
+            || !entries.TryGetValue(plaintext, out var pseudonym))
+        {
+            return false;
+        }
+
+        entries.Remove(plaintext);
+        if (entries.Count == 0)
+            _document.Namespaces.Remove(namespaceName);
+
+        if (_reverse.TryGetValue(namespaceName, out var reverse))
+        {
+            reverse.Remove(pseudonym);
+            if (reverse.Count == 0)
+                _reverse.Remove(namespaceName);
+        }
+
+        _dirty = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Entfernt einen ganzen Namensraum mit allen seinen Eintraegen -- der
+    /// Knopf "Leeren…" der Ersetzungstabelle.
+    /// </summary>
+    /// <returns>Die Anzahl der entfernten Eintraege.</returns>
+    public int RemoveNamespace(string namespaceName)
+    {
+        if (!_document.Namespaces.TryGetValue(namespaceName, out var entries))
+            return 0;
+
+        var anzahl = entries.Count;
+
+        _document.Namespaces.Remove(namespaceName);
+        _reverse.Remove(namespaceName);
+
+        if (anzahl > 0)
+            _dirty = true;
+
+        return anzahl;
+    }
+
     /// <summary>Alle Zuordnungen eines Namensraums.</summary>
     public IReadOnlyDictionary<string, string> Entries(string namespaceName)
         => _document.Namespaces.TryGetValue(namespaceName, out var entries)

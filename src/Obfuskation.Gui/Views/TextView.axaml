@@ -116,7 +116,7 @@
            Einsteiger nicht von selbst annimmt, darum steht es dauerhaft da. -->
       <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted small" Margin="2,6,0,0"
                  IsVisible="{Binding IsForward}" TextWrapping="Wrap"
-                 Text="Noch etwas Vertrauliches ohne Farbe? Links markieren, rechte Maustaste → „… immer ersetzen…“ (oder Strg+M) — der Dialog fragt in Klartext, kein regulärer Ausdruck nötig."/>
+                 Text="Noch etwas Vertrauliches ohne Farbe? Links markieren, rechte Maustaste → „… immer ersetzen…“ (oder Strg+M) — der Dialog fragt in Klartext, kein regulärer Ausdruck nötig, oder Regeln unter ⚙ Einstellungen bearbeiten."/>
 
       <Border Grid.Column="2" Classes="card" Margin="0">
         <Grid RowDefinitions="Auto,*">
@@ -141,14 +141,20 @@
     <Border Grid.Row="2" Classes="card" Margin="0,0,0,0" IsVisible="{Binding IsForward}">
       <StackPanel Spacing="6">
 
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12">
           <TextBlock Grid.Column="0" Text="{Binding MatchSummary}" Classes="muted small"
                      VerticalAlignment="Center" TextWrapping="Wrap"/>
+
+          <!-- Fuehrt auf den Projektreiter der Einstellungen, ohne eine
+               bestimmte Regel auszuwaehlen (Plan Teil C-2). -->
+          <Button Grid.Column="1" Content="Regeln bearbeiten…" Classes="flat"
+                  Command="{Binding EditRulesCommand}"
+                  ToolTip.Tip="Textregeln in den Einstellungen bearbeiten"/>
 
           <!-- Die Legende erklaert die Ansicht ohne einen Satz Hilfetext: was
                farbig ist, ist versorgt; was farblos bleibt, ginge im Klartext
                hinaus. Das ist die eigentliche Aussage der ganzen Seite. -->
-          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10"
                       VerticalAlignment="Center">
             <StackPanel Orientation="Horizontal" Spacing="4">
               <Border Width="10" Height="10" CornerRadius="2" VerticalAlignment="Center"
@@ -170,7 +176,7 @@
           <ItemsControl ItemsSource="{Binding Matches}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:TextMatchViewModel">
-                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto" ColumnSpacing="8" Margin="0,2">
+                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,Auto" ColumnSpacing="8" Margin="0,2">
                   <CheckBox Grid.Column="0" IsChecked="{Binding IsIncluded}"
                             IsEnabled="{Binding CanToggle}"
                             ToolTip.Tip="Diesen Fund für diesen Durchgang abschalten"/>
@@ -195,6 +201,10 @@
                           IsVisible="{Binding IsUserRule}"
                           Command="{Binding RemoveRuleCommand}"
                           ToolTip.Tip="Die selbst angelegte Regel wieder löschen"/>
+                  <Button Grid.Column="5" Content="bearbeiten…" Classes="flat"
+                          IsVisible="{Binding IsUserRule}"
+                          Command="{Binding EditRuleCommand}"
+                          ToolTip.Tip="Diese Regel in den Einstellungen bearbeiten"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

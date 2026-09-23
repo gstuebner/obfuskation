@@ -286,6 +286,45 @@ public sealed class TextViewModelTests : IDisposable
         Assert.Equal("hostname", zuLoeschen);
     }
 
+    [Fact]
+    public void Bearbeiten_meldet_den_Namen_der_Regel_aus_der_Fundliste()
+    {
+        // Plan Teil C-2: "bearbeiten…" neben "Regel entfernen" fuehrt auf die
+        // Einstellungen mit ausgewaehlter Regel.
+        var sitzung = ErzeugeSitzung();
+        sitzung.Profile.TextRules.Add(new TextRule
+        {
+            Name = "hostname", Priority = 60, Generator = "token", Pattern = @"\bFW\d{6}\b",
+        });
+
+        string? bearbeitet = "unveraendert";
+        var modell = new TextViewModel(
+            sitzung, debounceDelay: TimeSpan.Zero,
+            onEditRuleRequested: name => bearbeitet = name);
+
+        modell.InputText = "Server FW123456";
+        modell.RefreshPreview();
+
+        Assert.Single(modell.Matches).EditRuleCommand.Execute(null);
+
+        Assert.Equal("hostname", bearbeitet);
+    }
+
+    [Fact]
+    public void Regeln_bearbeiten_in_der_Kopfzeile_meldet_keinen_bestimmten_Regelnamen()
+    {
+        var sitzung = ErzeugeSitzung();
+
+        string? bearbeitet = "unveraendert";
+        var modell = new TextViewModel(
+            sitzung, debounceDelay: TimeSpan.Zero,
+            onEditRuleRequested: name => bearbeitet = name);
+
+        modell.EditRulesCommand.Execute(null);
+
+        Assert.Null(bearbeitet);
+    }
+
     // ------------------------------------------------------------------
     // Der gemeldete Vermerk: was die eingebaute Erkennung sieht -- und vor
     // allem, was nicht. Genau diese Luecke ist der Grund, warum es das

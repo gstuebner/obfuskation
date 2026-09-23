@@ -22,7 +22,6 @@ public partial class MainWindow : Window
             viewModel.GeneratorOptionsRequested += () => ShowGeneratorOptions(viewModel);
             viewModel.AboutRequested += () => ShowAbout(viewModel);
             viewModel.HelpRequested += ShowHelp;
-            viewModel.ExtensionsRequested += () => ShowExtensions(viewModel);
         };
     }
 
@@ -48,7 +47,4 @@ public partial class MainWindow : Window
         => new AboutWindow(viewModel.MappingStorePath).ShowDialog(this);
 
     private void ShowHelp() => new HelpWindow().ShowDialog(this);
-
-    private void ShowExtensions(MainViewModel viewModel)
-        => new ExtensionsWindow { DataContext = viewModel.CreateExtensionsViewModel() }.ShowDialog(this);
 }

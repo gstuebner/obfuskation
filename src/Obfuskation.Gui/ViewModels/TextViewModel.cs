@@ -41,6 +41,7 @@ public sealed class TextViewModel : ObservableObject
     private readonly Action? _onRealRunCompleted;
     private readonly Action<string>? _onAlwaysReplaceRequested;
     private readonly Action<string>? _onRemoveRuleRequested;
+    private readonly Action<string?>? _onEditRuleRequested;
     private readonly TimeSpan _debounceDelay;
 
     /// <summary>
@@ -90,6 +91,7 @@ public sealed class TextViewModel : ObservableObject
         Action? onRealRunCompleted = null,
         Action<string>? onAlwaysReplaceRequested = null,
         Action<string>? onRemoveRuleRequested = null,
+        Action<string?>? onEditRuleRequested = null,
         TimeSpan? debounceDelay = null)
     {
         _session = session;
@@ -97,7 +99,12 @@ public sealed class TextViewModel : ObservableObject
         _onRealRunCompleted = onRealRunCompleted;
         _onAlwaysReplaceRequested = onAlwaysReplaceRequested;
         _onRemoveRuleRequested = onRemoveRuleRequested;
+        _onEditRuleRequested = onEditRuleRequested;
         _debounceDelay = debounceDelay ?? TimeSpan.FromMilliseconds(300);
+
+        // Fundleiste (Plan Teil C-2): fuehrt auf den Projektreiter der
+        // Einstellungen, ohne eine bestimmte Regel auszuwaehlen.
+        EditRulesCommand = new RelayCommand(() => _onEditRuleRequested?.Invoke(null));
 
         // Eine Sammelbenachrichtigung statt an jeder einzelnen Clear()/Add()-
         // Stelle: HasMatches soll unabhaengig davon stimmen, auf welchem Weg
@@ -167,6 +174,9 @@ public sealed class TextViewModel : ObservableObject
     /// bewusst gewaehlt: sie ist die einzige dauerhaft sichtbare Meldungszeile.
     /// </summary>
     public void ReportViewError(string message) => StoreWarning = message;
+
+    /// <summary>"Regeln bearbeiten…" in der Kopfzeile der Fundleiste -- fuehrt auf den Projektreiter der Einstellungen.</summary>
+    public RelayCommand EditRulesCommand { get; }
 
     public ObservableCollection<TextMatchViewModel> Matches { get; } = new();
 
@@ -477,7 +487,7 @@ public sealed class TextViewModel : ObservableObject
             var eintrag = new TextMatchViewModel(
                 match.Value, replacement, match.Rule.Name, canToggle,
                 !EingebauteRegeln.Contains(match.Rule.Name),
-                RequestAlwaysReplace, _onRemoveRuleRequested);
+                RequestAlwaysReplace, _onRemoveRuleRequested, _onEditRuleRequested);
             eintrag.IncludedChanged += RecomputeResultText;
             Matches.Add(eintrag);
         }
@@ -752,7 +762,8 @@ public sealed class TextMatchViewModel : ObservableObject
         string original, string replacement, string ruleName, bool canToggle,
         bool isUserRule = false,
         Action<string>? onAlwaysReplace = null,
-        Action<string>? onRemoveRule = null)
+        Action<string>? onRemoveRule = null,
+        Action<string?>? onEditRule = null)
     {
         Original = original;
         Replacement = replacement;
@@ -767,6 +778,11 @@ public sealed class TextMatchViewModel : ObservableObject
         // "Immer ersetzen…" und keinen zurueck.
         AlwaysReplaceCommand = new RelayCommand(() => onAlwaysReplace?.Invoke(Original));
         RemoveRuleCommand = new RelayCommand(() => onRemoveRule?.Invoke(RuleName));
+
+        // "bearbeiten…" fuehrt in die Einstellungen, mit ausgewaehlter Regel
+        // (Plan Teil C-2) -- nur fuer eigene Regeln sinnvoll, neben "Regel
+        // entfernen".
+        EditRuleCommand = new RelayCommand(() => onEditRule?.Invoke(RuleName));
     }
 
     public string Original { get; }
@@ -793,6 +809,9 @@ public sealed class TextMatchViewModel : ObservableObject
 
     /// <summary>Loescht die selbst angelegte Regel wieder; nur sinnvoll bei <see cref="IsUserRule"/>.</summary>
     public RelayCommand RemoveRuleCommand { get; }
+
+    /// <summary>Oeffnet die Einstellungen mit dieser Regel ausgewaehlt; nur sinnvoll bei <see cref="IsUserRule"/>.</summary>
+    public RelayCommand EditRuleCommand { get; }
 
     public bool IsIncluded
     {
