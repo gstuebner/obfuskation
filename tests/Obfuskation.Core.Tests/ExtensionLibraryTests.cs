@@ -51,6 +51,29 @@ public class ExtensionLibraryTests
     }
 
     [Fact]
+    public void Eine_unlesbare_Datei_ergibt_eine_ConfigurationException()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || Environment.UserName == "root")
+            return; // Dateirechte gibt es unter Windows so nicht, und root liest ohnehin alles.
+
+        var verzeichnis = Path.Combine(Path.GetTempPath(), "obfuskation-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(verzeichnis);
+        var pfad = Path.Combine(verzeichnis, "obfuskation.json");
+        File.WriteAllText(pfad, "{}");
+        File.SetUnixFileMode(pfad, UnixFileMode.None);
+
+        try
+        {
+            var ex = Assert.Throws<ConfigurationException>(() => ExtensionLibrary.Load(pfad));
+            Assert.Contains(pfad, ex.Message);
+        }
+        finally
+        {
+            File.SetUnixFileMode(pfad, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+    }
+
+    [Fact]
     public void Ein_Erweiterungsgenerator_ist_ueber_die_Registry_erreichbar()
     {
         var extensions = new ExtensionLibrary
@@ -198,6 +221,55 @@ public sealed class ExtensionLibraryResolvePathTests : IDisposable
 
         Assert.Equal(Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName), ergebnis.Path);
         Assert.Equal(ExtensionOrigin.ConfigDirectory, ergebnis.Origin);
+    }
+
+    [Fact]
+    public void Eine_kommentierte_Erweiterung_wird_gewaehlt_und_geladen()
+    {
+        // Fehler 2 des Plans: JsonDocument.Parse ohne CommentHandling warf hier
+        // eine JsonException, LooksLikeProfile liess sie durch (galt als
+        // Profil), und ResolvePath uebersprang die Datei -- eine von Hand
+        // kommentierte Erweiterungsdatei wirkte nie.
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        File.WriteAllText(pfad, """
+            {
+              // Kommentar am Zeilenanfang
+              "textRules": [
+                { "name": "fw", "pattern": "\\bFW\\d{6}\\b", "generator": "token" }
+              ],
+              /* Blockkommentar */
+              "fieldRules": [
+                { "pattern": ".*iban.*", "generator": "iban" },
+                { "pattern": ".*plz.*", "generator": "postalCode" }
+              ]
+            }
+            """);
+
+        var ergebnis = ExtensionLibrary.ResolvePath(_programVerzeichnis);
+        Assert.Equal(pfad, ergebnis.Path);
+
+        var erweiterung = ExtensionLibrary.Load(ergebnis.Path);
+        Assert.Single(erweiterung.TextRules);
+        Assert.Equal(2, erweiterung.FieldRules.Count);
+    }
+
+    [Fact]
+    public void Kaputtes_JSON_wird_gewaehlt_statt_uebersprungen_und_Load_wirft()
+    {
+        // Anders als eine Datei mit Profilinhalt (siehe naechster Test) gilt
+        // eine kaputte Datei nicht als "dort liegt ein Profil" -- sie wird
+        // gewaehlt, und erst Load meldet den eigentlichen Fehler.
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        File.WriteAllText(pfad, "{ kein gueltiges json");
+
+        var ergebnis = ExtensionLibrary.ResolvePath(_programVerzeichnis);
+
+        Assert.Equal(pfad, ergebnis.Path);
+        var kandidat = ergebnis.Candidates.Single(c => c.Origin == ExtensionOrigin.ProgramDirectory);
+        Assert.False(kandidat.SkippedAsProfile);
+
+        var ex = Assert.Throws<ConfigurationException>(() => ExtensionLibrary.Load(ergebnis.Path));
+        Assert.Contains(pfad, ex.Message);
     }
 
     [Fact]
@@ -395,6 +467,40 @@ public sealed class ExtensionLibrarySaveTests : IDisposable
         {
             // Sonst kann Dispose() die Testdatei nicht mehr loeschen.
             File.SetUnixFileMode(neben, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+    }
+
+    [Fact]
+    public void Ein_schreibgeschuetzter_Ordner_um_eine_beschreibbare_Datei_ist_nicht_beschreibbar()
+    {
+        // A2 des Plans: die Datei selbst ist beschreibbar, aber Save braucht
+        // fuer die Nebendatei (und ggf. .bak) auch Schreibrecht auf den
+        // Ordner -- das faellt sonst erst beim tatsaechlichen Speichern auf.
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || Environment.UserName == "root")
+            return; // Ordnerrechte gibt es unter Windows so nicht, und root darf ohnehin ueberall schreiben.
+
+        var neben = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        new ExtensionLibrary().Save(neben);
+
+        var vorherigerModus = File.GetUnixFileMode(_programVerzeichnis);
+        File.SetUnixFileMode(_programVerzeichnis,
+            UnixFileMode.UserRead | UnixFileMode.UserExecute
+            | UnixFileMode.GroupRead | UnixFileMode.GroupExecute
+            | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+        try
+        {
+            var zustand = ExtensionLibrary.GetWriteState(_programVerzeichnis);
+
+            Assert.Equal(neben, zustand.Path);
+            Assert.False(zustand.CanWrite);
+            Assert.NotNull(zustand.Reason);
+            Assert.Contains("Ordner", zustand.Reason);
+        }
+        finally
+        {
+            // Sonst kann Dispose() das Testverzeichnis nicht mehr aufraeumen.
+            File.SetUnixFileMode(_programVerzeichnis, vorherigerModus);
         }
     }
 

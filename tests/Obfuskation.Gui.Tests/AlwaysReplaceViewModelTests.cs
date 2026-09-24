@@ -138,6 +138,39 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Ein_Speicherfehler_nimmt_Regel_und_Generator_zurueck_und_setzt_ErrorText()
+    {
+        // A3 des Plans: die Zwischendatei (".tmp") wird durch ein gleichnamiges
+        // Verzeichnis blockiert -- funktioniert ohne root und ohne
+        // Dateirechte zu manipulieren, im Unterschied zu einem chmod-Test.
+        var zwischendatei = Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName + ".tmp");
+        Directory.CreateDirectory(zwischendatei);
+
+        try
+        {
+            var profil = NeuesProfil();
+            var erweiterung = ExtensionLibrary.Empty;
+            var modell = Erzeugen(profil, erweiterung, "FW123456");
+            modell.UseExtension = true;
+
+            modell.ApplyCommand.Execute(null);
+
+            Assert.False(modell.Confirmed);
+            Assert.True(modell.HasErrorText);
+            Assert.NotNull(modell.ErrorText);
+
+            // Weder die Regel noch der eben erst benannte eigene Generator
+            // ("fw~") sind haengengeblieben.
+            Assert.Empty(erweiterung.TextRules);
+            Assert.False(erweiterung.Generators.ContainsKey("fw"));
+        }
+        finally
+        {
+            Directory.Delete(zwischendatei, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Regelnamen_werden_ueber_Profil_und_Erweiterung_hinweg_eindeutig_gemacht()
     {
         var profil = new Profile
@@ -154,40 +187,25 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
     }
 
     [Fact]
-    public void In_den_Einstellungen_bearbeiten_meldet_den_Reiter_und_bricht_den_Dialog_ab()
+    public void In_den_Einstellungen_bearbeiten_loest_das_Ereignis_aus_und_bricht_den_Dialog_ab()
     {
+        // Der Reiter selbst kennt seit Plan Teil B keine Ablageorte mehr --
+        // MainViewModel entscheidet anhand von UseExtension, welcher Bereich
+        // vorbelegt wird (siehe MainViewModelTests).
         var profil = NeuesProfil();
         var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
 
-        SettingsTab? angeforderterReiter = null;
+        var angefordert = false;
         var geschlossen = false;
-        modell.EditRulesRequested += tab => angeforderterReiter = tab;
+        modell.EditRulesRequested += () => angefordert = true;
         modell.CloseRequested += () => geschlossen = true;
 
         modell.EditManuallyCommand.Execute(null);
 
-        Assert.Equal(SettingsTab.Project, angeforderterReiter);
+        Assert.True(angefordert);
         Assert.True(geschlossen);
         Assert.False(modell.Confirmed);
         Assert.Empty(profil.TextRules);
-    }
-
-    [Fact]
-    public void In_den_Einstellungen_bearbeiten_meldet_den_globalen_Reiter_bei_gewaehlter_Reichweite()
-    {
-        // Der Reiter folgt UseExtension: waehlt der Anwender "immer, in allen
-        // Projekten" und geht dann auf "In den Einstellungen bearbeiten…",
-        // soll sich der globale Reiter oeffnen, nicht der Projektreiter.
-        var profil = NeuesProfil();
-        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
-        modell.UseExtension = true;
-
-        SettingsTab? angeforderterReiter = null;
-        modell.EditRulesRequested += tab => angeforderterReiter = tab;
-
-        modell.EditManuallyCommand.Execute(null);
-
-        Assert.Equal(SettingsTab.Global, angeforderterReiter);
     }
 
     // ------------------------------------------------------------------
@@ -359,5 +377,68 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
         Assert.False(modell.HasSample);
         Assert.Equal("", modell.LiteralDescription);
         Assert.False(modell.ApplyCommand.CanExecute(null));
+    }
+
+    // ---------------------------------------------------------- Bezeichnung
+
+    [Fact]
+    public void Die_Bezeichnung_folgt_dem_Beispielwert_bis_man_sie_selbst_aendert()
+    {
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "4532 7511 8920 4311");
+
+        Assert.Equal("nummer", modell.RuleNameInput);
+
+        modell.RuleNameInput = "Kreditkartennummer";
+        modell.Sample = "4532 7511 8920 4312";
+
+        Assert.Equal("Kreditkartennummer", modell.RuleNameInput);
+
+        modell.ApplyCommand.Execute(null);
+
+        var regel = Assert.Single(profil.TextRules);
+        Assert.Equal("Kreditkartennummer", regel.Name);
+    }
+
+    [Fact]
+    public void Eine_geleerte_Bezeichnung_faellt_auf_den_Vorschlag_zurueck()
+    {
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
+
+        modell.RuleNameInput = "   ";
+        modell.ApplyCommand.Execute(null);
+
+        Assert.Equal("fw", Assert.Single(profil.TextRules).Name);
+    }
+
+    [Fact]
+    public void Eine_vergebene_Bezeichnung_wird_vorher_angesagt_und_eindeutig_gemacht()
+    {
+        var profil = NeuesProfil();
+        profil.TextRules.Add(new TextRule { Name = "Kreditkartennummer", Pattern = "x" });
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "4532 7511 8920 4311");
+
+        modell.RuleNameInput = "Kreditkartennummer";
+
+        Assert.True(modell.HasRuleNameHint);
+        Assert.Contains("Kreditkartennummer2", modell.RuleNameHint);
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.Contains(profil.TextRules, r => r.Name == "Kreditkartennummer2");
+    }
+
+    [Fact]
+    public void Uebernehmen_und_weiter_setzt_die_Bezeichnung_auf_den_Vorschlag_zurueck()
+    {
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "4532 7511 8920 4311");
+
+        modell.RuleNameInput = "Kreditkartennummer";
+        modell.ApplyAndContinueCommand.Execute(null);
+        modell.Sample = "FW123456";
+
+        Assert.Equal("fw", modell.RuleNameInput);
     }
 }

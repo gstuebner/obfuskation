@@ -1,0 +1,103 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="40" d:DesignHeight="28"
+             x:Class="Obfuskation.Gui.Views.PatternHelpButton"
+             x:Name="Root">
+
+  <!--
+      Der Spickzettel zu regulaeren Ausdruecken (Plan Teil B6): Anfaenger
+      sollen fast immer mit "Alles dieser Form" auskommen, aber wer doch einen
+      eigenen Ausdruck braucht, findet hier die haeufigsten Kuerzel, zwei
+      Beispiele und den Hinweis, dass eine KI so etwas zuverlaessig schreibt,
+      samt fertiger Vorlage zum Kopieren, ohne dass echte Werte hineingehoeren.
+
+      x:CompileBindings="False" fuer den Flyout-Inhalt: er bindet ueber
+      #Root auf die eigene StyledProperty dieses Steuerelements, nicht auf
+      dessen DataContext (der je nach Einbettung eine Textregel oder ein
+      Spaltenmuster ist); klassische statt kompilierte Bindungen sind dafuer
+      der unkompliziertere Weg.
+  -->
+  <Button Classes="flat" Padding="4,0" VerticalAlignment="Center" ToolTip.Tip="Hilfe zu Mustern">
+    <TextBlock Text="?" FontWeight="Bold"/>
+    <Button.Flyout>
+      <Flyout>
+        <!-- Feste Breite statt MaxWidth: der FlyoutPresenter des Fluent-Themas
+             misst seinen Inhalt mit unbegrenzter Breite und schneidet ihn bei
+             rund 456 Punkten ab; mit MaxWidth="480" liefen die Absaetze
+             rechts aus dem Bild, statt umzubrechen. -->
+        <StackPanel Width="400" Spacing="10" x:CompileBindings="False">
+
+          <StackPanel Spacing="2">
+            <TextBlock Text="Was ist ein Muster?" FontWeight="SemiBold"/>
+            <TextBlock TextWrapping="Wrap" Classes="small"
+                       Text="Ein Muster (regulärer Ausdruck, kurz RegEx) beschreibt die Form eines Werts statt des Werts selbst: „FW, dann sechs Ziffern“ statt „FW123456“. Meist genügt „Alles dieser Form“, ein eigener Ausdruck ist nur für Sonderfälle nötig."/>
+          </StackPanel>
+
+          <StackPanel Spacing="2">
+            <TextBlock Text="Spickzettel" FontWeight="SemiBold"/>
+            <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="2" ColumnSpacing="8">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="\d" Classes="mono small"/>
+              <TextBlock Grid.Row="0" Grid.Column="1" Text="eine Ziffer" Classes="small"/>
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="\d{6}" Classes="mono small"/>
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="genau sechs Ziffern" Classes="small"/>
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="\d{4,6}" Classes="mono small"/>
+              <TextBlock Grid.Row="2" Grid.Column="1" Text="vier bis sechs Ziffern" Classes="small"/>
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="[A-Z]" Classes="mono small"/>
+              <TextBlock Grid.Row="3" Grid.Column="1" Text="ein Großbuchstabe" Classes="small"/>
+              <TextBlock Grid.Row="4" Grid.Column="0" Text="[A-Za-z]+" Classes="mono small"/>
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="ein oder mehr Buchstaben" Classes="small"/>
+              <TextBlock Grid.Row="5" Grid.Column="0" Text="\b" Classes="mono small"/>
+              <TextBlock Grid.Row="5" Grid.Column="1" Text="Wortgrenze" Classes="small"/>
+              <TextBlock Grid.Row="6" Grid.Column="0" Text="-?" Classes="mono small"/>
+              <TextBlock Grid.Row="6" Grid.Column="1" Text="Zeichen optional" Classes="small"/>
+              <TextBlock Grid.Row="7" Grid.Column="0" Text="a|b" Classes="mono small"/>
+              <TextBlock Grid.Row="7" Grid.Column="1" Text="a oder b" Classes="small"/>
+              <TextBlock Grid.Row="8" Grid.Column="0" Text="\." Classes="mono small"/>
+              <TextBlock Grid.Row="8" Grid.Column="1" Text="ein echter Punkt (Sonderzeichen mit \ schützen)" Classes="small"/>
+            </Grid>
+          </StackPanel>
+
+          <StackPanel Spacing="2" IsVisible="{Binding !#Root.IsFieldNameContext}">
+            <TextBlock Text="Beispiele" FontWeight="SemiBold"/>
+            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="2" ColumnSpacing="8">
+              <TextBlock Grid.Row="0" Grid.Column="0" Classes="mono small" Text="\bFW\d{6}\b"/>
+              <TextBlock Grid.Row="0" Grid.Column="1" Classes="muted small" Text="findet FW123456"/>
+              <TextBlock Grid.Row="1" Grid.Column="0" Classes="mono small" Text="\bINV-\d{4}-\d{3}\b"/>
+              <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small" Text="findet INV-2024-001"/>
+              <TextBlock Grid.Row="2" Grid.Column="0" Classes="mono small" Text="\b\d{5}\b"/>
+              <TextBlock Grid.Row="2" Grid.Column="1" Classes="muted small" Text="findet eine Postleitzahl"/>
+            </Grid>
+          </StackPanel>
+
+          <StackPanel Spacing="2" IsVisible="{Binding #Root.IsFieldNameContext}">
+            <TextBlock Text="Beispiele" FontWeight="SemiBold"/>
+            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="8">
+              <TextBlock Grid.Row="0" Grid.Column="0" Classes="mono small" Text=".*iban.*"/>
+              <TextBlock Grid.Row="0" Grid.Column="1" Classes="muted small" Text="Spaltenname enthält „iban“"/>
+              <TextBlock Grid.Row="1" Grid.Column="0" Classes="mono small" Text=".*nr"/>
+              <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small" Text="Spaltenname endet auf „nr“"/>
+            </Grid>
+          </StackPanel>
+
+          <Border Classes="card-raised" Padding="8">
+            <StackPanel Spacing="4">
+              <TextBlock TextWrapping="Wrap" Classes="small" FontWeight="SemiBold"
+                         Text="KI-Assistenten wie Claude oder ChatGPT schreiben solche Ausdrücke zuverlässig."/>
+              <TextBlock TextWrapping="Wrap" Classes="small"
+                         Text="Beschreiben Sie das Format in Worten und nennen Sie ausgedachte Beispiele — niemals echte Werte, denn genau die soll dieses Programm schützen. Den Vorschlag hier einfügen und in der Erprobung prüfen. Gebraucht wird die .NET-Schreibweise."/>
+            </StackPanel>
+          </Border>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Anfrage für die KI kopieren" Click="OnCopyRequest"/>
+            <TextBlock x:Name="CopiedHint" Text="Kopiert." Classes="accent small" VerticalAlignment="Center"
+                       IsVisible="False"/>
+          </StackPanel>
+
+        </StackPanel>
+      </Flyout>
+    </Button.Flyout>
+  </Button>
+</UserControl>

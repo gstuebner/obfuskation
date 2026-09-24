@@ -265,10 +265,10 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Bearbeiten_aus_der_Textansicht_oeffnet_den_richtigen_Reiter()
+    public async Task Bearbeiten_aus_der_Textansicht_oeffnet_den_richtigen_Bereich()
     {
-        // Plan Teil C-2: eine Profilregel oeffnet den Projektreiter, eine
-        // Erweiterungsregel den globalen -- mit ausgewaehlter Regel.
+        // Plan Teil C-2/B: eine Profilregel oeffnet die Einstellungen im
+        // Reiter "Textregeln" mit ausgewaehlter Regel im Bereich "Projekt".
         var profil = SchreibeProfil(p => p.TextRules.Add(
             new TextRule { Name = "profilregel", Pattern = @"\bA\d+\b" }));
 
@@ -287,8 +287,9 @@ public class MainViewModelTests : IDisposable
 
         await Task.Yield();
 
-        Assert.Equal(SettingsTab.Project, dialoge.LastSettingsViewModel!.SelectedTab);
-        Assert.Equal("profilregel", dialoge.LastSettingsViewModel.ProjectRules!.Selected!.Name);
+        Assert.Equal(SettingsTab.TextRules, dialoge.LastSettingsViewModel!.SelectedTab);
+        Assert.Equal("profilregel", dialoge.LastSettingsViewModel.TextRules.Selected!.Name);
+        Assert.Equal(RuleScope.Project, dialoge.LastSettingsViewModel.TextRules.Selected!.Scope);
     }
 
     [Fact]
@@ -651,7 +652,7 @@ public class MainViewModelTests : IDisposable
         await modell.InitializeAsync(profil, null);
 
         await modell.ShowSettingsAsync();
-        var regeln = dialoge.LastSettingsViewModel!.ProjectRules;
+        var regeln = dialoge.LastSettingsViewModel!.TextRules;
         Assert.NotNull(regeln);
         Assert.Equal(4, regeln!.Rules.Count);
 
@@ -674,7 +675,7 @@ public class MainViewModelTests : IDisposable
 
         await modell.ShowSettingsAsync();
         var einstellungen = dialoge.LastSettingsViewModel!;
-        var regeln = einstellungen.ProjectRules!;
+        var regeln = einstellungen.TextRules;
         regeln.AddCommand.Execute(null);
         regeln.Selected!.Pattern = @"\bTEST\d+\b";
 
@@ -690,7 +691,7 @@ public class MainViewModelTests : IDisposable
         // Wieder oeffnen und entfernen.
         await modell.ShowSettingsAsync();
         var zweiteEinstellungen = dialoge.LastSettingsViewModel!;
-        var regelnErneut = zweiteEinstellungen.ProjectRules!;
+        var regelnErneut = zweiteEinstellungen.TextRules;
         Assert.Single(regelnErneut.Rules);
         regelnErneut.RemoveCommand.Execute(null);
 
@@ -1053,10 +1054,9 @@ public class MainViewModelTests : IDisposable
         await modell.InitializeAsync(profil, SchreibeCsv());
 
         await modell.ShowSettingsAsync();
-        var textregeln = dialoge.LastSettingsViewModel!.ProjectRules;
-        Assert.NotNull(textregeln);
+        var textregeln = dialoge.LastSettingsViewModel!.TextRules;
 
-        var regel = textregeln!.Rules.Single(r => r.Name == "beleg");
+        var regel = textregeln.Rules.Single(r => r.Name == "beleg");
 
         Assert.NotNull(regel.Generator);
         Assert.Equal("belegNummer", regel.Generator!.Name);

@@ -96,6 +96,15 @@
     <Setter Property="TextElement.Foreground" Value="{DynamicResource BrushTextDisabled}"/>
   </Style>
 
+  <!-- Auswahlknoepfe mit eigenem Inhalt (Beschriftung plus Erklaerzeile, etwa
+       "Alles dieser Form" in den Einstellungen oder "Immer, in allen
+       Projekten" in "Immer ersetzen"): der TextBlock-Stil oben setzt die
+       Vordergrundfarbe fest, gesperrt saehe die Beschriftung sonst weiter
+       waehlbar aus, waehrend nur der Kreis ergraut. -->
+  <Style Selector="RadioButton:disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource BrushTextDisabled}"/>
+  </Style>
+
   <!-- Die betonte Schaltflaeche einer Karte; hoechstens eine je Ansicht. -->
   <Style Selector="Button.primary">
     <Setter Property="Background" Value="{DynamicResource BrushAccent}"/>

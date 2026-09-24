@@ -23,8 +23,8 @@
   -->
   <Window.KeyBindings>
     <!-- Strg+, oeffnet die Einstellungen aus jeder Ansicht, wie in den
-         meisten Anwendungen ueblich: ohne Parameter, also den Projektreiter,
-         sofern ein Profil geladen ist. -->
+         meisten Anwendungen ueblich: ohne Parameter, also den Reiter
+         "Textregeln", ungefiltert. -->
     <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding ShowSettingsCommand}"/>
   </Window.KeyBindings>
 
@@ -102,10 +102,10 @@
                      legt "Immer ersetzen…" an (Textansicht und Dateiansicht),
                      die Fachansicht bleibt darueber unter "In den Einstellungen
                      bearbeiten…" erreichbar. "Hauseigene Muster…" (nur lesend)
-                     entfaellt zugunsten des globalen Reiters der Einstellungen,
-                     der dasselbe zeigt und zusaetzlich bearbeitbar ist. -->
+                     entfaellt zugunsten der Einstellungen, die dasselbe zeigen
+                     und zusaetzlich bearbeitbar sind. -->
                 <MenuItem Header="Einstellungen…" Command="{Binding ShowSettingsCommand}"
-                          CommandParameter="{x:Static vm:SettingsTab.Global}"/>
+                          CommandParameter="{x:Static vm:SettingsTab.TextRules}"/>
                 <Separator/>
                 <MenuItem Header="Kurzhilfe…" Command="{Binding ShowHelpCommand}"/>
                 <MenuItem Header="Über Obfuskation…" Command="{Binding ShowAboutCommand}"/>

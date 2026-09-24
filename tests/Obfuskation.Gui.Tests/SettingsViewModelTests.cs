@@ -11,6 +11,10 @@ namespace Obfuskation.Gui.Tests;
 /// <see cref="ExtensionWriteState"/> selbst statt <c>ExtensionLibrary.GetWriteState()</c>
 /// zu rufen -- so bleibt jeder Test unabhaengig vom mit der ganzen Baugruppe
 /// geteilten Konfigurationsordner (siehe TestUmgebung).
+///
+/// Seit Plan Teil B gibt es keine getrennten Reiter "Projekt"/"Global" mehr:
+/// <see cref="SettingsViewModel.TextRules"/> ist eine einzige Liste, jede
+/// Regel traegt ihren <see cref="RuleScope"/> selbst.
 /// </summary>
 public sealed class SettingsViewModelTests : IDisposable
 {
@@ -40,6 +44,9 @@ public sealed class SettingsViewModelTests : IDisposable
 
     private ExtensionWriteState SchreibbarerZustand() => new(ExtensionPfad, CanWrite: true, Reason: null);
 
+    private static ExtensionResolution LeereAufloesung(string pfad)
+        => new(null, null, [new ExtensionCandidate(pfad, ExtensionOrigin.ConfigDirectory, Exists: false, SkippedAsProfile: false)]);
+
     private ProfileSession Sitzung(Action<Profile>? anpassen = null)
     {
         var profil = new Profile
@@ -54,6 +61,13 @@ public sealed class SettingsViewModelTests : IDisposable
         return ProfileSession.Load(pfad, ExtensionLibrary.Empty);
     }
 
+    private SettingsViewModel Modell(
+        ProfileSession? session, ExtensionLibrary extensions, ExtensionWriteState? zustand = null,
+        string? ladeFehler = null, SettingsTab tab = SettingsTab.TextRules, string? regelName = null,
+        RuleScope? bereich = null)
+        => new(session, extensions, zustand ?? SchreibbarerZustand(), ladeFehler,
+            LeereAufloesung(ExtensionPfad), tab, regelName, bereich);
+
     // -------------------------------------------------------- Uebernehmen
 
     [Fact]
@@ -61,15 +75,15 @@ public sealed class SettingsViewModelTests : IDisposable
     {
         var session = Sitzung();
         var extensions = ExtensionLibrary.Empty;
-        var schreibzustand = SchreibbarerZustand();
 
-        var modell = new SettingsViewModel(session, extensions, schreibzustand, extensionLoadError: null);
+        var modell = Modell(session, extensions);
 
-        modell.ProjectRules!.AddCommand.Execute(null);
-        modell.ProjectRules.Selected!.Pattern = @"\bPROJEKT\d+\b";
+        modell.TextRules.AddCommand.Execute(null);
+        modell.TextRules.Selected!.Pattern = @"\bPROJEKT\d+\b";
 
-        modell.GlobalRules.AddCommand.Execute(null);
-        modell.GlobalRules.Selected!.Pattern = @"\bGLOBAL\d+\b";
+        modell.TextRules.AddCommand.Execute(null);
+        modell.TextRules.Selected!.IsGlobalScope = true;
+        modell.TextRules.Selected!.Pattern = @"\bGLOBAL\d+\b";
 
         modell.ApplyCommand.Execute(null);
 
@@ -99,7 +113,7 @@ public sealed class SettingsViewModelTests : IDisposable
     {
         var session = Sitzung();
         var extensions = ExtensionLibrary.Empty;
-        var modell = new SettingsViewModel(session, extensions, SchreibbarerZustand(), extensionLoadError: null);
+        var modell = Modell(session, extensions);
 
         modell.ApplyCommand.Execute(null);
 
@@ -114,11 +128,11 @@ public sealed class SettingsViewModelTests : IDisposable
     public void Ein_ungueltiges_Muster_blockiert_das_Uebernehmen()
     {
         var session = Sitzung();
-        var modell = new SettingsViewModel(session, ExtensionLibrary.Empty, SchreibbarerZustand(), extensionLoadError: null);
+        var modell = Modell(session, ExtensionLibrary.Empty);
 
         // Eine frisch angelegte Regel hat ein leeres Muster -- das ist ein
         // Fehler (ProfileValidator), kein bloss unfertiger Zwischenstand.
-        modell.ProjectRules!.AddCommand.Execute(null);
+        modell.TextRules.AddCommand.Execute(null);
 
         modell.ApplyCommand.Execute(null);
 
@@ -126,8 +140,6 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.NotEmpty(modell.ValidationErrors);
         Assert.False(session.HasUnsavedChanges);
     }
-
-    // ----------------------------------------------------------- Abbrechen
 
     [Fact]
     public void Ein_schon_vorher_bestehender_Profilfehler_blockiert_das_Uebernehmen_nicht()
@@ -143,10 +155,11 @@ public sealed class SettingsViewModelTests : IDisposable
         }));
         var extensions = ExtensionLibrary.Empty;
 
-        var modell = new SettingsViewModel(session, extensions, SchreibbarerZustand(), extensionLoadError: null);
+        var modell = Modell(session, extensions);
 
-        modell.GlobalRules.AddCommand.Execute(null);
-        modell.GlobalRules.Selected!.Pattern = @"\bGLOBAL\d+\b";
+        modell.TextRules.AddCommand.Execute(null);
+        modell.TextRules.Selected!.IsGlobalScope = true;
+        modell.TextRules.Selected!.Pattern = @"\bGLOBAL\d+\b";
 
         modell.ApplyCommand.Execute(null);
 
@@ -155,17 +168,20 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Single(extensions.TextRules);
     }
 
+    // ----------------------------------------------------------- Abbrechen
+
     [Fact]
     public void Abbrechen_aendert_weder_Profil_noch_Erweiterung()
     {
         var session = Sitzung();
         var extensions = ExtensionLibrary.Empty;
-        var modell = new SettingsViewModel(session, extensions, SchreibbarerZustand(), extensionLoadError: null);
+        var modell = Modell(session, extensions);
 
-        modell.ProjectRules!.AddCommand.Execute(null);
-        modell.ProjectRules.Selected!.Pattern = @"\bPROJEKT\d+\b";
-        modell.GlobalRules.AddCommand.Execute(null);
-        modell.GlobalRules.Selected!.Pattern = @"\bGLOBAL\d+\b";
+        modell.TextRules.AddCommand.Execute(null);
+        modell.TextRules.Selected!.Pattern = @"\bPROJEKT\d+\b";
+        modell.TextRules.AddCommand.Execute(null);
+        modell.TextRules.Selected!.IsGlobalScope = true;
+        modell.TextRules.Selected!.Pattern = @"\bGLOBAL\d+\b";
 
         var geschlossen = false;
         modell.CloseRequested += () => geschlossen = true;
@@ -183,22 +199,27 @@ public sealed class SettingsViewModelTests : IDisposable
     // ------------------------------------------------------ Schreibschutz
 
     [Fact]
-    public void Eine_schreibgeschuetzte_Erweiterungsdatei_sperrt_den_globalen_Reiter()
+    public void Eine_schreibgeschuetzte_Erweiterungsdatei_sperrt_die_globalen_Regeln()
     {
         var zustand = new ExtensionWriteState(
             ExtensionPfad, CanWrite: false, Reason: "Die geltende Datei ist schreibgeschützt.");
+        var extensions = new ExtensionLibrary
+        {
+            TextRules = { new TextRule { Name = "hauseigen", Pattern = @"\bINV\d{6}\b" } },
+        };
 
-        var modell = new SettingsViewModel(null, ExtensionLibrary.Empty, zustand, extensionLoadError: null);
+        var modell = Modell(null, extensions, zustand);
 
         Assert.False(modell.CanEditGlobal);
         Assert.True(modell.HasGlobalWarning);
+        Assert.True(modell.ShowLockBar);
         Assert.Equal("Die geltende Datei ist schreibgeschützt.", modell.GlobalStateText);
-        Assert.True(modell.GlobalRules.IsReadOnly);
-        Assert.False(modell.GlobalRules.AddCommand.CanExecute(null));
+        Assert.False(modell.TextRules.CanAddRule);
+        Assert.All(modell.TextRules.Rules, r => Assert.False(r.IsEditable));
     }
 
     [Fact]
-    public void Eine_kaputte_Erweiterungsdatei_sperrt_den_globalen_Reiter_mit_der_Ladefehlermeldung()
+    public void Eine_kaputte_Erweiterungsdatei_sperrt_die_globalen_Regeln_mit_der_Ladefehlermeldung()
     {
         // Fehler 1 des Plans: auch wenn die Datei rein technisch beschreibbar
         // waere, darf ein kaputtes JSON nicht kommentarlos ueberschrieben
@@ -206,27 +227,30 @@ public sealed class SettingsViewModelTests : IDisposable
         var zustand = SchreibbarerZustand();
         var ladeFehler = "Erweiterungsdatei ist kein gültiges JSON: " + ExtensionPfad;
 
-        var modell = new SettingsViewModel(null, ExtensionLibrary.Empty, zustand, ladeFehler);
+        var modell = Modell(null, ExtensionLibrary.Empty, zustand, ladeFehler);
 
         Assert.False(modell.CanEditGlobal);
         Assert.Equal(ladeFehler, modell.GlobalStateText);
-        Assert.True(modell.GlobalRules.IsReadOnly);
+        Assert.False(modell.TextRules.CanAddRule);
     }
 
     [Fact]
-    public void Ohne_Profil_ist_der_Projektreiter_nicht_vorhanden()
+    public void Ohne_Profil_ist_der_Filter_ausgeblendet_und_neue_Regeln_landen_global()
     {
-        var modell = new SettingsViewModel(null, ExtensionLibrary.Empty, SchreibbarerZustand(), extensionLoadError: null);
+        var modell = Modell(null, ExtensionLibrary.Empty);
 
         Assert.False(modell.HasProfile);
-        Assert.Null(modell.ProjectRules);
-        Assert.Equal(SettingsTab.Global, modell.SelectedTab);
+        Assert.False(modell.TextRules.ShowFilter);
+
+        modell.TextRules.AddCommand.Execute(null);
+
+        Assert.Equal(RuleScope.Global, modell.TextRules.Selected!.Scope);
     }
 
-    // ----------------------------------------------------------- Verschieben
+    // ----------------------------------------------------------- Bereich
 
     [Fact]
-    public void Verschieben_nimmt_eine_Regel_samt_eigenem_Generator_in_die_Erweiterung_mit()
+    public void Bereich_wechseln_nimmt_eine_Regel_samt_eigenem_Generator_in_die_Erweiterung_mit()
     {
         var session = Sitzung(p =>
         {
@@ -238,22 +262,24 @@ public sealed class SettingsViewModelTests : IDisposable
         });
         var extensions = ExtensionLibrary.Empty;
 
-        var modell = new SettingsViewModel(session, extensions, SchreibbarerZustand(), extensionLoadError: null);
+        var modell = Modell(session, extensions);
 
-        var regel = modell.ProjectRules!.Rules.Single(r => r.Name == "beleg");
-        modell.ProjectRules.Selected = regel;
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "beleg");
+        modell.TextRules.Selected = regel;
 
-        Assert.True(regel.HasMoveLabel);
-        Assert.True(regel.MoveCommand.CanExecute(null));
+        Assert.True(regel.CanChangeScope);
 
-        regel.MoveCommand.Execute(null);
+        regel.IsGlobalScope = true;
 
-        // Nach dem Verschieben zeigt der globale Reiter die Regel bearbeitbar an.
-        Assert.Equal(SettingsTab.Global, modell.SelectedTab);
-        Assert.DoesNotContain(modell.ProjectRules.Rules, r => r.Name == "beleg" && !r.IsOtherArea);
-        var verschoben = modell.GlobalRules.Rules.Single(r => r.Name == "beleg" && !r.IsOtherArea);
+        // Nach dem Wechsel steht die Regel bearbeitbar im globalen Bereich.
+        var verschoben = modell.TextRules.Rules.Single(r => r.Name == "beleg");
+        Assert.Equal(RuleScope.Global, verschoben.Scope);
         Assert.Equal(@"\bBEL-\d{6}\b", verschoben.Pattern);
         Assert.Equal("belegNummer", verschoben.Generator!.Name);
+
+        // Die Seite "Eigene Generatoren" zeigt den mitkopierten Generator
+        // sofort, nicht erst nach einem Neustart des Fensters.
+        Assert.Contains(modell.GlobalGenerators, g => g.Name == "belegNummer");
 
         modell.ApplyCommand.Execute(null);
 
@@ -268,7 +294,7 @@ public sealed class SettingsViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Verschieben_macht_einen_doppelten_Namen_im_Ziel_eindeutig()
+    public void Bereich_wechseln_macht_einen_doppelten_Namen_im_Ziel_eindeutig()
     {
         var session = Sitzung(p =>
         {
@@ -279,11 +305,240 @@ public sealed class SettingsViewModelTests : IDisposable
             TextRules = { new TextRule { Name = "gleich", Pattern = @"\bB\d+\b" } },
         };
 
-        var modell = new SettingsViewModel(session, extensions, SchreibbarerZustand(), extensionLoadError: null);
+        var modell = Modell(session, extensions);
 
-        var regel = modell.ProjectRules!.Rules.Single(r => r.Name == "gleich" && !r.IsOtherArea);
-        regel.MoveCommand.Execute(null);
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "gleich" && r.Scope == RuleScope.Project);
+        regel.IsGlobalScope = true;
 
-        Assert.Contains(modell.GlobalRules.Rules, r => r.Name == "gleich2" && !r.IsOtherArea);
+        Assert.Contains(modell.TextRules.Rules, r => r.Name == "gleich2" && r.Scope == RuleScope.Global);
+    }
+
+    // ---------------------------------------------------- Erfassungsmodus
+
+    [Fact]
+    public void Beispielwert_mit_Ziffern_ergibt_eine_Form_mit_vorgeschlagenem_Namen()
+    {
+        var session = Sitzung();
+        var modell = Modell(session, ExtensionLibrary.Empty);
+
+        modell.TextRules.AddCommand.Execute(null);
+        var regel = modell.TextRules.Selected!;
+
+        // Ohne Ziffern im Beispiel steht "Genau dieser Wert" gewaehlt da --
+        // die Form greift von selbst, sobald ein Ziffernlauf auftaucht.
+        Assert.True(regel.IsExactMode);
+        regel.Sample = "FW123456";
+
+        Assert.True(regel.IsShapeMode);
+        Assert.False(regel.IsExactMode);
+        Assert.Equal(@"\bFW\d{6}\b", regel.Pattern);
+        Assert.Equal("fw", regel.Name);
+    }
+
+    [Fact]
+    public void Umschalten_auf_Exact_ergibt_das_Literal_Muster()
+    {
+        var session = Sitzung();
+        var modell = Modell(session, ExtensionLibrary.Empty);
+
+        modell.TextRules.AddCommand.Execute(null);
+        var regel = modell.TextRules.Selected!;
+        regel.Sample = "FW123456";
+
+        regel.IsExactMode = true;
+
+        Assert.Equal(@"\bFW123456\b", regel.Pattern);
+    }
+
+    [Fact]
+    public void Eine_vorhandene_erzeugte_Regel_oeffnet_im_Shape_Modus_mit_Beschreibung()
+    {
+        var session = Sitzung(p => p.TextRules.Add(
+            new TextRule { Name = "fw", Pattern = @"\bFW\d{6}\b" }));
+
+        var modell = Modell(session, ExtensionLibrary.Empty);
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "fw");
+
+        Assert.True(regel.IsShapeMode);
+        Assert.Equal("„FW“ + 6 Ziffern", regel.ShapeDescription);
+    }
+
+    [Fact]
+    public void Ein_freier_Regex_oeffnet_im_Custom_Modus()
+    {
+        var session = Sitzung(p => p.TextRules.Add(
+            new TextRule { Name = "frei", Pattern = @"FW\d+" }));
+
+        var modell = Modell(session, ExtensionLibrary.Empty);
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "frei");
+
+        Assert.True(regel.IsCustomMode);
+        Assert.Equal(@"FW\d+", regel.Pattern);
+    }
+
+    [Fact]
+    public void Ein_Klick_auf_einen_Erfassungsmodus_loescht_einen_eigenen_Ausdruck_nicht()
+    {
+        var session = Sitzung(p => p.TextRules.Add(
+            new TextRule { Name = "frei", Pattern = @"FW\d+" }));
+
+        var modell = Modell(session, ExtensionLibrary.Empty);
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "frei");
+
+        regel.IsExactMode = true;
+
+        Assert.Equal(@"FW\d+", regel.Pattern);
+
+        // Erst ein getippter Beispielwert ersetzt den Ausdruck.
+        regel.Sample = "FW7";
+        Assert.Equal(PatternFromSample.Literal("FW7").Pattern, regel.Pattern);
+    }
+
+    [Fact]
+    public void Ein_manuell_geaenderter_Name_bleibt_beim_Tippen_im_Beispielfeld_erhalten()
+    {
+        var session = Sitzung();
+        var modell = Modell(session, ExtensionLibrary.Empty);
+
+        modell.TextRules.AddCommand.Execute(null);
+        var regel = modell.TextRules.Selected!;
+
+        regel.Name = "eigenerName";
+        regel.Sample = "FW123456";
+
+        Assert.Equal("eigenerName", regel.Name);
+    }
+
+    [Fact]
+    public void Fuer_dieses_Projekt_anpassen_ergibt_eine_gleichnamige_Projektregel()
+    {
+        var session = Sitzung();
+        var extensions = new ExtensionLibrary
+        {
+            TextRules = { new TextRule { Name = "hauseigen", Pattern = @"\bINV\d{6}\b" } },
+        };
+
+        var zustand = new ExtensionWriteState(ExtensionPfad, CanWrite: false, Reason: "gesperrt");
+        var modell = Modell(session, extensions, zustand);
+
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "hauseigen");
+        Assert.True(regel.IsLocked);
+        Assert.True(regel.CanAdjustForProject);
+
+        regel.AdjustForProjectCommand.Execute(null);
+
+        var projektRegel = modell.TextRules.Rules.Single(r => r.Name == "hauseigen" && r.Scope == RuleScope.Project);
+        Assert.Equal(@"\bINV\d{6}\b", projektRegel.Pattern);
+
+        var globaleRegel = modell.TextRules.Rules.Single(r => r.Name == "hauseigen" && r.Scope == RuleScope.Global);
+        Assert.True(globaleRegel.IsOverridden);
+    }
+
+    // -------------------------------------------------------- Spaltenmuster
+
+    [Fact]
+    public void Spaltenmuster_lassen_sich_entfernen_und_umsortieren()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            FieldRules =
+            {
+                new FieldNameRule { Pattern = "eins", Generator = "token" },
+                new FieldNameRule { Pattern = "zwei", Generator = "token" },
+                new FieldNameRule { Pattern = "drei", Generator = "token" },
+            },
+        };
+
+        var modell = Modell(null, extensions);
+
+        Assert.Equal(3, modell.FieldRules.Count);
+
+        // Entfernen: die mittlere Zeile faellt weg -- zunaechst nur in der
+        // Kopie des Einstellungsfensters.
+        modell.FieldRules[1].RemoveCommand.Execute(null);
+        Assert.Equal(["eins", "drei"], modell.FieldRules.Select(f => f.Pattern));
+
+        // Hochschieben: die zweite (jetzt "drei") wandert nach vorn.
+        modell.FieldRules[1].MoveUpCommand.Execute(null);
+        Assert.Equal(["drei", "eins"], modell.FieldRules.Select(f => f.Pattern));
+
+        Assert.True(modell.HasUnsavedChanges);
+
+        // Erst "Übernehmen" schreibt die Kopie in die geteilte Instanz zurueck.
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Applied);
+        Assert.Equal(["drei", "eins"], extensions.FieldRules.Select(f => f.Pattern));
+    }
+
+    // ---------------------------------------------------------- Bezeichnung
+
+    private static FieldRule FreitextFeld(params string[] regeln)
+        => new() { Match = "Verwendungszweck", Action = FieldAction.ScanText, TextRules = regeln.ToList() };
+
+    [Fact]
+    public void Umbenennen_zieht_die_Regelauswahl_der_Freitextfelder_nach()
+    {
+        var session = Sitzung(p =>
+        {
+            p.TextRules.Add(new TextRule { Name = "begriff", Pattern = @"\b\d{4}\b", Generator = "token" });
+            p.TextRules.Add(new TextRule { Name = "email", Pattern = "@", Generator = "token" });
+            p.Fields.Add(FreitextFeld("begriff", "email"));
+        });
+
+        var modell = Modell(session, ExtensionLibrary.Empty);
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "begriff");
+
+        // Ueber einen Zwischenstand, der kurz wie die andere Regel heisst --
+        // die Auswahl darf dabei nicht auf "email" umgebogen werden.
+        regel.Name = "email";
+        Assert.True(regel.HasNameHint);
+        regel.Name = "Kreditkartennummer";
+        Assert.False(regel.HasNameHint);
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.False(modell.HasValidationErrors, string.Join("; ", modell.ValidationErrors));
+        Assert.True(modell.Applied);
+        Assert.Equal(["Kreditkartennummer", "email"], session.Profile.Fields.Single().TextRules);
+        Assert.True(session.HasUnsavedChanges);
+    }
+
+    [Fact]
+    public void Ein_Bereichswechsel_mit_Umbenennung_zieht_die_Regelauswahl_nach()
+    {
+        var erweiterung = new ExtensionLibrary();
+        erweiterung.TextRules.Add(new TextRule { Name = "inventar", Pattern = "INV", Generator = "token" });
+
+        var session = Sitzung(p =>
+        {
+            p.TextRules.Add(new TextRule { Name = "inventar", Pattern = @"\bINV\d{6}\b", Generator = "token" });
+            p.Fields.Add(FreitextFeld("inventar"));
+        });
+
+        var modell = Modell(session, erweiterung);
+        var projektRegel = modell.TextRules.Rules.Single(r => r.Name == "inventar" && r.Scope == RuleScope.Project);
+
+        projektRegel.IsGlobalScope = true;   // wird dabei zu "inventar2"
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Applied, string.Join("; ", modell.ValidationErrors));
+        Assert.Equal(["inventar2"], session.Profile.Fields.Single().TextRules);
+    }
+
+    [Fact]
+    public void Eine_gleichnamige_Regel_im_anderen_Bereich_wird_beim_Tippen_angesagt()
+    {
+        var erweiterung = new ExtensionLibrary();
+        erweiterung.TextRules.Add(new TextRule { Name = "inventar", Pattern = "INV", Generator = "token" });
+        var session = Sitzung(p => p.TextRules.Add(new TextRule { Name = "fw", Pattern = "FW", Generator = "token" }));
+
+        var modell = Modell(session, erweiterung);
+        var regel = modell.TextRules.Rules.Single(r => r.Name == "fw");
+
+        regel.Name = "Inventar";
+
+        Assert.True(regel.HasNameHint);
+        Assert.Contains("In diesem Projekt gilt dann nur diese hier", regel.NameHint);
     }
 }

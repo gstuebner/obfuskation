@@ -57,7 +57,7 @@
           <StackPanel Spacing="6">
             <TextBlock Text="Alle Regeln an einem Ort" Classes="card-title" Margin="0"/>
             <TextBlock TextWrapping="Wrap"
-                       Text="„⚙ Einstellungen“ in der Kopfzeile (oder Strg+,) zeigt Textregeln, eigene Generatoren und — im Reiter „Alle Projekte (hauseigen)“ — Spaltenmuster für das geladene Projekt und die hauseigene Erweiterungsdatei nebeneinander. Eine Regel lässt sich zwischen beiden verschieben; ist die Erweiterungsdatei schreibgeschützt oder kaputt, bleibt der globale Reiter gesperrt, mit dem Grund in der Kopfzeile. Geändert wird erst mit „Übernehmen“, „Abbrechen“ verwirft alles."/>
+                       Text="„⚙ Einstellungen“ in der Kopfzeile (oder Strg+,) zeigt im Reiter „Textregeln“ eine gemeinsame Liste aus Regeln des geladenen Projekts und der hauseigenen Erweiterungsdatei; „Gilt für“ an jeder Regel sagt und ändert, wo sie greift. Neue Regeln entstehen aus einem Beispielwert — „Alles dieser Form“ oder „Genau dieser Wert“ —, ein eigener Ausdruck bleibt für Profis erreichbar, mit Spickzettel und KI-Hinweis hinter dem „?“-Knopf. Ist die Erweiterungsdatei schreibgeschützt oder kaputt, tragen ihre Regeln ein 🔒 und eine Sperrleiste nennt den Grund; „Für dieses Projekt anpassen“ legt dann eine bearbeitbare Kopie im Projekt an. Eigene Generatoren, Spalten-Vorschläge und der Ablageort der Erweiterungsdatei haben eigene Reiter. Geändert wird erst mit „Übernehmen“, „Abbrechen“ verwirft alles."/>
           </StackPanel>
         </Border>
 

@@ -132,6 +132,74 @@ public class PatternFromSampleTests
     public void Der_Regelname_ist_ein_kleingeschriebener_Stamm()
     {
         Assert.Equal("fw", PatternFromSample.SuggestRuleName("FW123456"));
-        Assert.Equal("begriff", PatternFromSample.SuggestRuleName("2024-0815"));
+        Assert.Equal("nummer", PatternFromSample.SuggestRuleName("2024-0815"));
+        Assert.Equal("nummer", PatternFromSample.SuggestRuleName("4532 7511 8920 4311"));
+        Assert.Equal("begriff", PatternFromSample.SuggestRuleName("+-+"));
+    }
+
+    [Fact]
+    public void Ein_Leerzeichen_heisst_in_der_Beschreibung_auch_so()
+    {
+        Assert.Equal(
+            "4 Ziffern + Leerzeichen + 4 Ziffern + Leerzeichen + 4 Ziffern + Leerzeichen + 4 Ziffern",
+            PatternFromSample.Shape("4532 7511 8920 4311")!.Description);
+        Assert.Equal("„AB“ + 2 Leerzeichen + 3 Ziffern", PatternFromSample.Shape("AB  123")!.Description);
+        Assert.Equal("„AB-“ + 3 Ziffern", PatternFromSample.Shape("AB-123")!.Description);
+        Assert.Equal("„Az. X“ + Leerzeichen + 4 Ziffern", PatternFromSample.Shape("Az. X 1234")!.Description);
+    }
+
+    // ---------------------------------------------------------- TryRecognize
+
+    public static IEnumerable<object[]> RundreiseBeispiele => new[]
+    {
+        new object[] { "FW123456" },
+        new object[] { "2024-0815" },
+        new object[] { "+49 30 123456" },
+        new object[] { "Müller & Co." },
+    };
+
+    [Theory]
+    [MemberData(nameof(RundreiseBeispiele))]
+    public void Woertliches_Muster_wird_als_woertlich_wiedererkannt(string beispiel)
+    {
+        var woertlich = PatternFromSample.Literal(beispiel);
+
+        var erkannt = PatternFromSample.TryRecognize(woertlich.Pattern);
+
+        Assert.NotNull(erkannt);
+        Assert.False(erkannt.IsShape);
+        Assert.Equal(woertlich.Description, erkannt.Description);
+
+        // Die Rundreise muss exakt zum selben Muster fuehren -- das ist der
+        // Beweis, nicht nur eine Vermutung.
+        Assert.Equal(woertlich.Pattern, PatternFromSample.Literal(erkannt.Sample).Pattern);
+    }
+
+    [Theory]
+    [MemberData(nameof(RundreiseBeispiele))]
+    public void Formmuster_wird_als_Form_wiedererkannt(string beispiel)
+    {
+        var form = PatternFromSample.Shape(beispiel);
+        if (form is null)
+            return; // "Müller & Co." hat keine Form -- siehe Ohne_Ziffern_gibt_es_keine_eigene_Form.
+
+        var erkannt = PatternFromSample.TryRecognize(form.Pattern);
+
+        Assert.NotNull(erkannt);
+        Assert.True(erkannt.IsShape);
+        Assert.Equal(form.Description, erkannt.Description);
+        Assert.Equal(form.Pattern, PatternFromSample.Shape(erkannt.Sample)?.Pattern);
+    }
+
+    [Theory]
+    [InlineData(@"\b[A-Z]{2}\d{2}")]
+    [InlineData(".*")]
+    [InlineData(@"FW\d+")]
+    [InlineData("")]
+    [InlineData(@"\bFW\d{9999999999}\b")]
+    [InlineData(@"\bFW\d{100000000}\b")]
+    public void Ein_eigener_Ausdruck_wird_nicht_wiedererkannt(string muster)
+    {
+        Assert.Null(PatternFromSample.TryRecognize(muster));
     }
 }

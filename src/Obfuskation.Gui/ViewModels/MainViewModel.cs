@@ -122,12 +122,11 @@ public sealed class MainViewModel : ObservableObject
         ShowHelpCommand = new RelayCommand(() => HelpRequested?.Invoke());
 
         // Die Einstellungen sind unabhaengig vom geladenen Profil erreichbar --
-        // der globale Reiter existiert unabhaengig von jedem Profil und die
-        // Erweiterungsdatei wird schon im Konstruktor geladen (siehe oben).
-        // Ohne Parameter (Kopfzeile, Strg+,) oeffnet sich der Projektreiter,
-        // sofern ein Profil geladen ist -- SettingsViewModel faellt sonst
-        // selbst auf den globalen Reiter zurueck.
-        ShowSettingsCommand = new RelayCommand<SettingsTab?>(tab => _ = ShowSettingsAsync(tab ?? SettingsTab.Project));
+        // die Erweiterungsdatei existiert unabhaengig von jedem Profil und
+        // wird schon im Konstruktor geladen (siehe oben). Ohne Parameter
+        // (Kopfzeile, Strg+,) oeffnet sich der Reiter "Textregeln" mit der
+        // gemeinsamen Liste, ungefiltert.
+        ShowSettingsCommand = new RelayCommand<SettingsTab?>(tab => _ = ShowSettingsAsync(tab ?? SettingsTab.TextRules));
 
         // "Immer ersetzen…" aus der Dateiansicht: Vorbelegung ist der
         // Beispielwert des gerade gewaehlten Feldes (falls eines gewaehlt
@@ -186,9 +185,9 @@ public sealed class MainViewModel : ObservableObject
     public RelayCommand ShowHelpCommand { get; }
 
     /// <summary>
-    /// Oeffnet die Einstellungen. Der Parameter waehlt den Reiter (Kopfzeile
-    /// und Strg+, lassen ihn weg -- Projekt, sofern eines geladen ist; das
-    /// Menue "Mehr" gibt ausdruecklich den globalen Reiter vor).
+    /// Oeffnet die Einstellungen. Der Parameter waehlt den Reiter (Kopfzeile,
+    /// Strg+, und das Menue "Mehr" lassen ihn weg -- alle drei oeffnen
+    /// "Textregeln", ungefiltert).
     /// </summary>
     public RelayCommand<SettingsTab?> ShowSettingsCommand { get; }
 
@@ -762,7 +761,7 @@ public sealed class MainViewModel : ObservableObject
         if (_session is null)
             return;
 
-        SettingsTab? einstellungenReiter = null;
+        var einstellungenAngefordert = false;
 
         var viewModel = new AlwaysReplaceViewModel(
             _session.Profile, _extensions, initialSample, contextText,
@@ -800,13 +799,17 @@ public sealed class MainViewModel : ObservableObject
             introText,
             extensionBlockedReason: _extensionLoadError);
 
-        viewModel.EditRulesRequested += tab => einstellungenReiter = tab;
+        viewModel.EditRulesRequested += () => einstellungenAngefordert = true;
 
         var bestaetigt = await _dialogs().ShowAlwaysReplaceAsync(viewModel);
 
-        if (einstellungenReiter is { } reiter)
+        if (einstellungenAngefordert)
         {
-            await ShowSettingsAsync(reiter);
+            // Der Bereich folgt UseExtension: waehlte der Anwender "immer, in
+            // allen Projekten", soll sich der Filter der Einstellungen gleich
+            // auf "alle Projekte" stellen statt auf "alle".
+            await ShowSettingsAsync(
+                SettingsTab.TextRules, scope: viewModel.UseExtension ? RuleScope.Global : RuleScope.Project);
             return;
         }
 
@@ -827,19 +830,30 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Oeffnet die Einstellungen (Plan Teil B): Textregeln, eigene Generatoren
-    /// und -- im globalen Reiter -- Spaltenmuster, fuer Projekt und
-    /// Erweiterungsdatei nebeneinander. Das Ansichtsmodell arbeitet auf
-    /// Kopien; erst nach erfolgreichem "Übernehmen"
-    /// (<see cref="SettingsViewModel.Applied"/>) muss hier irgendetwas
-    /// nachgezogen werden.
+    /// Oeffnet die Einstellungen (Plan Teil B): eine gemeinsame Textregel-
+    /// Liste (Projekt und Erweiterungsdatei nebeneinander, mit "Gilt für" je
+    /// Regel), eigene Generatoren, Spaltenmuster und der Reiter "Ablageort".
+    /// Das Ansichtsmodell arbeitet auf Kopien; erst nach erfolgreichem
+    /// "Übernehmen" (<see cref="SettingsViewModel.Applied"/>) muss hier
+    /// irgendetwas nachgezogen werden.
     /// </summary>
     /// <param name="tab">Der Reiter, mit dem sich das Fenster oeffnet.</param>
     /// <param name="ruleName">Eine vorab auszuwaehlende Textregel, oder <c>null</c>.</param>
-    public async Task ShowSettingsAsync(SettingsTab tab = SettingsTab.Project, string? ruleName = null)
+    /// <param name="scope">
+    /// Bereich, auf den der Filter der Regelliste vorbelegt wird, wenn
+    /// <paramref name="ruleName"/> fehlt (etwa nach "In den Einstellungen
+    /// bearbeiten…", siehe <see cref="ShowAlwaysReplaceAsync"/>). Ist
+    /// <paramref name="ruleName"/> gesetzt, entscheidet er stattdessen, welche
+    /// der beiden gleichnamigen Regeln ausgewaehlt wird (Projekt gewinnt bei
+    /// Gleichstand).
+    /// </param>
+    public async Task ShowSettingsAsync(
+        SettingsTab tab = SettingsTab.TextRules, string? ruleName = null, RuleScope? scope = null)
     {
         var schreibzustand = ExtensionLibrary.GetWriteState();
-        var viewModel = new SettingsViewModel(_session, _extensions, schreibzustand, _extensionLoadError, tab, ruleName);
+        var fundort = ExtensionLibrary.ResolvePath();
+        var viewModel = new SettingsViewModel(
+            _session, _extensions, schreibzustand, _extensionLoadError, fundort, tab, ruleName, scope);
 
         var uebernommen = await _dialogs().ShowSettingsAsync(viewModel);
         if (!uebernommen)
@@ -938,24 +952,27 @@ public sealed class MainViewModel : ObservableObject
 
     /// <summary>
     /// "bearbeiten…" bzw. "Regeln bearbeiten…" aus der Fundleiste der
-    /// Textansicht (Plan Teil C-2): oeffnet die Einstellungen im richtigen
-    /// Reiter -- Profil oder global, je nachdem, wo <paramref name="ruleName"/>
-    /// liegt -- mit dieser Regel ausgewaehlt. Ohne Regelnamen (der Knopf
-    /// "Regeln bearbeiten…" in der Kopfzeile der Fundleiste) oeffnet einfach
-    /// der Projektreiter, ohne Auswahl.
+    /// Textansicht (Plan Teil C-2): oeffnet die Einstellungen im Reiter
+    /// "Textregeln", mit ausgewaehlter Regel -- im richtigen Bereich (Projekt
+    /// oder Erweiterung), je nachdem, wo <paramref name="ruleName"/> liegt.
+    /// Bei gleichnamigen Regeln in beiden Bereichen gewinnt das Projekt, denn
+    /// dessen Fassung ist die, die tatsaechlich greift (siehe
+    /// <see cref="ExtensionLibrary.MergeTextRules"/>). Ohne Regelnamen (der
+    /// Knopf "Regeln bearbeiten…" in der Kopfzeile der Fundleiste) oeffnet
+    /// einfach der Reiter, ohne Auswahl.
     /// </summary>
     private async Task EditTextRuleAsync(string? ruleName)
     {
         if (ruleName is null)
         {
-            await ShowSettingsAsync(SettingsTab.Project);
+            await ShowSettingsAsync(SettingsTab.TextRules);
             return;
         }
 
-        var inErweiterung = _extensions.TextRules.Any(
-            rule => string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase));
+        var imProfil = _session?.Profile.TextRules.Any(
+            rule => string.Equals(rule.Name, ruleName, StringComparison.OrdinalIgnoreCase)) ?? false;
 
-        await ShowSettingsAsync(inErweiterung ? SettingsTab.Global : SettingsTab.Project, ruleName);
+        await ShowSettingsAsync(SettingsTab.TextRules, ruleName, imProfil ? RuleScope.Project : RuleScope.Global);
     }
 
     /// <summary>

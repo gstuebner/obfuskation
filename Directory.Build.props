@@ -188,7 +188,29 @@
          entstehende Profilregeln wurden nur ueber die Rueckfrage beim
          Beenden gesichert. Nebenversion, weil neue Funktionen dazugekommen
          sind. -->
-    <Version>1.8.0</Version>
+    <!-- 1.9.0: Einstellungen nach Themen statt nach Ablageort. Eine
+         gemeinsame Regelliste ("Textregeln") zeigt Projekt- und
+         Erweiterungsregeln nebeneinander, jede mit "Gilt für: dieses Projekt
+         / alle Projekte" statt in zwei getrennten Reitern; eine gesperrte
+         hauseigene Regel bekommt "Für dieses Projekt anpassen". Neue Regeln
+         entstehen aus einem Beispielwert (PatternFromSample.TryRecognize
+         erkennt eine vorhandene Regel dabei als "Alles dieser Form" oder
+         "Genau dieser Wert" wieder, per Rundreise), dazu ein "?"-Knopf mit
+         Spickzettel, KI-Hinweis samt Warnung vor Echtdaten und "Anfrage für
+         die KI kopieren". Zweitens drei behobene Fehler aus der Messung fuer
+         1.9.0 (siehe docs/testdokumentation.md): eine von Hand kommentierte
+         Erweiterungsdatei wurde als Profil missverstanden und stillschweigend
+         uebergangen, statt dass ihre Muster wirkten
+         (ProfileStore.Classify/JsonFileKind, ExtensionLibrary.ResolvePath);
+         das Regelformular war im globalen Reiter durch feste Hoehen
+         abgeschnitten; Spaltenmuster liessen sich nicht mehr entfernen
+         (fehlende Auswahl in der Liste). Drittens zwei kleinere Korrekturen:
+         GetWriteState prueft jetzt zusaetzlich das Schreibrecht auf den
+         Ordner der Erweiterungsdatei (fuer Zwischendatei und Sicherungskopie),
+         und ein Schreibfehler in "Immer ersetzen" nimmt die eben angelegte
+         Regel samt eigenem Generator zurueck, statt den Dialog abstuerzen zu
+         lassen. -->
+    <Version>1.9.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

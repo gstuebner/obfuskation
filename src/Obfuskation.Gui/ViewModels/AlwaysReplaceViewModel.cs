@@ -145,6 +145,10 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
             OnPropertyChanged(nameof(ShapeDescription));
             OnPropertyChanged(nameof(HasPrefixHint));
             OnPropertyChanged(nameof(PrefixHint));
+            OnPropertyChanged(nameof(SuggestedRuleName));
+            if (!_ruleNameEdited)
+                OnPropertyChanged(nameof(RuleNameInput));
+            RaiseRuleNameHint();
             ApplyCommand.RaiseCanExecuteChanged();
             ApplyAndContinueCommand.RaiseCanExecuteChanged();
             RefreshPreview();
@@ -228,6 +232,72 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     private bool IsPlainTokenSelected()
         => _selectedGenerator is not null
            && string.Equals(_selectedGenerator.Name, "token", StringComparison.OrdinalIgnoreCase);
+
+    // ---------------------------------------------------------- Bezeichnung
+
+    private string _ruleNameInput = "";
+    private bool _ruleNameEdited;
+
+    /// <summary>Der aus dem Beispielwert abgeleitete Name (<see cref="PatternFromSample.SuggestRuleName"/>).</summary>
+    public string SuggestedRuleName => HasSample ? PatternFromSample.SuggestRuleName(Trimmed) : "";
+
+    /// <summary>
+    /// Die Bezeichnung der neuen Regel -- unter ihr erscheint die Regel in
+    /// der Fundliste der Textansicht. Folgt dem Vorschlag aus dem
+    /// Beispielwert, bis der Anwender selbst etwas eintippt; ein wieder
+    /// geleertes Feld faellt beim Anlegen auf den Vorschlag zurueck.
+    /// </summary>
+    public string RuleNameInput
+    {
+        get => _ruleNameEdited ? _ruleNameInput : SuggestedRuleName;
+        set
+        {
+            var neu = value ?? "";
+            if (neu == RuleNameInput)
+                return;
+
+            _ruleNameInput = neu;
+            _ruleNameEdited = true;
+            OnPropertyChanged();
+            RaiseRuleNameHint();
+        }
+    }
+
+    /// <summary>Der Name vor der Eindeutigmachung: die Eingabe, sonst der Vorschlag.</summary>
+    private string RuleNameBase
+    {
+        get
+        {
+            var eingabe = _ruleNameEdited ? _ruleNameInput.Trim() : "";
+            return eingabe.Length > 0 ? eingabe : SuggestedRuleName;
+        }
+    }
+
+    /// <summary>
+    /// Sagt vorher, wenn die gewuenschte Bezeichnung schon vergeben ist und
+    /// die Regel deshalb eine Nummer angehaengt bekommt -- sonst stuende
+    /// hinterher ueberraschend "Kreditkartennummer2" in der Fundliste.
+    /// </summary>
+    public string? RuleNameHint
+    {
+        get
+        {
+            var basis = RuleNameBase;
+            if (basis.Length == 0)
+                return null;
+
+            var eindeutig = MakeUniqueRuleName(basis);
+            return eindeutig == basis ? null : $"„{basis}“ gibt es schon – die Regel heißt dann „{eindeutig}“.";
+        }
+    }
+
+    public bool HasRuleNameHint => RuleNameHint is not null;
+
+    private void RaiseRuleNameHint()
+    {
+        OnPropertyChanged(nameof(RuleNameHint));
+        OnPropertyChanged(nameof(HasRuleNameHint));
+    }
 
     /// <summary>"Nur in diesem Projekt" (Profil) statt "immer, in allen Projekten" (Erweiterung).</summary>
     public bool UseExtension
@@ -330,15 +400,35 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     /// <summary>Was in diesem Durchgang schon entstanden ist -- die Rueckmeldung, die der offene Dialog sonst nicht gaebe.</summary>
     public string CreatedSummary => "Angelegt: " + string.Join(", ", _createdRuleNames);
 
+    private string? _errorText;
+
+    /// <summary>
+    /// Meldung, wenn das Schreiben der Erweiterungsdatei scheiterte (etwa
+    /// Schreibrecht waehrenddessen entzogen) -- im Fenster als
+    /// <c>warning small</c> unter den Knoepfen. <c>null</c> im ueblichen Fall.
+    /// </summary>
+    public string? ErrorText
+    {
+        get => _errorText;
+        private set
+        {
+            if (SetProperty(ref _errorText, value))
+                OnPropertyChanged(nameof(HasErrorText));
+        }
+    }
+
+    public bool HasErrorText => _errorText is not null;
+
     public event Action? CloseRequested;
 
     /// <summary>
     /// "In den Einstellungen bearbeiten…" wurde gewaehlt: der Aufrufer
-    /// (<see cref="MainViewModel"/>) oeffnet danach das Einstellungsfenster im
-    /// genannten Reiter -- Profil oder global, je nachdem, wohin diese Regel
-    /// laut <see cref="UseExtension"/> gerade gehen wuerde.
+    /// (<see cref="MainViewModel"/>) oeffnet danach das Einstellungsfenster,
+    /// mit dem Bereich vorbelegt, in den diese Regel laut
+    /// <see cref="UseExtension"/> gerade ginge -- der Reiter selbst kennt seit
+    /// Plan Teil B keine Ablageorte mehr, nur noch Themen.
     /// </summary>
-    public event Action<SettingsTab>? EditRulesRequested;
+    public event Action? EditRulesRequested;
 
     /// <summary>
     /// Rechnet das gewaehlte Muster gegen <see cref="_contextText"/> aus und
@@ -404,21 +494,47 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
             return false;
 
         var pattern = EffectivePattern().Pattern;
-        var ruleName = MakeUniqueRuleName(PatternFromSample.SuggestRuleName(Trimmed));
+        var ruleName = MakeUniqueRuleName(RuleNameBase);
+
+        // Vor ResolveGeneratorName merken, welche Namensraeume es im Ziel schon
+        // gibt -- nur so laesst sich ein dabei frisch angelegter eigener
+        // Generator im Fehlerfall gezielt wieder zurücknehmen, ohne einen
+        // schon vorher bestehenden gleichen Namens zu verlieren.
+        var zielGeneratoren = UseExtension ? _extensions.Generators : _profile.Generators;
+        var vorherVorhanden = new HashSet<string>(zielGeneratoren.Keys, StringComparer.OrdinalIgnoreCase);
+
         var generatorName = ResolveGeneratorName(ruleName);
+        var neuAngelegterGenerator = !vorherVorhanden.Contains(generatorName) && zielGeneratoren.ContainsKey(generatorName)
+            ? generatorName
+            : null;
 
         var rule = new TextRule { Name = ruleName, Priority = 60, Generator = generatorName, Pattern = pattern };
+        var zielRegeln = UseExtension ? _extensions.TextRules : _profile.TextRules;
+        zielRegeln.Add(rule);
 
         if (UseExtension)
         {
-            _extensions.TextRules.Add(rule);
-            _extensions.Save(ExtensionPath);
-        }
-        else
-        {
-            _profile.TextRules.Add(rule);
+            try
+            {
+                _extensions.Save(ExtensionPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Zurücknehmen statt mit einem Stand weiterzuarbeiten, der auf
+                // der Platte gar nicht existiert: sonst zeigte der Dialog eine
+                // Regel (und moeglicherweise einen frisch benannten
+                // Namensraum), die nach dem naechsten Neustart wieder weg
+                // waere, ohne dass hier je ein Fehler zu sehen war.
+                zielRegeln.Remove(rule);
+                if (neuAngelegterGenerator is not null)
+                    zielGeneratoren.Remove(neuAngelegterGenerator);
+
+                ErrorText = $"Die Regel konnte nicht gespeichert werden: {ex.Message}";
+                return false;
+            }
         }
 
+        ErrorText = null;
         RuleName = ruleName;
         _createdRuleNames.Add(ruleName);
         Confirmed = true;
@@ -451,7 +567,13 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
 
         // Ueber den Setter, nicht ueber das Feld: er zieht Vorschau,
         // Beschreibungen und die Ausfuehrbarkeit der Schaltflaechen nach.
+        // Die naechste Regel bekommt wieder den Vorschlag aus ihrem eigenen
+        // Beispielwert, nicht die Bezeichnung der eben angelegten.
+        _ruleNameEdited = false;
+        _ruleNameInput = "";
         Sample = "";
+        OnPropertyChanged(nameof(RuleNameInput));
+        RaiseRuleNameHint();
 
         OnPropertyChanged(nameof(HasCreatedRules));
         OnPropertyChanged(nameof(CreatedSummary));
@@ -459,7 +581,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
 
     private void EditManually()
     {
-        EditRulesRequested?.Invoke(UseExtension ? SettingsTab.Global : SettingsTab.Project);
+        EditRulesRequested?.Invoke();
         CloseRequested?.Invoke();
     }
 

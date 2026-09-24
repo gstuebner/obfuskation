@@ -145,8 +145,8 @@
           <TextBlock Grid.Column="0" Text="{Binding MatchSummary}" Classes="muted small"
                      VerticalAlignment="Center" TextWrapping="Wrap"/>
 
-          <!-- Fuehrt auf den Projektreiter der Einstellungen, ohne eine
-               bestimmte Regel auszuwaehlen (Plan Teil C-2). -->
+          <!-- Fuehrt auf den Reiter "Textregeln" der Einstellungen, ohne
+               eine bestimmte Regel auszuwaehlen (Plan Teil C-2). -->
           <Button Grid.Column="1" Content="Regeln bearbeiten…" Classes="flat"
                   Command="{Binding EditRulesCommand}"
                   ToolTip.Tip="Textregeln in den Einstellungen bearbeiten"/>

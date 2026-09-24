@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.8.0
+version: 1.9.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 23.09.2026
+date: 24.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.8.0 · Stand 23. September 2026
+Fassung 1.9.0 · Stand 24. September 2026
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -123,7 +123,12 @@ Der Dialog fragt:
    „FW“ + 6 Ziffern — in Worten, nicht als `\bFW\d{6}\b`). Ein
    Vorschaustreifen zeigt sofort, wie oft das gewählte Muster im aktuellen
    Text zuträfe, mit den Fundstellen.
-3. **Wo gilt das?** — „nur in diesem Projekt“ trägt die Regel in das offene
+3. **Bezeichnung** — unter diesem Namen erscheint die Regel in der Fundliste
+   und in den Einstellungen. Vorbelegt aus dem Wert (`FW123456` → `fw`, eine
+   reine Ziffernfolge wie eine Kartennummer → `nummer`), aber frei änderbar,
+   etwa zu „Kreditkartennummer“. Ist die Bezeichnung schon vergeben, sagt der
+   Dialog vorher, mit welcher angehängten Nummer die Regel angelegt wird.
+4. **Wo gilt das?** — „nur in diesem Projekt“ trägt die Regel in das offene
    Profil ein. „Immer, in allen Projekten“ schreibt sie stattdessen in die
    Erweiterungsdatei (Kapitel 11) — der Dialog nennt den Zielpfad vorher im
    Klartext und weist darauf hin, wenn dabei eine Sicherungskopie entsteht,
@@ -132,8 +137,9 @@ Der Dialog fragt:
    erst zur Verfügung — der Dialog nennt den Grund.
 
 „In den Einstellungen bearbeiten…“ führt bei Bedarf in die vollständige
-Fachansicht mit Erprobungsfeld — das Fenster „Einstellungen“ (Kapitel 5),
-im Reiter, der zur Wahl unter „Wo gilt das?“ passt.
+Fachansicht mit Erprobungsfeld — das Fenster „Einstellungen“ (Kapitel 5), Reiter
+„Textregeln“, mit dem Filter „Zeigen“ auf der Reichweite, die unter „Wo gilt
+das?“ gewählt war.
 
 **Mehrere übersehene Stellen.** Eine Regel erledigt dabei oft mehr als eine
 Fundstelle: „alles dieser Form“ macht aus `FW123456` das Muster „FW + 6
@@ -437,7 +443,7 @@ geschieht oder zuletzt geschah — vom schlichten „Bereit.“ bis zur Meldung
 **Die Nebenfenster**, über **Mehr** erreichbar:
 
 - **Einstellungen…** — öffnet dasselbe Fenster wie der Knopf „⚙ Einstellungen“
-  in der Kopfzeile (Strg+,), im globalen Reiter. Siehe unten.
+  in der Kopfzeile (Strg+,), im Reiter „Textregeln“. Siehe unten.
 - **Ersetzungstabelle…** — Pfad, Anzahl je Namensraum und die Dateirechte,
   seit dieser Fassung auch bearbeitbar. Siehe unten.
 - **Kurzhilfe…** — kurze Karten für den schnellen Einstieg, im Menü durch
@@ -446,9 +452,7 @@ geschieht oder zuletzt geschah — vom schlichten „Bereit.“ bis zur Meldung
   die verwendeten Pfade.
 
 Die früheren Einträge „Textregeln…“ und „Hauseigene Muster…“ (nur lesend)
-sind entfallen: beides zeigt jetzt das eine Fenster „Einstellungen“, mit
-Reitern für das Projekt und die Erweiterungsdatei nebeneinander — und beide
-Reiter sind dort bearbeitbar, nicht nur der erste.
+sind entfallen: beides zeigt jetzt das eine Fenster „Einstellungen“.
 
 ![Das Mehr-Menü mit „Einstellungen…“ anstelle der früheren Einträge „Textregeln…“ und „Hauseigene Muster…“.](bilder/gui-mehr-menue.png)
 *Das Mehr-Menü, neu aufzunehmen: zeigt noch den Stand vor dieser Fassung
@@ -458,46 +462,92 @@ Reiter sind dort bearbeitbar, nicht nur der erste.
 ### Einstellungen: Textregeln, eigene Generatoren und Spaltenmuster an einem Ort
 
 Erreichbar über den Knopf **„⚙ Einstellungen“** in der Kopfzeile (immer
-sichtbar), das Tastenkürzel **Strg+,** oder „Mehr → Einstellungen…“. Zwei
-Reiter:
+sichtbar), das Tastenkürzel **Strg+,** oder „Mehr → Einstellungen…“. Vier
+Reiter, nach **Thema** statt nach Ablageort — anders als in der Vorfassung
+gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
 
-1. **„Dieses Projekt – ‹Profilname›“** — ohne geladenes Profil nur ein
-   Hinweis. Sonst: die **Textregeln** des Profils, bearbeitbar wie zuvor im
-   Fenster „Textregeln“; darunter, grau abgesetzt, die geerbten
-   Erweiterungsregeln mit dem Zusatz „gilt für alle Projekte“ und dem Knopf
-   **„Dort bearbeiten“**, der in den globalen Reiter wechselt und die Regel
-   dort auswählt. Dazu die **eigenen Generatoren** des Profils (Name, Typ,
-   Präfix) — „Entfernen“ ist gesperrt, solange noch eine Regel oder ein Feld
+1. **„Textregeln“** — eine gemeinsame Liste aus den Regeln des geladenen
+   Profils und der hauseigenen Erweiterungsdatei, zuerst die Projektregeln,
+   dann die globalen. Ohne Profil bleibt der Filter „Zeigen: alle / dieses
+   Projekt / alle Projekte“ verborgen — es gibt dann nur globale Regeln.
+   Jede Zeile nennt Namen, Bereich und, bei einer hauseigenen Regel, ein 🔒,
+   wenn die Erweiterungsdatei gesperrt ist; eine globale Regel, die eine
+   gleichnamige Projektregel gerade nicht greifen lässt, erscheint blass.
+
+   **Eine neue Regel** entsteht über **„+ Neue Regel“** aus einem
+   Beispielwert, ganz ohne regulären Ausdruck: ins Feld „Was wird gesucht?“
+   tippen, dann **„Alles dieser Form“** (aus `FW123456` wird „FW“ + 6
+   Ziffern, nur zur Wahl, wenn der Wert Ziffern enthält) oder **„Genau
+   dieser Wert“** wählen. Die **Bezeichnung** ganz oben im Formular folgt
+   dabei dem Beispielwert (`FW123456` → `fw`), bis sie von Hand geändert
+   wird — etwa ein vorgeschlagenes `nummer` zu „Kreditkartennummer“. Heißt
+   eine andere Regel genauso, steht darunter sofort ein Hinweis: im selben
+   Bereich ist der Name doppelt vergeben, über die Bereichsgrenze hinweg
+   ersetzt die Projektregel die gleichnamige Regel für alle Projekte.
+   Wählt ein Freitextfeld (Aktion „Freitext durchsuchen“) Regeln namentlich
+   aus, zieht „Übernehmen“ eine Umbenennung dort automatisch nach. Andere
+   Projekte, die eine Regel für alle Projekte namentlich auswählen, müssen
+   das selbst nachziehen. Wer einen regulären Ausdruck
+   selbst schreiben will oder muss, wählt **„Eigener Ausdruck (für
+   Profis)“** — der „?“-Knopf daneben öffnet einen Spickzettel mit den
+   häufigsten Kürzeln, zwei Beispielen und dem Hinweis, dass eine
+   KI-Anwendung wie Claude oder ChatGPT einen solchen Ausdruck zuverlässig
+   schreibt, samt **„Anfrage für die KI kopieren“** — die Vorlage verlangt
+   ausdrücklich **ausgedachte** Beispiele, nie echte Werte. Ein unpassendes
+   oder zu weit gefasstes Muster wird sofort gemeldet: leer oder ungültig
+   als Fehlertext, „trifft auch leeren Text“ als Warnung.
+
+   **„Gilt für“** entscheidet zwischen „Dieses Projekt“ und „Alle Projekte“
+   und lässt sich jederzeit umschalten (Nutzt die Regel einen eigenen
+   Generator, der im Ziel noch nicht existiert, wird er mitkopiert statt
+   verschoben, damit die Quelle funktionsfähig bleibt). Ist die
+   Erweiterungsdatei gesperrt, ist die Wahl „Alle Projekte“ gesperrt, mit
+   dem Grund im Tooltip. Eine gesperrte hauseigene Regel trägt zusätzlich
+   den Knopf **„Für dieses Projekt anpassen“**: er legt eine bearbeitbare
+   Kopie mit demselben Namen im Profil an, die die hauseigene Regel für
+   dieses Projekt ersetzt, ohne die Erweiterungsdatei anzufassen.
+
+   Unter „Erweitert“ stehen Priorität (höhere gewinnt bei Überlappung) und
+   „Groß-/Kleinschreibung egal“. Die **Erprobung** darunter
+   zeigt sofort, was im Probetext greift — dieselbe Vereinigung aus Profil-
+   und Erweiterungsregeln wie ein echter Lauf.
+2. **„Eigene Generatoren“** — wie zuvor die Abschnitte „Dieses Projekt“ und
+   „Alle Projekte“ (🔒 bei gesperrter Erweiterungsdatei) mit Name, Typ und
+   Präfix; „Entfernen“ ist gesperrt, solange noch eine Regel oder ein Feld
    den Generator nutzt, mit einem Tooltip, der sie nennt.
-2. **„Alle Projekte (hauseigen)“** — Kopfzeile mit Pfad und Zustand: entweder
-   „bearbeitbar“ oder der Grund der Sperre (die Datei ist schreibgeschützt,
-   oder — Fehler behoben in dieser Fassung, siehe unten — kaputt). Die
-   Knöpfe **„Ordner öffnen“** und **„Im Editor öffnen“** führen direkt zur
-   Datei. Ist der Reiter gesperrt, sind alle Felder dort schreibgeschützt,
-   die Ursache steht oben. Trägt die Datei von Hand gepflegte Kommentare,
-   entsteht beim Speichern eine Sicherungskopie (`.bak`), wie beim Dialog
-   „Immer ersetzen…“. Inhalt: dieselben Textregeln und eigenen Generatoren
-   wie im Projektreiter, dazu die **Spaltenmuster** (`fieldRules`, Kapitel
-   11): Muster, Generator, „Groß-/Kleinschreibung egal“ und Kommentar.
+3. **„Spalten-Vorschläge“** — die **Spaltenmuster** (`fieldRules`, Kapitel
+   11) der Erweiterungsdatei: Muster für den Spaltennamen (mit demselben
+   „?“-Knopf, hier mit Beispielen für Spaltennamen wie `.*iban.*`),
+   Generator, „Groß-/Kleinschreibung egal“ und Kommentar. Jede Zeile hat
+   „↑“/„↓“ (die erste passende Zeile gewinnt) und „Entfernen“; unten
+   „Hinzufügen“. Gesperrt, wenn die Erweiterungsdatei nicht beschreibbar ist.
+4. **„Ablageort“** — Pfad der geltenden Datei, ihre Reichweite (neben der
+   Programmdatei oder im persönlichen Konfigurationsordner) und Zustand
+   („bearbeitbar“ oder der Grund der Sperre — die Datei ist schreibgeschützt,
+   ihr Ordner ist es, oder sie ist kaputt), dazu die Liste aller geprüften
+   Fundorte. Die Knöpfe **„Ordner öffnen“** und **„Im Editor öffnen“** führen
+   direkt zur Datei.
 
-Eine Textregel lässt sich zwischen den Reitern **verschieben** — „In alle
-Projekte verschieben“ bzw. „Nur in dieses Projekt verschieben“. Nutzt sie
-einen eigenen Generator, der im Ziel noch nicht existiert, wird er
-mitkopiert (nicht verschoben), damit die Quelle funktionsfähig bleibt, falls
-dort noch etwas anderes ihn braucht.
+Ist die Erweiterungsdatei gesperrt, erscheint zusätzlich eine **Sperrleiste**
+oben im Fenster, auf jeder Seite: „🔒 Regeln für alle Projekte sind nur
+lesbar: ‹Grund›“ mit dem Knopf „Details“, der zum Reiter „Ablageort“ führt.
+Trägt die Datei von Hand gepflegte Kommentare, entsteht beim Speichern eine
+Sicherungskopie (`.bak`), wie beim Dialog „Immer ersetzen…“ — der Hinweis
+dazu steht in der Fußzeile.
 
 Das Fenster arbeitet auf **Kopien** von Profil und Erweiterung. **Abbrechen**
 verwirft sie einfach. **Übernehmen** prüft zuerst — Fehler erscheinen als
-Liste und blockieren — und schreibt bei Erfolg beide geänderten Bereiche
-zurück: die Erweiterungsdatei auf die Platte, das Profil in die laufende
-Sitzung (Sternchen im Titel wie bei jeder anderen Änderung). Schließen des
-Fensters mit ungespeicherten Änderungen (über die Titelleiste) fragt nach:
-„Übernehmen / Verwerfen / Weiter bearbeiten“.
+Liste, bei einer Textregel mit Name und Bereich statt eines rohen Pfads
+(„Regel „fw“ (Dieses Projekt): …“), und blockieren — und schreibt bei Erfolg
+beide geänderten Bereiche zurück: die Erweiterungsdatei auf die Platte, das
+Profil in die laufende Sitzung (Sternchen im Titel wie bei jeder anderen
+Änderung). Schließen des Fensters mit ungespeicherten Änderungen (über die
+Titelleiste) fragt nach: „Übernehmen / Verwerfen / Weiter bearbeiten“.
 
-![Das Fenster „Einstellungen“: zwei Reiter für Projekt und hauseigene Erweiterung, mit Textregeln, eigenen Generatoren und (global) Spaltenmustern.](bilder/gui-textregeln.png)
+![Das Fenster „Einstellungen“: eine gemeinsame Regelliste mit „Gilt für“ je Regel, eigene Generatoren, Spalten-Vorschläge und der Ablageort als eigene Reiter.](bilder/gui-textregeln.png)
 *Das Fenster „Einstellungen“, neu aufzunehmen — der Dateiname ist aus der
 Vorfassung übernommen (damals das Fenster „Textregeln“), das Bild selbst
-zeigt noch den alten, einreitrigen Stand.*
+zeigt noch den älteren, zweireitrigen Stand.*
 
 ### Ersetzungstabelle: Werte gezielt einsehen und löschen
 
@@ -997,13 +1047,28 @@ Sie fließt beim Start automatisch in jedes Profil ein, wird aber **nie** in
 eine Profildatei zurückgeschrieben — eine Änderung an der Erweiterungsdatei
 betrifft also nie den Inhalt eines Profils.
 
-Bearbeiten lässt sie sich seit dieser Fassung auch ohne Texteditor, im
-globalen Reiter der **Einstellungen** (Kapitel 5). Geschrieben wird immer
-nur die geltende Datei selbst — liegt sie neben der Programmdatei und ist
-dort schreibgeschützt (etwa bei einer Installation aus einem Paket), bleibt
-der Reiter gesperrt, mit der Ursache in der Kopfzeile, statt heimlich eine
+Die Datei darf von Hand mit `//`- und `/* */`-Kommentaren versehen werden —
+seit dieser Fassung wirken sie auch tatsächlich (vorher wurde eine
+kommentierte Datei fälschlich für ein Profil gehalten und stillschweigend
+übergangen, ihre Muster griffen dann nie; `obfuskation extensions path`
+zeigte dazu „dort liegt ein Profil, übergangen“). Ist die Datei dagegen
+wirklich kaputt (ungültiges JSON), meldet das Programm jetzt einen klaren
+Fehler mit Pfad, statt die Datei ebenso still zu übergehen — in der Kommandozeile
+mit dem Konfigurationsfehler-Exitcode, in der Oberfläche als Sperre mit der
+Fehlermeldung in der Kopfzeile der Einstellungen.
+
+Bearbeiten lässt sie sich seit Fassung 1.8.0 auch ohne Texteditor, im Reiter
+„Textregeln“, „Eigene Generatoren“ bzw. „Spalten-Vorschläge“ der
+**Einstellungen** (Kapitel 5), erkennbar an „Alle Projekte“ bzw. dem 🔒.
+Wer eine globale Regel ändern darf, ergibt sich allein aus Ablageort und
+Schreibrecht: Geschrieben wird immer nur die geltende Datei selbst — liegt
+sie neben der Programmdatei und ist dort schreibgeschützt (etwa bei einer
+Installation aus einem Paket), bleiben die globalen Regeln gesperrt, mit der
+Ursache in der Sperrleiste und im Reiter „Ablageort“, statt heimlich eine
 zweite Datei im Konfigurationsordner anzulegen, die beim nächsten Start
-ohnehin nicht gelesen würde.
+ohnehin nicht gelesen würde. Dasselbe gilt, wenn die Datei zwar selbst
+beschreibbar ist, ihr Ordner aber nicht — dort ließe sich weder die
+Zwischendatei noch eine nötige Sicherungskopie anlegen.
 
 ### Was eine Maske ist
 

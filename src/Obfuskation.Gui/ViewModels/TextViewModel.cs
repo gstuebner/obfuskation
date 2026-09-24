@@ -102,7 +102,7 @@ public sealed class TextViewModel : ObservableObject
         _onEditRuleRequested = onEditRuleRequested;
         _debounceDelay = debounceDelay ?? TimeSpan.FromMilliseconds(300);
 
-        // Fundleiste (Plan Teil C-2): fuehrt auf den Projektreiter der
+        // Fundleiste (Plan Teil C-2): fuehrt auf den Reiter "Textregeln" der
         // Einstellungen, ohne eine bestimmte Regel auszuwaehlen.
         EditRulesCommand = new RelayCommand(() => _onEditRuleRequested?.Invoke(null));
 
@@ -175,7 +175,7 @@ public sealed class TextViewModel : ObservableObject
     /// </summary>
     public void ReportViewError(string message) => StoreWarning = message;
 
-    /// <summary>"Regeln bearbeiten…" in der Kopfzeile der Fundleiste -- fuehrt auf den Projektreiter der Einstellungen.</summary>
+    /// <summary>"Regeln bearbeiten…" in der Kopfzeile der Fundleiste -- fuehrt auf den Reiter "Textregeln" der Einstellungen.</summary>
     public RelayCommand EditRulesCommand { get; }
 
     public ObservableCollection<TextMatchViewModel> Matches { get; } = new();

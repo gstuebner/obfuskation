@@ -1,24 +1,38 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using Obfuskation.Core.Configuration;
 using Obfuskation.Gui.Services;
 
 namespace Obfuskation.Gui.ViewModels;
 
-/// <summary>Welcher der beiden Reiter des Einstellungsfensters gemeint ist.</summary>
+/// <summary>
+/// Die vier Themen des Einstellungsfensters (Plan Teil B) -- eine gemeinsame
+/// Regelliste statt getrennter Reiter je Ablageort ("Dieses Projekt" /
+/// "Alle Projekte"): welcher Bereich (<see cref="RuleScope"/>) eine Regel
+/// betrifft, steht jetzt an ihr selbst statt am Reiter.
+/// </summary>
 public enum SettingsTab
 {
-    /// <summary>„Dieses Projekt – ‹Profilname›“.</summary>
+    TextRules,
+    Generators,
+    FieldRules,
+    Location,
+}
+
+/// <summary>Wo eine Regel (oder ein Generator) gilt.</summary>
+public enum RuleScope
+{
+    /// <summary>Nur im geladenen Profil.</summary>
     Project,
 
-    /// <summary>„Alle Projekte (hauseigen)“ -- die Erweiterungsdatei.</summary>
+    /// <summary>In der Erweiterungsdatei -- gilt fuer alle Projekte.</summary>
     Global,
 }
 
 /// <summary>
-/// Das Einstellungsfenster: Textregeln, eigene Generatoren und (im globalen
-/// Reiter) Spaltenmuster, fuer das Projekt und fuer die Erweiterungsdatei
-/// nebeneinander. Ersetzt das fruehere Fenster "Textregeln" und "Hauseigene
-/// Muster…" (rein lesend).
+/// Das Einstellungsfenster: eine gemeinsame Textregel-Liste (Projekt- und
+/// Erweiterungsregeln nebeneinander, mit "Gilt für"-Umschalter je Regel),
+/// eigene Generatoren, Spaltenmuster und der Reiter "Ablageort".
 ///
 /// <b>Kopien statt Original:</b> das Fenster arbeitet auf einer Kopie des
 /// Profils (<see cref="ProfileStore.DeepCopy{T}"/>) und einer Kopie der
@@ -44,6 +58,7 @@ public sealed class SettingsViewModel : ObservableObject
     private readonly ExtensionLibrary _extensionsCopy;
     private readonly Profile? _profileCopy;
     private readonly ExtensionWriteState _writeState;
+    private readonly ExtensionResolution _resolution;
     private readonly string? _extensionLoadError;
 
     private SettingsTab _selectedTab;
@@ -51,18 +66,36 @@ public sealed class SettingsViewModel : ObservableObject
     private bool _globalDirty;
     private readonly HashSet<string> _baselineErrors;
 
+    /// <summary>
+    /// Die Regelnamen, die die Freitextfelder des Profils beim Oeffnen
+    /// ausdruecklich auswaehlen (<see cref="FieldRule.TextRules"/>), je Feld in
+    /// der Reihenfolge von <see cref="Profile.Fields"/> -- <c>null</c> fuer ein
+    /// Feld ohne eigene Auswahl. Grundlage fuer <see cref="RewriteFieldRuleReferences"/>.
+    /// </summary>
+    private readonly List<List<string>?> _originalFieldReferences = new();
+
+    /// <summary>
+    /// Welches Regelobjekt ein Name beim Oeffnen meinte -- wie im echten Lauf
+    /// (<see cref="ExtensionLibrary.MergeTextRules"/>) gewinnt die Projektregel
+    /// vor einer gleichnamigen globalen.
+    /// </summary>
+    private readonly Dictionary<string, TextRule> _originalRuleByName = new(StringComparer.OrdinalIgnoreCase);
+
     public SettingsViewModel(
         ProfileSession? session,
         ExtensionLibrary extensions,
         ExtensionWriteState writeState,
         string? extensionLoadError,
-        SettingsTab initialTab = SettingsTab.Project,
-        string? selectRuleName = null)
+        ExtensionResolution? resolution = null,
+        SettingsTab initialTab = SettingsTab.TextRules,
+        string? selectRuleName = null,
+        RuleScope? selectRuleScope = null)
     {
         _session = session;
         _extensions = extensions;
         _writeState = writeState;
         _extensionLoadError = extensionLoadError;
+        _resolution = resolution ?? ExtensionLibrary.ResolvePath();
 
         _extensionsCopy = extensions.Clone();
         _profileCopy = session is null ? null : ProfileStore.DeepCopy(session.Profile);
@@ -72,29 +105,36 @@ public sealed class SettingsViewModel : ObservableObject
         // hat dieses Fenster weder verursacht noch kann es dort behoben werden.
         _baselineErrors = ErrorKeys(ProfileValidator.Validate(_profileCopy ?? new Profile(), _extensionsCopy));
 
-        // Ohne Profil ist der Projektreiter nicht erreichbar (siehe
-        // ProjectTabHint) -- der globale Reiter bleibt trotzdem sinnvoll, denn
-        // die Erweiterungsdatei existiert unabhaengig von jedem Profil.
-        _selectedTab = _profileCopy is null ? SettingsTab.Global : initialTab;
+        foreach (var regel in _extensionsCopy.TextRules)
+            _originalRuleByName[regel.Name] = regel;
+        foreach (var regel in _profileCopy?.TextRules ?? new List<TextRule>())
+            _originalRuleByName[regel.Name] = regel;
+        foreach (var feld in _profileCopy?.Fields ?? new List<FieldRule>())
+            _originalFieldReferences.Add(feld.TextRules is null ? null : new List<string>(feld.TextRules));
+
+        _selectedTab = initialTab;
 
         ApplyCommand = new RelayCommand(Apply);
         CancelCommand = new RelayCommand(() => CloseRequested?.Invoke());
         OpenFolderCommand = new RelayCommand(
             () => OpenFolderRequested?.Invoke(Path.GetDirectoryName(_writeState.Path) ?? _writeState.Path));
         OpenEditorCommand = new RelayCommand(() => OpenEditorRequested?.Invoke(_writeState.Path));
+        ShowLocationDetailsCommand = new RelayCommand(() => SelectedTab = SettingsTab.Location);
 
         BuildProjectGenerators();
         BuildGlobalGenerators();
         BuildFieldRules();
-        BuildTextRulePanels();
+
+        TextRules = new TextRulesViewModel(
+            _profileCopy, _extensionsCopy, CanEditGlobal, GlobalLockReason, OnTextRuleChanged,
+            onGeneratorCopied: OnGeneratorCopiedByScopeChange);
 
         if (selectRuleName is not null)
-        {
-            if (_selectedTab == SettingsTab.Project)
-                ProjectRules?.SelectByName(selectRuleName);
-            else
-                GlobalRules.SelectByName(selectRuleName);
-        }
+            TextRules.SelectByName(selectRuleName, selectRuleScope);
+        else if (selectRuleScope is { } vorgabeBereich)
+            TextRules.SelectedFilterOption = TextRules.FilterOptions.First(o => o.Scope == vorgabeBereich);
+
+        BuildCandidates();
     }
 
     // ----------------------------------------------------------- Reiter
@@ -107,60 +147,54 @@ public sealed class SettingsViewModel : ObservableObject
             if (!SetProperty(ref _selectedTab, value))
                 return;
 
-            OnPropertyChanged(nameof(IsProjectTab));
-            OnPropertyChanged(nameof(IsGlobalTab));
             OnPropertyChanged(nameof(SelectedTabIndex));
         }
     }
 
-    public bool IsProjectTab
-    {
-        get => _selectedTab == SettingsTab.Project;
-        set { if (value) SelectedTab = SettingsTab.Project; }
-    }
-
-    public bool IsGlobalTab
-    {
-        get => _selectedTab == SettingsTab.Global;
-        set { if (value) SelectedTab = SettingsTab.Global; }
-    }
-
-    /// <summary>
-    /// Wie <see cref="SelectedTab"/>, als Zahl fuer die Bindung an
-    /// <c>TabControl.SelectedIndex</c> -- schlichter als ein eigener
-    /// Konverter fuer genau diese eine Stelle.
-    /// </summary>
+    /// <summary>Wie <see cref="SelectedTab"/>, als Zahl fuer <c>TabControl.SelectedIndex</c>.</summary>
     public int SelectedTabIndex
     {
-        get => _selectedTab == SettingsTab.Global ? 1 : 0;
-        set => SelectedTab = value == 1 ? SettingsTab.Global : SettingsTab.Project;
+        get => (int)_selectedTab;
+        set => SelectedTab = (SettingsTab)value;
     }
 
-    /// <summary>Ob ueberhaupt ein Profil geladen ist -- sonst zeigt der Projektreiter nur einen Hinweis.</summary>
+    /// <summary>Ob ueberhaupt ein Profil geladen ist -- ohne Profil bleibt der Filter der Regelliste ausgeblendet.</summary>
     public bool HasProfile => _profileCopy is not null;
 
-    public string ProjectTabTitle => _profileCopy is null
-        ? "Dieses Projekt"
-        : $"Dieses Projekt – {_session!.DisplayName}";
+    public string ProjectTitle => _profileCopy is null ? "kein Profil geladen" : _session!.DisplayName;
 
-    // ----------------------------------------------------------- Global
+    // ----------------------------------------------------------- Sperrleiste
 
+    /// <summary>Pfad der geltenden Erweiterungsdatei -- fuer die Statuszeile des Aufrufers nach "Übernehmen".</summary>
     public string GlobalPath => _writeState.Path;
 
-    /// <summary>Ob der globale Reiter bearbeitet werden darf.</summary>
+    /// <summary>Ob der globale Bereich (Erweiterungsdatei) bearbeitet werden darf.</summary>
     public bool CanEditGlobal => _extensionLoadError is null && _writeState.CanWrite;
 
-    /// <summary>
-    /// Zustandstext der Kopfzeile: "bearbeitbar", oder die Ursache der Sperre
-    /// -- entweder der Ladefehler (Fehler 1) oder <see cref="ExtensionWriteState.Reason"/>
-    /// (Fehler 2).
-    /// </summary>
-    public string GlobalStateText
-        => _extensionLoadError ?? _writeState.Reason ?? "bearbeitbar";
+    /// <summary>Grund fuer die Sperre -- entweder der Ladefehler (Fehler 1) oder <see cref="ExtensionWriteState.Reason"/> (Fehler 2). <c>null</c> wenn bearbeitbar.</summary>
+    public string? GlobalLockReason => _extensionLoadError ?? _writeState.Reason;
+
+    /// <summary>Zustandstext fuer den Reiter "Ablageort": "bearbeitbar", oder die Ursache der Sperre.</summary>
+    public string GlobalStateText => GlobalLockReason ?? "bearbeitbar";
 
     public bool HasGlobalWarning => !CanEditGlobal;
 
+    /// <summary>Sperrleiste oben, auf jeder Seite -- nur sichtbar, wenn der globale Bereich gesperrt ist.</summary>
+    public bool ShowLockBar => !CanEditGlobal;
+
+    public string LockBarText => $"🔒 Regeln für alle Projekte sind nur lesbar: {GlobalLockReason}";
+
+    /// <summary>Fuehrt von der Sperrleiste zum Reiter "Ablageort".</summary>
+    public RelayCommand ShowLocationDetailsCommand { get; }
+
     public bool HasGlobalComments => File.Exists(_writeState.Path) && ExtensionLibrary.HasComments(_writeState.Path);
+
+    /// <summary>
+    /// Der .bak-Hinweis in der Fußzeile: nur sichtbar, wenn tatsächlich etwas
+    /// Globales geändert wurde (sonst entstünde beim Schließen ohne
+    /// "Übernehmen" gar keine Sicherungskopie) und die Datei Kommentare trägt.
+    /// </summary>
+    public bool ShowGlobalCommentsWarning => _globalDirty && HasGlobalComments;
 
     public RelayCommand OpenFolderCommand { get; }
     public RelayCommand OpenEditorCommand { get; }
@@ -173,76 +207,40 @@ public sealed class SettingsViewModel : ObservableObject
 
     // ------------------------------------------------------- Textregeln
 
-    /// <summary>Nur mit geladenem Profil vorhanden.</summary>
-    public TextRulesViewModel? ProjectRules { get; private set; }
+    /// <summary>Die gemeinsame Regelliste -- Projekt- und Erweiterungsregeln nebeneinander (Plan Teil B2).</summary>
+    public TextRulesViewModel TextRules { get; private set; } = null!;
 
-    public TextRulesViewModel GlobalRules { get; private set; } = null!;
-
-    private void BuildTextRulePanels()
+    private void OnTextRuleChanged(RuleScope scope)
     {
-        IReadOnlyList<TextRule> MergeForTrial()
-            => _extensionsCopy.MergeTextRules(_profileCopy?.TextRules ?? new List<TextRule>());
+        if (scope == RuleScope.Project)
+            _projectDirty = true;
+        else
+            _globalDirty = true;
 
-        if (_profileCopy is not null)
-        {
-            ProjectRules = new TextRulesViewModel(
-                _profileCopy.TextRules,
-                () => _extensionsCopy.TextRules,
-                _profileCopy,
-                _extensionsCopy,
-                MergeForTrial,
-                OnProjectChanged,
-                isReadOnly: false,
-                otherAreaLabel: "gilt für alle Projekte",
-                moveLabel: "In alle Projekte verschieben",
-                onSwitchToOtherArea: name => SwitchTo(SettingsTab.Global, name),
-                onMoveRequested: CanEditGlobal ? rule => MoveRule(rule, fromProject: true) : null);
-        }
-
-        GlobalRules = new TextRulesViewModel(
-            _extensionsCopy.TextRules,
-            () => _profileCopy?.TextRules ?? new List<TextRule>(),
-            _profileCopy ?? new Profile(),
-            _extensionsCopy,
-            MergeForTrial,
-            OnGlobalChanged,
-            isReadOnly: !CanEditGlobal,
-            otherAreaLabel: "gilt nur in diesem Projekt",
-            moveLabel: "Nur in dieses Projekt verschieben",
-            onSwitchToOtherArea: name => SwitchTo(SettingsTab.Project, name),
-            onMoveRequested: _profileCopy is not null ? rule => MoveRule(rule, fromProject: false) : null);
-
-        OnPropertyChanged(nameof(ProjectRules));
-        OnPropertyChanged(nameof(GlobalRules));
-    }
-
-    private void SwitchTo(SettingsTab tab, string ruleName)
-    {
-        SelectedTab = tab;
-        (tab == SettingsTab.Project ? ProjectRules : GlobalRules)?.SelectByName(ruleName);
-    }
-
-    private void OnProjectChanged()
-    {
-        _projectDirty = true;
         OnPropertyChanged(nameof(HasUnsavedChanges));
-        GlobalRules.RefreshOtherArea();
-        RefreshGeneratorUsage();
-    }
-
-    private void OnGlobalChanged()
-    {
-        _globalDirty = true;
-        OnPropertyChanged(nameof(HasUnsavedChanges));
-        ProjectRules?.RefreshOtherArea();
+        OnPropertyChanged(nameof(ShowGlobalCommentsWarning));
         RefreshGeneratorUsage();
     }
 
     /// <summary>
+    /// Ein Bereichswechsel (siehe <see cref="TextRulesViewModel.ChangeScope"/>)
+    /// hat einen eigenen Generator in den Zielbereich mitkopiert -- die
+    /// Listen "Eigene Generatoren" halten ihren eigenen Bestand
+    /// (<see cref="ProjectGenerators"/>/<see cref="GlobalGenerators"/>) und
+    /// muessen deshalb neu aufgebaut werden, sonst zeigte die Seite den
+    /// frisch kopierten Generator erst nach einem Neustart des Fensters.
+    /// </summary>
+    private void OnGeneratorCopiedByScopeChange()
+    {
+        BuildProjectGenerators();
+        BuildGlobalGenerators();
+    }
+
+    /// <summary>
     /// Meldet allen Eintraegen der Generatorenlisten, dass sich anderswo etwas
-    /// geaendert haben koennte, das sie betrifft (eine Regel, die ihren
-    /// Generator gewechselt hat) -- Sperre und Tooltip von "Entfernen" lesen
-    /// sonst einen veralteten Stand.
+    /// geaendert haben koennte (eine Regel, die ihren Generator gewechselt
+    /// hat) -- Sperre und Tooltip von "Entfernen" lesen sonst einen veralteten
+    /// Stand.
     /// </summary>
     private void RefreshGeneratorUsage()
     {
@@ -250,47 +248,6 @@ public sealed class SettingsViewModel : ObservableObject
             eintrag.NotifyUsageChanged();
         foreach (var eintrag in GlobalGenerators)
             eintrag.NotifyUsageChanged();
-    }
-
-    /// <summary>
-    /// Verschiebt eine eigene Regel in den jeweils anderen Bereich. Einen
-    /// eigenen Generator, den die Regel nutzt und den es im Ziel noch nicht
-    /// gibt, kopiert das mit, statt ihn zu verschieben -- die Quelle soll
-    /// weiter funktionieren, falls dort noch etwas anderes ihn braucht.
-    /// </summary>
-    private void MoveRule(TextRule rule, bool fromProject)
-    {
-        if (_profileCopy is null)
-            return;
-
-        var quellRegeln = fromProject ? _profileCopy.TextRules : _extensionsCopy.TextRules;
-        var zielRegeln = fromProject ? _extensionsCopy.TextRules : _profileCopy.TextRules;
-        var quellGeneratoren = fromProject ? _profileCopy.Generators : _extensionsCopy.Generators;
-        var zielGeneratoren = fromProject ? _extensionsCopy.Generators : _profileCopy.Generators;
-
-        var neuerName = TextRuleNaming.MakeUnique(
-            rule.Name, zielRegeln.Select(r => r.Name).Concat(quellRegeln.Where(r => r != rule).Select(r => r.Name)));
-
-        if (!Core.Generation.GeneratorRegistry.KnownNames.Contains(rule.Generator, StringComparer.OrdinalIgnoreCase)
-            && quellGeneratoren.TryGetValue(rule.Generator, out var generatorSettings)
-            && !zielGeneratoren.ContainsKey(rule.Generator))
-        {
-            zielGeneratoren[rule.Generator] = ProfileStore.DeepCopy(generatorSettings);
-        }
-
-        quellRegeln.Remove(rule);
-        rule.Name = neuerName;
-        zielRegeln.Add(rule);
-
-        _projectDirty = true;
-        _globalDirty = true;
-        OnPropertyChanged(nameof(HasUnsavedChanges));
-
-        BuildProjectGenerators();
-        BuildGlobalGenerators();
-        BuildTextRulePanels();
-
-        SwitchTo(fromProject ? SettingsTab.Global : SettingsTab.Project, neuerName);
     }
 
     // ---------------------------------------------------- Eigene Generatoren
@@ -392,16 +349,16 @@ public sealed class SettingsViewModel : ObservableObject
     {
         _projectDirty = true;
         OnPropertyChanged(nameof(HasUnsavedChanges));
-        ProjectRules?.RefreshGenerators();
-        GlobalRules.RefreshGenerators();
+        OnPropertyChanged(nameof(ShowGlobalCommentsWarning));
+        TextRules?.RefreshGeneratorsList();
     }
 
     private void OnGlobalGeneratorsChanged()
     {
         _globalDirty = true;
         OnPropertyChanged(nameof(HasUnsavedChanges));
-        ProjectRules?.RefreshGenerators();
-        GlobalRules.RefreshGenerators();
+        OnPropertyChanged(nameof(ShowGlobalCommentsWarning));
+        TextRules?.RefreshGeneratorsList();
     }
 
     // -------------------------------------------------------- Spaltenmuster
@@ -409,62 +366,97 @@ public sealed class SettingsViewModel : ObservableObject
     public ObservableCollection<FieldNameRuleViewModel> FieldRules { get; } = new();
 
     public RelayCommand AddFieldRuleCommand { get; private set; } = null!;
-    public RelayCommand RemoveFieldRuleCommand { get; private set; } = null!;
-
-    private FieldNameRuleViewModel? _selectedFieldRule;
-
-    public FieldNameRuleViewModel? SelectedFieldRule
-    {
-        get => _selectedFieldRule;
-        set
-        {
-            if (SetProperty(ref _selectedFieldRule, value))
-                RemoveFieldRuleCommand.RaiseCanExecuteChanged();
-        }
-    }
 
     private void BuildFieldRules()
     {
         FieldRules.Clear();
         foreach (var rule in _extensionsCopy.FieldRules)
-            FieldRules.Add(new FieldNameRuleViewModel(rule, _profileCopy, _extensionsCopy, OnFieldRulesChanged, CanEditGlobal));
+            FieldRules.Add(MakeFieldRuleEntry(rule));
 
         AddFieldRuleCommand = new RelayCommand(AddFieldRule, () => CanEditGlobal);
-        RemoveFieldRuleCommand = new RelayCommand(RemoveFieldRule, () => CanEditGlobal && _selectedFieldRule is not null);
-
         OnPropertyChanged(nameof(AddFieldRuleCommand));
-        OnPropertyChanged(nameof(RemoveFieldRuleCommand));
+    }
+
+    private FieldNameRuleViewModel MakeFieldRuleEntry(FieldNameRule rule)
+    {
+        FieldNameRuleViewModel? entry = null;
+        entry = new FieldNameRuleViewModel(
+            rule, _profileCopy, _extensionsCopy, OnFieldRulesChanged, CanEditGlobal, FieldRules,
+            onRemove: () => RemoveFieldRule(entry!));
+        return entry;
     }
 
     private void AddFieldRule()
     {
         var rule = new FieldNameRule { Pattern = "", Generator = "token" };
-        _extensionsCopy.FieldRules.Add(rule);
-
-        var viewModel = new FieldNameRuleViewModel(rule, _profileCopy, _extensionsCopy, OnFieldRulesChanged, CanEditGlobal);
+        var viewModel = MakeFieldRuleEntry(rule);
         FieldRules.Add(viewModel);
-        SelectedFieldRule = viewModel;
 
         OnFieldRulesChanged();
     }
 
-    private void RemoveFieldRule()
+    private void RemoveFieldRule(FieldNameRuleViewModel entry)
     {
-        if (_selectedFieldRule is null)
-            return;
-
-        _extensionsCopy.FieldRules.Remove(_selectedFieldRule.Rule);
-        FieldRules.Remove(_selectedFieldRule);
-        SelectedFieldRule = FieldRules.FirstOrDefault();
-
+        FieldRules.Remove(entry);
         OnFieldRulesChanged();
     }
 
+    /// <summary>
+    /// Gleicht <see cref="ExtensionLibrary.FieldRules"/> an die Reihenfolge
+    /// und den Bestand der Ansichtscollection an -- gerufen nach jeder
+    /// Aenderung (Hinzufuegen, Entfernen, Verschieben, Feldbearbeitung); die
+    /// Objekte selbst bleiben dieselben, nur Reihenfolge/Bestand koennten sich
+    /// geaendert haben.
+    /// </summary>
     private void OnFieldRulesChanged()
     {
+        _extensionsCopy.FieldRules.Clear();
+        _extensionsCopy.FieldRules.AddRange(FieldRules.Select(f => f.Rule));
+
         _globalDirty = true;
         OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(ShowGlobalCommentsWarning));
         RefreshGeneratorUsage();
+
+        foreach (var eintrag in FieldRules)
+            eintrag.NotifyPositionChanged();
+    }
+
+    // -------------------------------------------------------- Ablageort
+
+    /// <summary>
+    /// Erklaert, wer die geltende Datei aendern darf: neben der Programmdatei
+    /// nur, wer dort Schreibrecht hat, im Konfigurationsordner jeder Anwender
+    /// selbst.
+    /// </summary>
+    public string GlobalReachText => _resolution.Origin == ExtensionOrigin.ProgramDirectory
+        ? "Neben der Programmdatei – gilt für alle, die das Programm von dort starten. "
+          + "Ändern kann sie, wer dort Schreibrecht hat."
+        : "Im persönlichen Konfigurationsordner – gilt für alle Ihre Projekte auf diesem Rechner.";
+
+    /// <summary>Die geprueften Fundorte samt Zustand, fuer den Reiter "Ablageort".</summary>
+    public IReadOnlyList<ExtensionCandidateInfo> Candidates { get; private set; } = Array.Empty<ExtensionCandidateInfo>();
+
+    private void BuildCandidates()
+    {
+        Candidates = _resolution.Candidates.Select(kandidat =>
+        {
+            var origin = kandidat.Origin == ExtensionOrigin.ProgramDirectory
+                ? "neben der Programmdatei"
+                : "im Konfigurationsordner";
+
+            var zustand = !kandidat.Exists
+                ? "nicht vorhanden"
+                : kandidat.SkippedAsProfile
+                    ? "als Profil übergangen"
+                    : string.Equals(kandidat.Path, _resolution.Path, StringComparison.Ordinal)
+                        ? "gilt"
+                        : "vorhanden";
+
+            return new ExtensionCandidateInfo(kandidat.Path, origin, zustand);
+        }).ToList();
+
+        OnPropertyChanged(nameof(Candidates));
     }
 
     // ------------------------------------------------------ Übernehmen/Abbrechen
@@ -493,6 +485,11 @@ public sealed class SettingsViewModel : ObservableObject
     {
         ValidationErrors.Clear();
 
+        // Vor der Pruefung: ein umbenanntes "iban" soll nicht als "Die
+        // Textregel 'iban' ist nicht definiert" das Übernehmen blockieren.
+        if (RewriteFieldRuleReferences())
+            _projectDirty = true;
+
         var issues = ProfileValidator.Validate(_profileCopy ?? new Profile(), _extensionsCopy);
         var fehler = issues
             .Where(i => i.Severity == ValidationSeverity.Error && !_baselineErrors.Contains(ErrorKey(i)))
@@ -501,7 +498,7 @@ public sealed class SettingsViewModel : ObservableObject
         if (fehler.Count > 0)
         {
             foreach (var issue in fehler)
-                ValidationErrors.Add($"{issue.Path}: {issue.Message}");
+                ValidationErrors.Add(DescribeValidationIssue(issue));
 
             OnPropertyChanged(nameof(HasValidationErrors));
             return;
@@ -540,6 +537,12 @@ public sealed class SettingsViewModel : ObservableObject
             foreach (var (name, settings) in _profileCopy.Generators)
                 _session.Profile.Generators[name] = settings;
 
+            // Nur die Regelauswahl der Felder -- alles andere an den Feldern
+            // bearbeitet dieses Fenster nicht, und die Reihenfolge ist dieselbe
+            // wie in der Kopie.
+            for (var i = 0; i < _session.Profile.Fields.Count && i < _profileCopy.Fields.Count; i++)
+                _session.Profile.Fields[i].TextRules = _profileCopy.Fields[i].TextRules;
+
             _session.MarkChanged();
         }
 
@@ -548,15 +551,91 @@ public sealed class SettingsViewModel : ObservableObject
         _projectDirty = false;
         _globalDirty = false;
         OnPropertyChanged(nameof(HasUnsavedChanges));
+        OnPropertyChanged(nameof(ShowGlobalCommentsWarning));
 
         CloseRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// Zieht die Regelauswahl der Freitextfelder nach, wenn eine dort genannte
+    /// Regel umbenannt wurde -- von Hand ueber "Bezeichnung" oder beim
+    /// Bereichswechsel, der einen doppelten Namen eindeutig macht.
+    ///
+    /// Aufgeloest wird ueber das Regelobjekt, nicht ueber Zwischenstaende beim
+    /// Tippen: jeder beim Oeffnen genannte Name zeigt auf die Regel, die er
+    /// damals meinte (<see cref="_originalRuleByName"/>), und bekommt deren
+    /// heutigen Namen. Gibt es die Regel nicht mehr, bleibt der Name stehen --
+    /// die Pruefung meldet ihn dann als nicht definiert, und das zu Recht.
+    /// Jedes Mal frisch aus <see cref="_originalFieldReferences"/> gebildet,
+    /// damit ein zweites "Übernehmen" nach einem Pruefungsfehler dasselbe
+    /// Ergebnis liefert.
+    /// </summary>
+    /// <returns>Ob sich an mindestens einem Feld gegenueber dem Stand beim Oeffnen etwas geaendert hat.</returns>
+    private bool RewriteFieldRuleReferences()
+    {
+        if (_profileCopy is null)
+            return false;
+
+        var vorhanden = new HashSet<TextRule>(
+            _profileCopy.TextRules.Concat(_extensionsCopy.TextRules), ReferenceEqualityComparer.Instance);
+
+        var geaendert = false;
+        for (var i = 0; i < _profileCopy.Fields.Count && i < _originalFieldReferences.Count; i++)
+        {
+            if (_originalFieldReferences[i] is not { } namen)
+                continue;
+
+            var neu = namen
+                .Select(name => _originalRuleByName.TryGetValue(name, out var regel) && vorhanden.Contains(regel)
+                    ? regel.Name
+                    : name)
+                .ToList();
+
+            _profileCopy.Fields[i].TextRules = neu;
+            geaendert |= !neu.SequenceEqual(namen, StringComparer.Ordinal);
+        }
+
+        return geaendert;
     }
 
     private static string ErrorKey(ValidationIssue issue) => issue.Path + "\n" + issue.Message;
 
     private static HashSet<string> ErrorKeys(IEnumerable<ValidationIssue> issues)
         => issues.Where(i => i.Severity == ValidationSeverity.Error).Select(ErrorKey).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Uebersetzt einen Befund in eine fuer den Menschen lesbare Zeile. Fuer
+    /// eine Textregel (<c>textRules[i]…</c> bzw. <c>extensions.textRules[i]…</c>,
+    /// siehe <see cref="ProfileValidator"/>) wird daraus "Regel „fw"
+    /// (Dieses Projekt): <c>&lt;Meldung&gt;</c>" -- der rohe Index sagt einem
+    /// Anwender ohne Kenntnis des Dateiformats nichts. Fuer alles andere
+    /// (Generatoren, Spaltenmuster, …) bleibt der Pfad stehen.
+    /// </summary>
+    private string DescribeValidationIssue(ValidationIssue issue)
+    {
+        var treffer = TextRulePathPattern.Match(issue.Path);
+        if (!treffer.Success)
+            return $"{issue.Path}: {issue.Message}";
+
+        var istGlobal = treffer.Groups[1].Success;
+        var index = int.Parse(treffer.Groups[2].Value);
+        var regeln = istGlobal ? _extensionsCopy.TextRules : _profileCopy?.TextRules;
+
+        if (regeln is null || index < 0 || index >= regeln.Count)
+            return $"{issue.Path}: {issue.Message}";
+
+        var bereich = istGlobal ? "Alle Projekte" : "Dieses Projekt";
+        return $"Regel „{regeln[index].Name}“ ({bereich}): {issue.Message}";
+    }
+
+    private static readonly Regex TextRulePathPattern = new(@"^(extensions\.)?textRules\[(\d+)\]", RegexOptions.Compiled);
 }
+
+/// <summary>Ein gepruefter Fundort der Erweiterungsdatei, fuer den Reiter "Ablageort".</summary>
+/// <param name="Path">Der geprueft Pfad.</param>
+/// <param name="OriginLabel">"neben der Programmdatei" oder "im Konfigurationsordner".</param>
+/// <param name="StateLabel">"gilt", "vorhanden", "als Profil übergangen" oder "nicht vorhanden".</param>
+public sealed record ExtensionCandidateInfo(string Path, string OriginLabel, string StateLabel);
 
 /// <summary>Ein eigener Generator (<see cref="Profile.Generators"/> bzw. <see cref="ExtensionLibrary.Generators"/>) in der Liste "Eigene Generatoren".</summary>
 public sealed class GeneratorEntryViewModel : ObservableObject
@@ -663,13 +742,16 @@ public sealed class FieldNameRuleViewModel : ObservableObject
 {
     private readonly Action _onChanged;
     private readonly bool _canEdit;
+    private readonly ObservableCollection<FieldNameRuleViewModel> _siblings;
 
     public FieldNameRuleViewModel(
-        FieldNameRule rule, Profile? profile, ExtensionLibrary extensions, Action onChanged, bool canEdit)
+        FieldNameRule rule, Profile? profile, ExtensionLibrary extensions, Action onChanged, bool canEdit,
+        ObservableCollection<FieldNameRuleViewModel> siblings, Action onRemove)
     {
         Rule = rule;
         _onChanged = onChanged;
         _canEdit = canEdit;
+        _siblings = siblings;
 
         // Der Sonderwert "scanText" (Freitextfeld durchsuchen) steht neben den
         // eingebauten und eigenen Generatoren zur Wahl -- ein Spaltenmuster
@@ -678,6 +760,10 @@ public sealed class FieldNameRuleViewModel : ObservableObject
         var eintraege = new List<GeneratorOption> { new("scanText", "Freitextfeld durchsuchen") };
         eintraege.AddRange(GeneratorOption.For(profile ?? new Profile(), extensions));
         Generators = new ObservableCollection<GeneratorOption>(eintraege);
+
+        RemoveCommand = new RelayCommand(onRemove, () => CanEdit);
+        MoveUpCommand = new RelayCommand(() => Move(-1), () => CanMoveUp);
+        MoveDownCommand = new RelayCommand(() => Move(1), () => CanMoveDown);
     }
 
     public FieldNameRule Rule { get; }
@@ -685,6 +771,44 @@ public sealed class FieldNameRuleViewModel : ObservableObject
     public ObservableCollection<GeneratorOption> Generators { get; }
 
     public bool CanEdit => _canEdit;
+
+    public RelayCommand RemoveCommand { get; }
+    public RelayCommand MoveUpCommand { get; }
+    public RelayCommand MoveDownCommand { get; }
+
+    public bool CanMoveUp => CanEdit && _siblings.IndexOf(this) > 0;
+
+    public bool CanMoveDown
+    {
+        get
+        {
+            var index = _siblings.IndexOf(this);
+            return CanEdit && index >= 0 && index < _siblings.Count - 1;
+        }
+    }
+
+    private void Move(int delta)
+    {
+        if (!CanEdit)
+            return;
+
+        var index = _siblings.IndexOf(this);
+        var ziel = index + delta;
+        if (index < 0 || ziel < 0 || ziel >= _siblings.Count)
+            return;
+
+        _siblings.Move(index, ziel);
+        _onChanged();
+    }
+
+    /// <summary>Meldet, dass sich die Position in <see cref="_siblings"/> geaendert haben koennte -- nach jeder strukturellen Aenderung.</summary>
+    public void NotifyPositionChanged()
+    {
+        OnPropertyChanged(nameof(CanMoveUp));
+        OnPropertyChanged(nameof(CanMoveDown));
+        MoveUpCommand.RaiseCanExecuteChanged();
+        MoveDownCommand.RaiseCanExecuteChanged();
+    }
 
     public string Pattern
     {

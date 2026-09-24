@@ -113,34 +113,74 @@ public static class ProfileStore
     }
 
     /// <summary>
-    /// Siebt fremde oder andersrollige JSON-Dateien aus, bevor ueberhaupt
-    /// <see cref="Load"/> versucht wird: eine Datei zaehlt als Profil, wenn
-    /// sie <c>profileName</c> oder <c>fields</c> traegt. Gebraucht an zwei
-    /// Stellen, die sich nicht auseinanderentwickeln duerfen --
-    /// <see cref="Discover"/> (unterscheidet ein Altprofil von der
-    /// gleichnamigen Erweiterungsdatei) und <see cref="ProfileCatalog"/>
-    /// (siebt fremde Dateien im zentralen Ordner aus).
+    /// Ergebnis von <see cref="Classify"/>: was eine JSON-Datei an einem der
+    /// beiden gemeinsamen Fundorte (Profil oder Erweiterungsdatei) ist.
     /// </summary>
-    public static bool LooksLikeProfile(string path)
+    public enum JsonFileKind
+    {
+        /// <summary>Traegt <c>profileName</c> oder <c>fields</c> -- ein Profil.</summary>
+        Profile,
+
+        /// <summary>Gueltiges JSON, aber kein Profil -- etwa eine Erweiterungsdatei.</summary>
+        Other,
+
+        /// <summary>Kein gueltiges JSON. <see cref="Load"/> liefert dazu die eigentliche Fehlermeldung.</summary>
+        Unreadable,
+    }
+
+    /// <summary>
+    /// Optionen fuer <see cref="JsonDocument.Parse(Stream, JsonDocumentOptions)"/>
+    /// in <see cref="Classify"/> -- wie <see cref="JsonOptions"/>, damit eine von
+    /// Hand kommentierte Erweiterungsdatei hier nicht faelschlich als
+    /// <see cref="JsonFileKind.Unreadable"/> durchfaellt.
+    /// </summary>
+    private static readonly JsonDocumentOptions ClassifyOptions = new()
+    {
+        CommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
+    /// <summary>
+    /// Stellt fest, was fuer eine JSON-Datei an <paramref name="path"/> liegt,
+    /// ohne sie schon vollstaendig einzulesen. Gebraucht an zwei Stellen, die
+    /// sich nicht auseinanderentwickeln duerfen -- <see cref="Discover"/>
+    /// (unterscheidet ein Altprofil von der gleichnamigen Erweiterungsdatei)
+    /// und <see cref="ExtensionLibrary.ResolvePath"/> (uebersieht eine dort
+    /// liegende Profildatei).
+    /// </summary>
+    public static JsonFileKind Classify(string path)
     {
         try
         {
             using var stream = File.OpenRead(path);
-            using var document = JsonDocument.Parse(stream);
-            return document.RootElement.ValueKind == JsonValueKind.Object &&
-                   (document.RootElement.TryGetProperty("profileName", out _) ||
-                    document.RootElement.TryGetProperty("fields", out _));
+            using var document = JsonDocument.Parse(stream, ClassifyOptions);
+            var istProfil = document.RootElement.ValueKind == JsonValueKind.Object &&
+                            (document.RootElement.TryGetProperty("profileName", out _) ||
+                             document.RootElement.TryGetProperty("fields", out _));
+
+            return istProfil ? JsonFileKind.Profile : JsonFileKind.Other;
         }
         catch (JsonException)
         {
-            // Kaputtes JSON laesst sich hier nicht beurteilen -- durchlassen,
-            // Load wirft gleich noch einmal und liefert dann den Fehler mit
-            // brauchbarer Meldung.
-            return true;
+            // Echtes kaputtes JSON laesst sich von einer Profildatei hier
+            // nicht unterscheiden -- Load soll den Fehler mit brauchbarer
+            // Meldung melden, nicht diese Klassifikation.
+            return JsonFileKind.Unreadable;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return false;
+            return JsonFileKind.Other;
         }
     }
+
+    /// <summary>
+    /// Siebt fremde oder andersrollige JSON-Dateien aus, bevor ueberhaupt
+    /// <see cref="Load"/> versucht wird: eine Datei zaehlt als Profil, wenn
+    /// <see cref="Classify"/> <see cref="JsonFileKind.Profile"/> ergibt, oder
+    /// wenn sie sich gar nicht erst parsen laesst (<see cref="JsonFileKind.Unreadable"/>)
+    /// -- dann soll <see cref="Load"/> gleich noch einmal ansetzen und den
+    /// eigentlichen Fehler melden, statt dass die Datei hier schon
+    /// stillschweigend als "keine Profildatei" durchfaellt.
+    /// </summary>
+    public static bool LooksLikeProfile(string path) => Classify(path) is JsonFileKind.Profile or JsonFileKind.Unreadable;
 }

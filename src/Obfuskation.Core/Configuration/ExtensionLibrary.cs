@@ -154,10 +154,15 @@ public sealed class ExtensionLibrary
     ///    letzteres in das Auspackverzeichnis unter <c>/tmp</c> und waere nutzlos.
     /// 2. <see cref="PathHelper.ConfigDirectory"/> (<c>~/.config/obfuskation</c>).
     ///
-    /// Eine Datei, auf die <see cref="ProfileStore.LooksLikeProfile"/> zutrifft,
-    /// wird uebersprungen -- an derselben Stelle kann eine gleichnamige
-    /// Projektdatei liegen (siehe <see cref="ProfileStore.Discover"/>) -- und
-    /// der naechste Ort geprueft.
+    /// Eine Datei, die laut <see cref="ProfileStore.Classify"/> ein Profil ist
+    /// (<see cref="ProfileStore.JsonFileKind.Profile"/>), wird uebersprungen --
+    /// an derselben Stelle kann eine gleichnamige Projektdatei liegen (siehe
+    /// <see cref="ProfileStore.Discover"/>) -- und der naechste Ort geprueft.
+    /// Eine kaputte Datei (<see cref="ProfileStore.JsonFileKind.Unreadable"/>)
+    /// wird dagegen ausdruecklich <b>nicht</b> uebersprungen: sie wird gewaehlt,
+    /// und <see cref="Load"/> wirft dafuer <see cref="ConfigurationException"/>
+    /// mit brauchbarer Meldung, statt dass die Datei still als "dort liegt ein
+    /// Profil" durchgeht (siehe Plan Teil A1).
     /// </summary>
     /// <param name="programDirectory">
     /// Verzeichnis der laufenden Programmdatei. Ohne Angabe gilt das
@@ -180,7 +185,7 @@ public sealed class ExtensionLibrary
 
             var path = Path.Combine(directory, FileName);
             var exists = File.Exists(path);
-            var skipped = exists && ProfileStore.LooksLikeProfile(path);
+            var skipped = exists && ProfileStore.Classify(path) == ProfileStore.JsonFileKind.Profile;
             candidates.Add(new ExtensionCandidate(path, origin, exists, skipped));
 
             if (selectedPath is null && exists && !skipped)
@@ -201,7 +206,8 @@ public sealed class ExtensionLibrary
     /// <see cref="ResolvePath"/>. Eine fehlende Datei ist kein Fehler — die
     /// Erweiterung ist optional — und ergibt <see cref="Empty"/>. Eine
     /// vorhandene, aber kaputte Datei wirft <see cref="ConfigurationException"/>
-    /// mit dem Pfad in der Meldung.
+    /// mit dem Pfad in der Meldung -- ebenso eine, die sich zwar parsen liesse,
+    /// aber nicht mehr geoeffnet werden kann (Zugriffsrechte, Laufwerk weg).
     /// </summary>
     public static ExtensionLibrary Load(string? path = null)
     {
@@ -218,6 +224,10 @@ public sealed class ExtensionLibrary
         catch (JsonException ex)
         {
             throw new ConfigurationException($"Erweiterungsdatei ist kein gültiges JSON: {resolved}", ex);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new ConfigurationException($"Erweiterungsdatei nicht lesbar: {resolved} – {ex.Message}", ex);
         }
     }
 
@@ -249,15 +259,30 @@ public sealed class ExtensionLibrary
         if (resolution.Path is null)
             return new ExtensionWriteState(configPath, CanWrite: true, Reason: null);
 
-        if (IsWritable(resolution.Path))
-            return new ExtensionWriteState(resolution.Path, CanWrite: true, Reason: null);
+        if (!IsWritable(resolution.Path))
+        {
+            var reason = resolution.Origin == ExtensionOrigin.ProgramDirectory
+                ? "Die geltende Datei liegt im Programmverzeichnis und ist schreibgeschützt. "
+                  + "Änderungen nimmt dort der Administrator vor."
+                : "Die geltende Datei ist schreibgeschützt.";
 
-        var reason = resolution.Origin == ExtensionOrigin.ProgramDirectory
-            ? "Die geltende Datei liegt im Programmverzeichnis und ist schreibgeschützt. "
-              + "Änderungen nimmt dort der Administrator vor."
-            : "Die geltende Datei ist schreibgeschützt.";
+            return new ExtensionWriteState(resolution.Path, CanWrite: false, reason);
+        }
 
-        return new ExtensionWriteState(resolution.Path, CanWrite: false, reason);
+        // Die Datei selbst ist beschreibbar -- fuer das sichere Speichern
+        // (Nebendatei, ggf. .bak, dann Move) braucht Save aber auch
+        // Schreibrecht auf ihren Ordner. Ohne diese Pruefung wuerde ein
+        // schreibgeschuetzter Ordner erst beim tatsaechlichen Speichern
+        // auffallen, mitten im Einstellungsfenster.
+        var directory = Path.GetDirectoryName(resolution.Path);
+        if (!string.IsNullOrEmpty(directory) && !IsDirectoryWritable(directory))
+        {
+            return new ExtensionWriteState(resolution.Path, CanWrite: false,
+                "Die Datei ist beschreibbar, ihr Ordner aber nicht. Zum sicheren Speichern "
+                + "(Zwischendatei, Sicherungskopie) braucht das Programm Schreibrecht auf den Ordner.");
+        }
+
+        return new ExtensionWriteState(resolution.Path, CanWrite: true, Reason: null);
     }
 
     /// <summary>
@@ -366,6 +391,28 @@ public sealed class ExtensionLibrary
         try
         {
             using var stream = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Prueft das Schreibrecht auf einen Ordner ueber eine Probedatei, die sich
+    /// beim Schliessen selbst wieder entfernt (<see cref="FileOptions.DeleteOnClose"/>) --
+    /// es gibt keine verlaessliche API, die Ordnerrechte plattformuebergreifend
+    /// ohne einen solchen Versuch beantwortet.
+    /// </summary>
+    private static bool IsDirectoryWritable(string directory)
+    {
+        var probe = Path.Combine(directory, $".obfuskation-schreibprobe-{Guid.NewGuid():N}");
+
+        try
+        {
+            using var stream = new FileStream(
+                probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.DeleteOnClose);
             return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

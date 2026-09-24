@@ -1,41 +1,56 @@
 using System.Collections.ObjectModel;
+using System.Text.RegularExpressions;
 using Obfuskation.Core.Configuration;
 using Obfuskation.Core.Detection;
 
 namespace Obfuskation.Gui.ViewModels;
 
 /// <summary>
-/// Die Textregeln eines Bereichs (Projekt oder Erweiterung), mit einem
-/// Erprobungsfeld -- der Inhalt von <c>TextRulesPanel</c>, seit die
-/// Einstellungen (Plan Teil B) beide Bereiche nebeneinander zeigen, statt wie
-/// zuvor nur die Profilregeln in einem eigenen Fenster.
+/// Wie eine Textregel gerade erfasst wird -- die drei Modi des Formulars
+/// (Plan Teil B, "Anfaenger statt RegEx").
+/// </summary>
+public enum PatternMode
+{
+    /// <summary>"Genau dieser Wert" (<see cref="PatternFromSample.Literal"/>).</summary>
+    Exact,
+
+    /// <summary>"Alles dieser Form" (<see cref="PatternFromSample.Shape"/>).</summary>
+    Shape,
+
+    /// <summary>"Eigener Ausdruck (für Profis)": das Muster wird von Hand eingetragen.</summary>
+    Custom,
+}
+
+/// <summary>
+/// Eine gemeinsame Liste aller Textregeln -- Projektregeln und Regeln der
+/// Erweiterungsdatei nebeneinander, statt wie vor Plan Teil B in zwei
+/// getrennten Reiterinhalten. Jede Regel traegt ihren Bereich
+/// (<see cref="RuleScope"/>) offen als Eigenschaft statt sich hinter zwei
+/// Instanzen dieses Ansichtsmodells zu verstecken -- Verschieben zwischen den
+/// Bereichen ist damit nur noch eine Eigenschaftsaenderung an der Regel
+/// selbst (<see cref="TextRuleViewModel.IsProjectScope"/>/
+/// <see cref="TextRuleViewModel.IsGlobalScope"/>), keine Bewegung zwischen
+/// zwei Listen mehr.
 ///
-/// Das Erproben ist hier kein Beiwerk: ein zu weit gefasstes Muster ersetzt
-/// harmlose Werte und beschaedigt die Testdaten, ein zu enges laesst Echtdaten
-/// stehen. Beides faellt beim Betrachten des Musters nicht auf, beim Erproben
-/// an echtem Text sofort.
-///
-/// Die Regeln des jeweils anderen Bereichs erscheinen nur lesend darunter
-/// (<see cref="TextRuleViewModel.IsOtherArea"/>) -- mit dem Knopf "Dort
-/// bearbeiten", der in den anderen Reiter wechselt, und, sofern der Aufrufer
-/// es erlaubt, mit einem Knopf zum Verschieben.
+/// Arbeitet wie das ganze Einstellungsfenster auf Kopien von Profil und
+/// Erweiterung (siehe <see cref="SettingsViewModel"/>) und mutiert sie direkt --
+/// <see cref="SettingsViewModel.Apply"/> uebernimmt die Kopien erst bei
+/// "Übernehmen".
 /// </summary>
 public sealed class TextRulesViewModel : ObservableObject
 {
-    private readonly List<TextRule> _editableRules;
-    private readonly Func<IReadOnlyList<TextRule>> _otherAreaRules;
-    private readonly Profile _profile;
+    private readonly Profile? _profile;
+    private readonly Profile _profileForGenerators;
     private readonly ExtensionLibrary _extensions;
-    private readonly Func<IReadOnlyList<TextRule>> _mergeForTrial;
-    private readonly Action _onChanged;
-    private readonly bool _isReadOnly;
-    private readonly string _otherAreaLabel;
-    private readonly string _moveLabel;
-    private readonly Action<string>? _onSwitchToOtherArea;
-    private readonly Action<TextRule>? _onMoveRequested;
+    private readonly bool _canEditGlobal;
+    private readonly string? _globalLockReason;
+    private readonly Action<RuleScope> _onChanged;
+    private readonly Action? _onGeneratorCopied;
     private readonly TextRuleEngine _engine = new();
+    private readonly List<TextRuleViewModel> _allRules = new();
 
     private TextRuleViewModel? _selected;
+    private RuleFilterOption _selectedFilterOption;
     private string _sampleText =
         "Herr Max Mustermann, IBAN DE02120300000000202051, erreichbar unter\n"
         + "max.mustermann@beispiel.de oder +49 30 12345678.\n"
@@ -43,72 +58,69 @@ public sealed class TextRulesViewModel : ObservableObject
 
     private string _matchSummary = "";
 
-    /// <param name="editableRules">Die bearbeitbare Liste dieses Bereichs (Profil- oder Erweiterungsregeln).</param>
-    /// <param name="otherAreaRules">
-    /// Liest bei jedem Aufbau live die Regeln des jeweils anderen Bereichs --
-    /// eine Funktion statt einer Momentaufnahme, damit <see cref="RefreshOtherArea"/>
-    /// stets den aktuellen Stand zeigt, auch nachdem dort etwas verschoben
-    /// oder geloescht wurde.
-    /// </param>
-    /// <param name="profile">Fuer die Generatorenliste (<see cref="GeneratorOption.For"/>), unabhaengig vom Bereich.</param>
-    /// <param name="extensions">Wie <paramref name="profile"/>.</param>
-    /// <param name="mergeForTrial">
-    /// Liefert die fuer die Erprobung zusammengefuehrten Regeln (Profil- und
-    /// Erweiterungsregeln nach <c>ExtensionLibrary.MergeTextRules</c>) --
-    /// dieselbe Funktion fuer beide Bereiche, denn die Vereinigung ist immer
-    /// dieselbe, unabhaengig davon, welcher Reiter gerade offen ist.
-    /// </param>
-    /// <param name="onChanged">Wird bei jeder Aenderung an einer eigenen Regel gerufen.</param>
-    /// <param name="isReadOnly">
-    /// Ob der ganze Bereich schreibgeschuetzt ist -- etwa der globale Reiter
-    /// bei einer schreibgeschuetzten Erweiterungsdatei.
-    /// </param>
-    /// <param name="otherAreaLabel">Beschriftung der gespiegelten Zeilen, z. B. "gilt für alle Projekte".</param>
-    /// <param name="moveLabel">Beschriftung des Verschieben-Knopfs, oder leer ohne diesen Knopf.</param>
-    /// <param name="onSwitchToOtherArea">"Dort bearbeiten" bei einer gespiegelten Zeile -- <c>null</c> ohne diesen Knopf.</param>
-    /// <param name="onMoveRequested">
-    /// Verschiebt eine eigene Regel in den anderen Bereich -- <c>null</c>,
-    /// wenn dort nicht geschrieben werden darf (kein Profil geladen bzw. die
-    /// Erweiterungsdatei ist schreibgeschuetzt).
+    /// <param name="profile">Das Profil (Kopie), oder <c>null</c> ohne geladenes Profil.</param>
+    /// <param name="extensions">Die Erweiterung (Kopie) -- immer vorhanden, unabhaengig von <paramref name="profile"/>.</param>
+    /// <param name="canEditGlobal">Ob sich die Erweiterungsdatei gerade schreiben liesse.</param>
+    /// <param name="globalLockReason">Erklaerung, wenn <paramref name="canEditGlobal"/> falsch ist -- sonst <c>null</c>.</param>
+    /// <param name="onChanged">Wird bei jeder Aenderung gerufen, mit dem betroffenen Bereich.</param>
+    /// <param name="onGeneratorCopied">
+    /// Wird gerufen, wenn ein Bereichswechsel (<see cref="ChangeScope"/>)
+    /// einen eigenen Generator in den Zielbereich mitkopiert hat -- der
+    /// Aufrufer (<see cref="SettingsViewModel"/>) haelt die Listen "Eigene
+    /// Generatoren" separat und muss sie dann neu aufbauen, sonst zeigte die
+    /// dortige Seite den frisch kopierten Generator erst nach einem
+    /// Neustart des Fensters.
     /// </param>
     public TextRulesViewModel(
-        List<TextRule> editableRules,
-        Func<IReadOnlyList<TextRule>> otherAreaRules,
-        Profile profile,
-        ExtensionLibrary extensions,
-        Func<IReadOnlyList<TextRule>> mergeForTrial,
-        Action onChanged,
-        bool isReadOnly = false,
-        string otherAreaLabel = "",
-        string moveLabel = "",
-        Action<string>? onSwitchToOtherArea = null,
-        Action<TextRule>? onMoveRequested = null)
+        Profile? profile, ExtensionLibrary extensions, bool canEditGlobal, string? globalLockReason,
+        Action<RuleScope> onChanged, Action? onGeneratorCopied = null)
     {
-        _editableRules = editableRules;
-        _otherAreaRules = otherAreaRules;
         _profile = profile;
+        _profileForGenerators = profile ?? new Profile();
         _extensions = extensions;
-        _mergeForTrial = mergeForTrial;
+        _canEditGlobal = canEditGlobal;
+        _globalLockReason = globalLockReason;
         _onChanged = onChanged;
-        _isReadOnly = isReadOnly;
-        _otherAreaLabel = otherAreaLabel;
-        _moveLabel = moveLabel;
-        _onSwitchToOtherArea = onSwitchToOtherArea;
-        _onMoveRequested = onMoveRequested;
+        _onGeneratorCopied = onGeneratorCopied;
 
-        Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(profile, extensions));
+        Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(_profileForGenerators, extensions));
+
+        FilterOptions =
+        [
+            new RuleFilterOption("alle", null),
+            new RuleFilterOption("dieses Projekt", RuleScope.Project),
+            new RuleFilterOption("alle Projekte", RuleScope.Global),
+        ];
+        _selectedFilterOption = FilterOptions[0];
+
+        AddCommand = new RelayCommand(AddRule, () => CanAddRule);
+        RemoveCommand = new RelayCommand(RemoveSelected, () => _selected is { IsEditable: true });
 
         BuildRules();
-
-        AddCommand = new RelayCommand(Add, () => !_isReadOnly);
-        RemoveCommand = new RelayCommand(Remove, () => !_isReadOnly && _selected is { IsOtherArea: false });
-
-        // Erst jetzt: der Setter meldet dem Entfernen-Befehl seine
-        // Verfuegbarkeit, den es vorher noch nicht gab.
-        Selected = Rules.FirstOrDefault(r => !r.IsOtherArea) ?? Rules.FirstOrDefault();
-
-        Evaluate();
     }
+
+    // -------------------------------------------------------------- Filter
+
+    public bool HasProfile => _profile is not null;
+
+    /// <summary>Ohne Profil bleibt der Filter ausgeblendet -- es gibt kein "dieses Projekt".</summary>
+    public bool ShowFilter => HasProfile;
+
+    public IReadOnlyList<RuleFilterOption> FilterOptions { get; }
+
+    public RuleFilterOption SelectedFilterOption
+    {
+        get => _selectedFilterOption;
+        set
+        {
+            if (!SetProperty(ref _selectedFilterOption, value))
+                return;
+
+            ApplyFilter();
+        }
+    }
+
+    // --------------------------------------------------------------- Liste
 
     public ObservableCollection<TextRuleViewModel> Rules { get; } = new();
     public ObservableCollection<GeneratorOption> Generators { get; }
@@ -116,9 +128,6 @@ public sealed class TextRulesViewModel : ObservableObject
 
     public RelayCommand AddCommand { get; }
     public RelayCommand RemoveCommand { get; }
-
-    /// <summary>Ob dieser Bereich schreibgeschuetzt ist (siehe Konstruktor).</summary>
-    public bool IsReadOnly => _isReadOnly;
 
     public TextRuleViewModel? Selected
     {
@@ -134,6 +143,13 @@ public sealed class TextRulesViewModel : ObservableObject
     }
 
     public bool HasSelected => _selected is not null;
+
+    /// <summary>Ob "+ Neue Regel" ueberhaupt etwas anlegen koennte -- sonst Grund fuer den Tooltip.</summary>
+    public bool CanAddRule => _profile is not null || _canEditGlobal;
+
+    public string? AddRuleLockReason => CanAddRule
+        ? null
+        : _globalLockReason ?? "Kein Profil geladen und die Erweiterungsdatei ist nicht beschreibbar.";
 
     /// <summary>Der Text, an dem die Muster erprobt werden.</summary>
     public string SampleText
@@ -152,66 +168,263 @@ public sealed class TextRulesViewModel : ObservableObject
         private set => SetProperty(ref _matchSummary, value);
     }
 
-    /// <summary>Waehlt die Regel mit diesem Namen, sofern sie in diesem Bereich (auch gespiegelt) erscheint.</summary>
-    public void SelectByName(string ruleName)
+    /// <summary>Waehlt die Regel mit diesem Namen und Bereich aus, sofern vorhanden -- passt den Filter bei Bedarf an.</summary>
+    public void SelectByName(string ruleName, RuleScope? scope = null)
     {
-        var treffer = Rules.FirstOrDefault(r => string.Equals(r.Name, ruleName, StringComparison.OrdinalIgnoreCase));
-        if (treffer is not null)
-            Selected = treffer;
+        var treffer = _allRules.FirstOrDefault(r =>
+            string.Equals(r.Name, ruleName, StringComparison.OrdinalIgnoreCase) && (scope is null || r.Scope == scope));
+
+        if (treffer is null)
+            return;
+
+        if (!Rules.Contains(treffer))
+            SelectedFilterOption = FilterOptions[0]; // "alle" -- macht die Regel sicher sichtbar.
+
+        Selected = treffer;
     }
 
     private void BuildRules()
     {
-        Rules.Clear();
+        _allRules.Clear();
 
-        foreach (var rule in _editableRules)
-            Rules.Add(MakeEditableEntry(rule));
+        var projektNamen = new HashSet<string>(
+            _profile?.TextRules.Select(r => r.Name) ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
-        AppendOtherArea();
-    }
-
-    private TextRuleViewModel MakeEditableEntry(TextRule rule)
-        => new(_profile, _extensions, rule, OnRuleChanged, isReadOnly: _isReadOnly,
-            moveLabel: _moveLabel,
-            onMove: _isReadOnly || _onMoveRequested is null ? null : () => _onMoveRequested(rule));
-
-    private void AppendOtherArea()
-    {
-        // Eine gleichnamige eigene Regel ersetzt eine des anderen Bereichs
-        // vollstaendig, statt zusaetzlich zu gelten -- dieselbe Regel wie
-        // ExtensionLibrary.MergeTextRules; sie erscheint dann nicht doppelt.
-        var eigeneNamen = new HashSet<string>(_editableRules.Select(r => r.Name), StringComparer.OrdinalIgnoreCase);
-
-        foreach (var rule in _otherAreaRules().Where(r => !eigeneNamen.Contains(r.Name)))
+        if (_profile is not null)
         {
-            Rules.Add(new TextRuleViewModel(
-                _profile, _extensions, rule, OnRuleChanged, isReadOnly: true, areaLabel: _otherAreaLabel,
-                onSwitchToOtherArea: _onSwitchToOtherArea is null ? null : () => _onSwitchToOtherArea(rule.Name)));
+            foreach (var rule in _profile.TextRules)
+                _allRules.Add(MakeEntry(rule, RuleScope.Project, isOverridden: false));
         }
+
+        foreach (var rule in _extensions.TextRules)
+            _allRules.Add(MakeEntry(rule, RuleScope.Global, isOverridden: projektNamen.Contains(rule.Name)));
+
+        // Galt fuer genau diesen einen Aufbau -- ein spaeterer BuildRules-Lauf
+        // (etwa nach dem naechsten Verschieben) soll keine andere Regel
+        // ungewollt in den Namensautomatismus versetzen.
+        _pendingAutoNameRule = null;
+
+        ApplyFilter();
     }
 
     /// <summary>
-    /// Baut nur die gespiegelten (schreibgeschuetzten) Zeilen des anderen
-    /// Bereichs neu auf -- gerufen, wenn sich dort etwas geaendert hat.
-    /// Die eigene, gerade bearbeitete Liste bleibt dabei unangetastet, damit
-    /// eine laufende Eingabe (Fokus, Cursorposition) nicht verlorengeht.
+    /// Die eben erst per <see cref="AddRule"/> angelegte Regel, deren
+    /// Formular-Instanz beim naechsten <see cref="BuildRules"/> mit
+    /// <c>nameIsAuto: true</c> entstehen soll -- ohne dieses Merken wuerde der
+    /// vollstaendige Wiederaufbau der Liste den Automatismus sofort wieder
+    /// verlieren, noch bevor der Anwender einen Beispielwert eintippen konnte.
     /// </summary>
-    public void RefreshOtherArea()
+    private TextRule? _pendingAutoNameRule;
+
+    private TextRuleViewModel MakeEntry(TextRule rule, RuleScope scope, bool isOverridden)
     {
-        for (var i = Rules.Count - 1; i >= 0; i--)
+        var isEditable = scope == RuleScope.Project || _canEditGlobal;
+
+        return new TextRuleViewModel(
+            rule, scope, isOverridden, isEditable,
+            canChangeScope: _profile is not null && _canEditGlobal && isEditable,
+            scopeLockReason: ScopeLockReason,
+            canAdjustForProject: scope == RuleScope.Global && !isEditable && !isOverridden && _profile is not null,
+            profileForGenerators: _profileForGenerators,
+            extensions: _extensions,
+            makeUniqueName: kandidat => TextRuleNaming.MakeUnique(kandidat, AllNamesExcept(rule)),
+            onChanged: () => OnRuleChanged(scope),
+            onChangeScope: neuerBereich => ChangeScope(rule, neuerBereich),
+            onAdjustForProject: () => AdjustForProject(rule),
+            nameIsAuto: ReferenceEquals(rule, _pendingAutoNameRule),
+            nameHint: () => DescribeNameConflict(rule, scope));
+    }
+
+    /// <summary>
+    /// Hinweis unter der Bezeichnung, solange sie mit einer anderen Regel
+    /// zusammenfaellt -- im selben Bereich blockiert das "Übernehmen"
+    /// (<see cref="ProfileValidator"/>: "mehrfach vergeben"), ueber die
+    /// Bereichsgrenze hinweg ersetzt die Projektregel die globale
+    /// (<see cref="ExtensionLibrary.MergeTextRules"/>). Beides soll beim
+    /// Tippen auffallen, nicht erst beim Übernehmen oder gar nicht.
+    /// </summary>
+    private string? DescribeNameConflict(TextRule rule, RuleScope scope)
+    {
+        bool Gleich(TextRule andere)
+            => !ReferenceEquals(andere, rule) && string.Equals(andere.Name, rule.Name, StringComparison.OrdinalIgnoreCase);
+
+        var projektRegeln = _profile?.TextRules ?? new List<TextRule>();
+        var eigene = scope == RuleScope.Project ? projektRegeln : _extensions.TextRules;
+        var fremde = scope == RuleScope.Project ? _extensions.TextRules : projektRegeln;
+
+        if (eigene.Any(Gleich))
+            return "Diese Bezeichnung ist schon vergeben. Bitte eine andere wählen.";
+
+        if (fremde.Any(Gleich))
         {
-            if (Rules[i].IsOtherArea)
-                Rules.RemoveAt(i);
+            return scope == RuleScope.Project
+                ? "Eine Regel für alle Projekte heißt genauso. In diesem Projekt gilt dann nur diese hier."
+                : "Eine Projektregel heißt genauso. In diesem Projekt gilt dann nur die Projektregel.";
         }
 
-        AppendOtherArea();
+        return null;
+    }
+
+    private string? ScopeLockReason
+    {
+        get
+        {
+            if (_profile is null)
+                return "Kein Profil geladen.";
+            if (!_canEditGlobal)
+                return _globalLockReason ?? "Regeln für alle Projekte sind nicht bearbeitbar.";
+            return null;
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        var vorherigeAuswahl = _selected;
+
+        Rules.Clear();
+        foreach (var eintrag in _allRules.Where(
+                     r => _selectedFilterOption.Scope is null || r.Scope == _selectedFilterOption.Scope))
+        {
+            Rules.Add(eintrag);
+        }
+
+        Selected = vorherigeAuswahl is not null && Rules.Contains(vorherigeAuswahl)
+            ? vorherigeAuswahl
+            : Rules.FirstOrDefault();
+
         Evaluate();
     }
 
-    /// <summary>Baut die Generatorenliste neu auf -- nach einer Aenderung an den eigenen Generatoren.</summary>
-    public void RefreshGenerators()
+    /// <summary>Alle vergebenen Namen ueber beide Bereiche -- fuer Eindeutigkeit.</summary>
+    private IEnumerable<string> AllNames()
+        => (_profile?.TextRules ?? Enumerable.Empty<TextRule>()).Concat(_extensions.TextRules).Select(r => r.Name);
+
+    /// <summary>Wie <see cref="AllNames"/>, ohne <paramref name="ausser"/> selbst -- damit eine Regel ihrem eigenen Namen nicht ausweicht.</summary>
+    private IEnumerable<string> AllNamesExcept(TextRule ausser)
+        => (_profile?.TextRules ?? Enumerable.Empty<TextRule>())
+            .Concat(_extensions.TextRules)
+            .Where(r => r != ausser)
+            .Select(r => r.Name);
+
+    // ----------------------------------------------------- Anlegen/Entfernen
+
+    private void AddRule()
     {
-        var ziel = GeneratorOption.For(_profile, _extensions);
+        if (!CanAddRule)
+            return;
+
+        var scope = _profile is not null ? RuleScope.Project : RuleScope.Global;
+        var name = TextRuleNaming.MakeUnique("regel", AllNames());
+        var rule = new TextRule { Name = name, Priority = 60, Generator = "token", Pattern = "" };
+
+        if (scope == RuleScope.Project)
+            _profile!.TextRules.Add(rule);
+        else
+            _extensions.TextRules.Add(rule);
+
+        // Der Name folgt dem Beispielwert, bis er von Hand geaendert wird
+        // (siehe TextRuleViewModel.Sample) -- nur bei einer eben erst
+        // angelegten Regel, nicht bei einer bestehenden.
+        _pendingAutoNameRule = rule;
+
+        BuildRules();
+        SelectByName(name, scope);
+
+        _onChanged(scope);
+    }
+
+    private void RemoveSelected()
+    {
+        if (_selected is not { IsEditable: true } regel)
+            return;
+
+        var owner = regel.Scope == RuleScope.Project ? _profile!.TextRules : _extensions.TextRules;
+        owner.Remove(regel.Rule);
+
+        var scope = regel.Scope;
+        BuildRules();
+
+        _onChanged(scope);
+    }
+
+    // ---------------------------------------------------------- Bereich
+
+    /// <summary>
+    /// Wechselt eine Regel in den anderen Bereich (ehemals
+    /// <c>SettingsViewModel.MoveRule</c>). Ein eigener Generator, den die
+    /// Regel nutzt und den es im Ziel noch nicht gibt, wird mitkopiert statt
+    /// verschoben -- die Quelle soll weiter funktionieren, falls dort noch
+    /// etwas anderes ihn braucht.
+    /// </summary>
+    private void ChangeScope(TextRule rule, RuleScope zielBereich)
+    {
+        if (_profile is null)
+            return;
+
+        var quellBereich = zielBereich == RuleScope.Global ? RuleScope.Project : RuleScope.Global;
+        var quellRegeln = quellBereich == RuleScope.Project ? _profile.TextRules : _extensions.TextRules;
+        var zielRegeln = zielBereich == RuleScope.Project ? _profile.TextRules : _extensions.TextRules;
+        var quellGeneratoren = quellBereich == RuleScope.Project ? _profile.Generators : _extensions.Generators;
+        var zielGeneratoren = zielBereich == RuleScope.Project ? _profile.Generators : _extensions.Generators;
+
+        if (!quellRegeln.Contains(rule))
+            return;
+
+        var neuerName = TextRuleNaming.MakeUnique(
+            rule.Name, zielRegeln.Select(r => r.Name).Concat(quellRegeln.Where(r => r != rule).Select(r => r.Name)));
+
+        var generatorKopiert = false;
+        if (!Core.Generation.GeneratorRegistry.KnownNames.Contains(rule.Generator, StringComparer.OrdinalIgnoreCase)
+            && quellGeneratoren.TryGetValue(rule.Generator, out var generatorSettings)
+            && !zielGeneratoren.ContainsKey(rule.Generator))
+        {
+            zielGeneratoren[rule.Generator] = ProfileStore.DeepCopy(generatorSettings);
+            generatorKopiert = true;
+        }
+
+        quellRegeln.Remove(rule);
+        rule.Name = neuerName;
+        zielRegeln.Add(rule);
+
+        BuildRules();
+        SelectByName(neuerName, zielBereich);
+
+        if (generatorKopiert)
+            _onGeneratorCopied?.Invoke();
+
+        // Beide Bereiche haben sich geaendert -- Quelle verliert, Ziel bekommt
+        // die Regel.
+        _onChanged(quellBereich);
+        _onChanged(zielBereich);
+        RefreshGeneratorsList();
+    }
+
+    /// <summary>
+    /// "Für dieses Projekt anpassen" bei einer gesperrten globalen Regel: eine
+    /// gleichnamige Kopie entsteht im Profil und ersetzt die globale Regel
+    /// damit fuer dieses Projekt (<see cref="TextRuleViewModel.IsOverridden"/>),
+    /// ohne die Erweiterungsdatei anzufassen.
+    /// </summary>
+    private void AdjustForProject(TextRule globalRule)
+    {
+        if (_profile is null)
+            return;
+
+        var kopie = ProfileStore.DeepCopy(globalRule);
+        _profile.TextRules.Add(kopie);
+
+        BuildRules();
+        SelectByName(kopie.Name, RuleScope.Project);
+
+        _onChanged(RuleScope.Project);
+    }
+
+    // --------------------------------------------------------- Generatoren
+
+    /// <summary>Baut die Generatorenliste neu auf -- nach einer Aenderung an den eigenen Generatoren.</summary>
+    public void RefreshGeneratorsList()
+    {
+        var ziel = GeneratorOption.For(_profileForGenerators, _extensions);
 
         for (var i = 0; i < ziel.Count; i++)
         {
@@ -228,72 +441,27 @@ public sealed class TextRulesViewModel : ObservableObject
 
         while (Generators.Count > ziel.Count)
             Generators.RemoveAt(Generators.Count - 1);
+
+        foreach (var eintrag in _allRules)
+            eintrag.NotifyGeneratorChanged();
     }
 
-    private void Add()
+    private void OnRuleChanged(RuleScope scope)
     {
-        var rule = new TextRule
-        {
-            Name = NextName(),
-            Priority = 50,
-            Pattern = "",
-            Generator = "token",
-        };
-
-        _editableRules.Add(rule);
-
-        var viewModel = MakeEditableEntry(rule);
-
-        // Vor den gespiegelten Zeilen des anderen Bereichs einfuegen: die
-        // eigenen Regeln stehen immer zuerst.
-        var einfuegeIndex = Rules.TakeWhile(r => !r.IsOtherArea).Count();
-        Rules.Insert(einfuegeIndex, viewModel);
-        Selected = viewModel;
-
-        OnRuleChanged();
-    }
-
-    private void Remove()
-    {
-        if (_selected is null || _selected.IsOtherArea)
-            return;
-
-        _editableRules.Remove(_selected.Rule);
-        Rules.Remove(_selected);
-        Selected = Rules.FirstOrDefault(r => !r.IsOtherArea) ?? Rules.FirstOrDefault();
-
-        OnRuleChanged();
-    }
-
-    private string NextName()
-    {
-        var vergeben = new HashSet<string>(
-            _editableRules.Select(r => r.Name).Concat(_otherAreaRules().Select(r => r.Name)),
-            StringComparer.OrdinalIgnoreCase);
-
-        var nummer = 1;
-        while (vergeben.Contains($"regel{nummer}"))
-            nummer++;
-        return $"regel{nummer}";
-    }
-
-    private void OnRuleChanged()
-    {
-        _onChanged();
+        _onChanged(scope);
         Evaluate();
     }
 
     /// <summary>
     /// Wendet alle zusammengefuehrten Regeln auf den Erprobungstext an und
-    /// zeigt, was greift -- ueber <see cref="_mergeForTrial"/>, damit die
-    /// Erprobung immer das prueft, was ein echter Lauf tatsaechlich findet,
-    /// nicht nur den Ausschnitt dieses Bereichs.
+    /// zeigt, was greift (<see cref="ExtensionLibrary.MergeTextRules"/>) --
+    /// dieselbe Vereinigung, die auch ein echter Lauf anwendet.
     /// </summary>
     private void Evaluate()
     {
         Matches.Clear();
 
-        var brauchbare = _mergeForTrial()
+        var brauchbare = _extensions.MergeTextRules(_profile?.TextRules ?? new List<TextRule>())
             .Where(rule => !string.IsNullOrWhiteSpace(rule.Pattern))
             .ToList();
 
@@ -334,111 +502,151 @@ public sealed class TextRulesViewModel : ObservableObject
     }
 }
 
+/// <summary>Ein Eintrag der Filter-ComboBox ("Zeigen: …").</summary>
+/// <param name="Label">Beschriftung.</param>
+/// <param name="Scope"><c>null</c> fuer "alle", sonst der gezeigte Bereich.</param>
+public sealed record RuleFilterOption(string Label, RuleScope? Scope);
+
 /// <summary>
-/// Eine einzelne Textregel im Formular.
-///
-/// Eine gespiegelte Regel des anderen Bereichs (<see cref="IsOtherArea"/>)
-/// oder eine Regel in einem schreibgeschuetzten Bereich
-/// (<see cref="IsReadOnly"/>) ist nur lesend: die Setter tun dann nichts.
+/// Eine einzelne Textregel im Formular -- traegt jetzt ihren Bereich
+/// (<see cref="Scope"/>) offen, statt in zwei getrennten Listen zu leben
+/// (siehe Klassenkopf von <see cref="TextRulesViewModel"/>).
 /// </summary>
 public sealed class TextRuleViewModel : ObservableObject
 {
-    private readonly Action _onChanged;
-    private readonly Profile _profile;
+    private readonly bool _canChangeScope;
+    private readonly bool _canAdjustForProject;
+    private readonly Profile _profileForGenerators;
     private readonly ExtensionLibrary _extensions;
+    private readonly Func<string, string> _makeUniqueName;
+    private readonly Action _onChanged;
+    private readonly Action<RuleScope> _onChangeScope;
+    private readonly Action _onAdjustForProject;
+    private readonly Func<string?> _nameHint;
+
+    private PatternMode _mode;
+    private string _sample;
+    private bool _nameIsAuto;
 
     public TextRuleViewModel(
-        Profile profile, ExtensionLibrary extensions, TextRule rule, Action onChanged,
-        bool isReadOnly = false,
-        string? areaLabel = null,
-        Action? onSwitchToOtherArea = null,
-        string moveLabel = "",
-        Action? onMove = null)
+        TextRule rule, RuleScope scope, bool isOverridden, bool isEditable,
+        bool canChangeScope, string? scopeLockReason, bool canAdjustForProject,
+        Profile profileForGenerators, ExtensionLibrary extensions,
+        Func<string, string> makeUniqueName, Action onChanged, Action<RuleScope> onChangeScope,
+        Action onAdjustForProject, bool nameIsAuto = false, Func<string?>? nameHint = null)
     {
-        _profile = profile;
-        _extensions = extensions;
         Rule = rule;
+        Scope = scope;
+        IsOverridden = isOverridden;
+        IsEditable = isEditable;
+        _canChangeScope = canChangeScope;
+        ScopeLockReason = scopeLockReason;
+        _canAdjustForProject = canAdjustForProject;
+        _profileForGenerators = profileForGenerators;
+        _extensions = extensions;
+        _makeUniqueName = makeUniqueName;
         _onChanged = onChanged;
-        IsReadOnly = isReadOnly;
-        AreaLabel = areaLabel;
-        IsOtherArea = areaLabel is not null;
-        MoveLabel = moveLabel;
+        _onChangeScope = onChangeScope;
+        _onAdjustForProject = onAdjustForProject;
+        _nameIsAuto = nameIsAuto;
+        _nameHint = nameHint ?? (() => null);
 
-        SwitchToOtherAreaCommand = new RelayCommand(() => onSwitchToOtherArea?.Invoke(), () => onSwitchToOtherArea is not null);
-        MoveCommand = new RelayCommand(() => onMove?.Invoke(), () => onMove is not null);
+        var (mode, sample) = DetermineInitialState(rule.Pattern);
+        _mode = mode;
+        _sample = sample;
+
+        AdjustForProjectCommand = new RelayCommand(() => _onAdjustForProject(), () => _canAdjustForProject);
     }
 
     public TextRule Rule { get; }
 
-    /// <summary>Ob diese Zeile ueberhaupt bearbeitet werden darf.</summary>
-    public bool IsReadOnly { get; }
+    /// <summary>Ob diese Regel im Profil oder in der Erweiterungsdatei liegt.</summary>
+    public RuleScope Scope { get; }
+
+    public string ScopeLabel => Scope == RuleScope.Project ? "Dieses Projekt" : "Alle Projekte";
 
     /// <summary>
-    /// Ob der eigene Bereich (nicht eine gespiegelte Zeile des anderen
-    /// Bereichs) schreibgeschuetzt ist -- fuer den Warnhinweis am Formular,
-    /// der nur in diesem Fall erscheint, nicht bei jeder gespiegelten Zeile
-    /// (die traegt bereits <see cref="AreaLabel"/>).
+    /// Ob diese Regel ueberhaupt bearbeitet werden darf: eine Projektregel
+    /// immer, eine globale nur, wenn die Erweiterungsdatei beschreibbar ist.
     /// </summary>
-    public bool IsReadOnlyOwnArea => IsReadOnly && !IsOtherArea;
+    public bool IsEditable { get; }
+
+    /// <summary>Global und nicht beschreibbar -- fuer das Schloss-Symbol in der Liste.</summary>
+    public bool IsLocked => Scope == RuleScope.Global && !IsEditable;
 
     /// <summary>
-    /// Ob diese Regel aus dem jeweils anderen Bereich gespiegelt ist statt aus
-    /// dem gerade bearbeiteten -- steuert Beschriftung und "Dort bearbeiten".
+    /// Eine globale Regel mit gleichem Namen wie eine Projektregel: die
+    /// Projektregel gewinnt (<see cref="ExtensionLibrary.MergeTextRules"/>),
+    /// diese hier greift in diesem Projekt nicht.
     /// </summary>
-    public bool IsOtherArea { get; }
+    public bool IsOverridden { get; }
 
-    /// <summary>Beschriftung der Herkunft, z. B. "gilt für alle Projekte". Nur bei <see cref="IsOtherArea"/> gesetzt.</summary>
-    public string? AreaLabel { get; }
+    // ------------------------------------------------------------- Bereich
 
-    /// <summary>Wechselt in den anderen Reiter und waehlt diese Regel dort aus. Nur bei <see cref="IsOtherArea"/> verfuegbar.</summary>
-    public RelayCommand SwitchToOtherAreaCommand { get; }
+    public bool IsProjectScope
+    {
+        get => Scope == RuleScope.Project;
+        set { if (value && _canChangeScope) _onChangeScope(RuleScope.Project); }
+    }
 
-    /// <summary>Beschriftung des Verschieben-Knopfs, oder leer ohne diesen Knopf.</summary>
-    public string MoveLabel { get; }
+    public bool IsGlobalScope
+    {
+        get => Scope == RuleScope.Global;
+        set { if (value && _canChangeScope) _onChangeScope(RuleScope.Global); }
+    }
 
-    public bool HasMoveLabel => MoveLabel.Length > 0;
+    /// <summary>Ob sich der Bereich ueberhaupt wechseln laesst: Profil vorhanden, Erweiterung beschreibbar, Regel bearbeitbar.</summary>
+    public bool CanChangeScope => _canChangeScope;
 
-    /// <summary>Verschiebt diese Regel (samt eigenem Generator) in den anderen Bereich.</summary>
-    public RelayCommand MoveCommand { get; }
+    public string? ScopeLockReason { get; }
+
+    /// <summary>"Für dieses Projekt anpassen" bei einer gesperrten, noch nicht ueberschriebenen globalen Regel.</summary>
+    public bool CanAdjustForProject => _canAdjustForProject;
+
+    public RelayCommand AdjustForProjectCommand { get; }
+
+    // ------------------------------------------------------------- Felder
 
     public string Name
     {
         get => Rule.Name;
         set
         {
-            if (IsReadOnly || Rule.Name == value)
+            if (!IsEditable)
                 return;
-            Rule.Name = value;
+
+            var neu = (value ?? "").Trim();
+            if (Rule.Name == neu || neu.Length == 0)
+                return;
+
+            // Jede Handaenderung beendet den Automatismus -- ab hier folgt der
+            // Name nicht mehr dem Beispielwert.
+            _nameIsAuto = false;
+
+            Rule.Name = neu;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(Display));
+            OnPropertyChanged(nameof(PatternDescription));
+            OnPropertyChanged(nameof(NameHint));
+            OnPropertyChanged(nameof(HasNameHint));
             _onChanged();
         }
     }
 
-    public string Pattern
-    {
-        get => Rule.Pattern;
-        set
-        {
-            if (IsReadOnly || Rule.Pattern == value)
-                return;
-            Rule.Pattern = value;
-            OnPropertyChanged();
-            _onChanged();
-        }
-    }
+    /// <summary>Warnung unter der Bezeichnung bei einem Namenszusammenfall, sonst <c>null</c>.</summary>
+    public string? NameHint => _nameHint();
 
-    public GeneratorOption? Generator
+    public bool HasNameHint => NameHint is not null;
+
+    /// <summary>Setzt den Namen, ohne <see cref="_nameIsAuto"/> zu beenden -- fuer die automatische Umbenennung ueber <see cref="Sample"/>.</summary>
+    private void SetAutoName(string neu)
     {
-        get => GeneratorOption.Find(_profile, Rule.Generator, _extensions);
-        set
-        {
-            if (IsReadOnly || value is null || Rule.Generator == value.Name)
-                return;
-            Rule.Generator = value.Name;
-            OnPropertyChanged();
-            _onChanged();
-        }
+        if (Rule.Name == neu)
+            return;
+
+        Rule.Name = neu;
+        OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(NameHint));
+        OnPropertyChanged(nameof(HasNameHint));
     }
 
     public int Priority
@@ -446,11 +654,10 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.Priority;
         set
         {
-            if (IsReadOnly || Rule.Priority == value)
+            if (!IsEditable || Rule.Priority == value)
                 return;
             Rule.Priority = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(Display));
             _onChanged();
         }
     }
@@ -460,7 +667,7 @@ public sealed class TextRuleViewModel : ObservableObject
         get => Rule.IgnoreCase;
         set
         {
-            if (IsReadOnly || Rule.IgnoreCase == value)
+            if (!IsEditable || Rule.IgnoreCase == value)
                 return;
             Rule.IgnoreCase = value;
             OnPropertyChanged();
@@ -468,9 +675,248 @@ public sealed class TextRuleViewModel : ObservableObject
         }
     }
 
-    public string Display => IsOtherArea
-        ? $"{Rule.Name}  ·  {AreaLabel}"
-        : $"{Rule.Name}  ·  {Rule.Priority}";
+    public GeneratorOption? Generator
+    {
+        get => GeneratorOption.Find(_profileForGenerators, Rule.Generator, _extensions);
+        set
+        {
+            if (!IsEditable || value is null || Rule.Generator == value.Name)
+                return;
+            Rule.Generator = value.Name;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PatternDescription));
+            _onChanged();
+        }
+    }
+
+    /// <summary>Meldet, dass sich die Generatorenliste geaendert haben koennte (siehe <see cref="TextRulesViewModel.RefreshGeneratorsList"/>).</summary>
+    public void NotifyGeneratorChanged() => OnPropertyChanged(nameof(Generator));
+
+    // -------------------------------------------------------- Erfassungsmodus
+
+    /// <summary>
+    /// "Genau dieser Wert" -- auch dann angezeigt, wenn eigentlich die Form
+    /// gewaehlt ist, der Beispielwert aber (noch) keine Ziffern hat: dann
+    /// erzeugt <see cref="RegeneratePatternFromSample"/> ohnehin das woertliche
+    /// Muster, und ohne diese Lesart stuende gar kein Knopf gewaehlt da, weil
+    /// "Alles dieser Form" ausgeblendet ist. Wie <c>AlwaysReplaceViewModel.UseLiteral</c>.
+    /// </summary>
+    public bool IsExactMode
+    {
+        get => _mode == PatternMode.Exact || (_mode == PatternMode.Shape && !CanUseShape);
+        set { if (value) SetMode(PatternMode.Exact); }
+    }
+
+    public bool IsShapeMode
+    {
+        get => _mode == PatternMode.Shape && CanUseShape;
+        set { if (value) SetMode(PatternMode.Shape); }
+    }
+
+    public bool IsCustomMode
+    {
+        get => _mode == PatternMode.Custom;
+        set { if (value) SetMode(PatternMode.Custom); }
+    }
+
+    private void SetMode(PatternMode mode)
+    {
+        if (!IsEditable || _mode == mode)
+            return;
+
+        _mode = mode;
+        OnPropertyChanged(nameof(IsExactMode));
+        OnPropertyChanged(nameof(IsShapeMode));
+        OnPropertyChanged(nameof(IsCustomMode));
+
+        // Wechsel zu Custom behaelt das Muster unangetastet und macht das
+        // Feld bearbeitbar -- nur beim Wechsel zurueck zu Exact/Shape wird es
+        // aus dem Beispielwert neu gebildet, und nur, wenn es schon einen
+        // gibt: ein eigener Ausdruck hat kein Beispiel, und ein neugieriger
+        // Klick auf "Genau dieser Wert" loeschte ihn sonst stillschweigend.
+        // Er bleibt stehen, bis tatsaechlich ein Beispielwert getippt wird.
+        if (mode != PatternMode.Custom && _sample.Trim().Length > 0)
+            RegeneratePatternFromSample();
+
+        RaisePatternChanged();
+        _onChanged();
+    }
+
+    /// <summary>
+    /// Der Beispielwert des Formulars. Ausserhalb des Custom-Modus wird daraus
+    /// bei jeder Aenderung das Muster neu erzeugt (Form nur, wenn
+    /// <see cref="CanUseShape"/> zutrifft, sonst woertlich); im Custom-Modus
+    /// bleibt der Setter wirkungslos -- dort bestimmt das Musterfeld direkt.
+    /// </summary>
+    public string Sample
+    {
+        get => _sample;
+        set
+        {
+            if (!IsEditable || _mode == PatternMode.Custom)
+                return;
+
+            var neu = value ?? "";
+            if (_sample == neu)
+                return;
+
+            _sample = neu;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanUseShape));
+            OnPropertyChanged(nameof(IsExactMode));
+            OnPropertyChanged(nameof(IsShapeMode));
+            OnPropertyChanged(nameof(ExactDescription));
+            OnPropertyChanged(nameof(ShapeDescription));
+
+            RegeneratePatternFromSample();
+            RaisePatternChanged();
+
+            // Solange der Name automatisch ist, folgt er dem Beispielwert --
+            // eindeutig gemacht ueber den Aufrufer, der beide Bereiche kennt.
+            if (_nameIsAuto && neu.Trim().Length > 0)
+                SetAutoName(_makeUniqueName(PatternFromSample.SuggestRuleName(neu)));
+
+            _onChanged();
+        }
+    }
+
+    private void RegeneratePatternFromSample()
+    {
+        var trimmed = _sample.Trim();
+        if (trimmed.Length == 0)
+        {
+            Rule.Pattern = "";
+            return;
+        }
+
+        Rule.Pattern = _mode == PatternMode.Shape && CanUseShape
+            ? PatternFromSample.Shape(trimmed)!.Pattern
+            : PatternFromSample.Literal(trimmed).Pattern;
+    }
+
+    /// <summary>Ob der Beispielwert einen Ziffernlauf enthaelt -- sonst waere "Alles dieser Form" nur die woertliche Lesart.</summary>
+    public bool CanUseShape => _sample.Trim().Length > 0 && PatternFromSample.Shape(_sample.Trim()) is not null;
+
+    public string ExactDescription => _sample.Trim().Length == 0 ? "" : PatternFromSample.Literal(_sample.Trim()).Description;
+
+    public string ShapeDescription => CanUseShape ? PatternFromSample.Shape(_sample.Trim())!.Description : "";
+
+    /// <summary>Das Musterfeld im Custom-Modus; sonst nur lesend ueber <see cref="Pattern"/>Description-Zeile.</summary>
+    public string Pattern
+    {
+        get => Rule.Pattern;
+        set
+        {
+            if (!IsEditable)
+                return;
+
+            var neu = value ?? "";
+            if (Rule.Pattern == neu)
+                return;
+
+            Rule.Pattern = neu;
+            RaisePatternChanged();
+            _onChanged();
+        }
+    }
+
+    private void RaisePatternChanged()
+    {
+        OnPropertyChanged(nameof(Pattern));
+        OnPropertyChanged(nameof(PatternDescription));
+        OnPropertyChanged(nameof(PatternError));
+        OnPropertyChanged(nameof(HasPatternError));
+        OnPropertyChanged(nameof(IsPatternEmpty));
+        OnPropertyChanged(nameof(PatternWarning));
+        OnPropertyChanged(nameof(HasPatternWarning));
+    }
+
+    /// <summary>Zeile 2 der Liste: erkannte Beschreibung, sonst das gekuerzte Muster, sonst "noch kein Muster", dazu der Generator.</summary>
+    public string PatternDescription
+    {
+        get
+        {
+            string beschreibung;
+            if (Rule.Pattern.Length == 0)
+            {
+                beschreibung = "noch kein Muster";
+            }
+            else
+            {
+                var erkannt = PatternFromSample.TryRecognize(Rule.Pattern);
+                beschreibung = erkannt?.Description
+                    ?? (Rule.Pattern.Length > 40 ? Rule.Pattern[..40] + "…" : Rule.Pattern);
+            }
+
+            return $"{beschreibung} → {Rule.Generator}";
+        }
+    }
+
+    /// <summary>Leeres Muster ergibt einen neutralen Hinweis, ein ungueltiger Ausdruck die Meldung von <see cref="Regex"/>.</summary>
+    public string? PatternError
+    {
+        get
+        {
+            if (Rule.Pattern.Length == 0)
+                return "Noch kein Muster angegeben.";
+
+            try
+            {
+                _ = new Regex(Rule.Pattern);
+                return null;
+            }
+            catch (ArgumentException ex)
+            {
+                return ex.Message;
+            }
+        }
+    }
+
+    public bool HasPatternError => PatternError is not null;
+
+    /// <summary>Ob <see cref="PatternError"/> nur der neutrale "leer"-Hinweis ist -- fuer die Stilklasse (muted statt error) in der Ansicht.</summary>
+    public bool IsPatternEmpty => Rule.Pattern.Length == 0;
+
+    /// <summary>Trifft das Muster auch den leeren Text, ist es vermutlich zu weit gefasst.</summary>
+    public string? PatternWarning
+    {
+        get
+        {
+            if (Rule.Pattern.Length == 0)
+                return null;
+
+            try
+            {
+                return Regex.IsMatch("", Rule.Pattern)
+                    ? "Trifft auch leeren Text – vermutlich zu weit gefasst."
+                    : null;
+            }
+            catch (ArgumentException)
+            {
+                return null; // ungueltiger Ausdruck steht schon in PatternError
+            }
+        }
+    }
+
+    public bool HasPatternWarning => PatternWarning is not null;
+
+    /// <summary>
+    /// Ermittelt beim Aufbau den Erfassungsmodus aus dem vorhandenen Muster:
+    /// <see cref="PatternFromSample.TryRecognize"/> ergibt Form oder woertlich
+    /// samt Beispielwert, ein leeres Muster startet im Formmodus mit leerem
+    /// Beispiel, alles andere gilt als eigener Ausdruck (Custom).
+    /// </summary>
+    private static (PatternMode Mode, string Sample) DetermineInitialState(string pattern)
+    {
+        if (pattern.Length == 0)
+            return (PatternMode.Shape, "");
+
+        var erkannt = PatternFromSample.TryRecognize(pattern);
+        if (erkannt is null)
+            return (PatternMode.Custom, "");
+
+        return (erkannt.IsShape ? PatternMode.Shape : PatternMode.Exact, erkannt.Sample);
+    }
 }
 
 /// <param name="Rule">Regel, die gegriffen hat.</param>

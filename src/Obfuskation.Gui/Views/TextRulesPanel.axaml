@@ -3,115 +3,205 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:Obfuskation.Gui.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="880" d:DesignHeight="560"
+             xmlns:views="using:Obfuskation.Gui.Views"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="560"
              x:Class="Obfuskation.Gui.Views.TextRulesPanel"
              x:DataType="vm:TextRulesViewModel">
 
   <!--
-      Der Inhalt des frueheren TextRulesWindow, jetzt als UserControl fuer
-      beide Reiter des Einstellungsfensters: dieselbe Ansicht bedient sowohl
-      die Profilregeln als auch die Erweiterungsregeln, nur mit
-      unterschiedlicher Verdrahtung des zugrundeliegenden Ansichtsmodells
-      (siehe SettingsViewModel.BuildTextRulePanels). Regeln des jeweils
-      anderen Bereichs erscheinen schreibgeschuetzt unten in derselben Liste
-      (TextRuleViewModel.IsOtherArea).
+      Die gemeinsame Regelliste (Plan Teil B2/B3): Projekt- und
+      Erweiterungsregeln nebeneinander, jede mit "Gilt für: dieses Projekt /
+      alle Projekte" statt in zwei getrennten Reitern. Links die Liste mit
+      Filter, rechts Formular und Erprobung untereinander, keine feste Hoehe
+      mehr (Befund aus der Messung fuer 1.9.0: das Formular war bei fester
+      Listenhoehe abgeschnitten), beide Karten bekommen den Platz, den sie
+      brauchen, und scrollen bei Bedarf selbst.
   -->
-  <Grid RowDefinitions="240,12,*">
+  <Grid ColumnDefinitions="300,12,*">
 
-    <!-- Regelliste -->
-    <Border Grid.Row="0" Classes="card">
-      <Grid RowDefinitions="Auto,*,Auto">
+    <!-- ==================================================== Regelliste ==== -->
+    <Border Grid.Column="0" Classes="card">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
         <TextBlock Grid.Row="0" Text="Regeln" Classes="card-title"/>
 
-        <ListBox Grid.Row="1" ItemsSource="{Binding Rules}"
-                 SelectedItem="{Binding Selected}">
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8"
+                    IsVisible="{Binding ShowFilter}">
+          <TextBlock Text="Zeigen:" Classes="muted" VerticalAlignment="Center"/>
+          <ComboBox ItemsSource="{Binding FilterOptions}" SelectedItem="{Binding SelectedFilterOption}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:RuleFilterOption">
+                <TextBlock Text="{Binding Label}"/>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+
+        <ListBox Grid.Row="2" ItemsSource="{Binding Rules}" SelectedItem="{Binding Selected}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:TextRuleViewModel">
-              <TextBlock Text="{Binding Display}" TextWrapping="NoWrap"
-                         Classes.muted="{Binding IsOtherArea}"/>
+              <Grid RowDefinitions="Auto,Auto" Margin="0,2">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                             Classes.muted="{Binding IsOverridden}"/>
+                  <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="🔒" IsVisible="{Binding IsLocked}" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding ScopeLabel}" Classes="muted small" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Grid>
+                <TextBlock Grid.Row="1" Text="{Binding PatternDescription}" Classes="muted small"
+                           TextTrimming="CharacterEllipsis" Classes.muted="{Binding IsOverridden}"/>
+              </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-          <Button Content="Hinzufügen" Command="{Binding AddCommand}"/>
-          <Button Content="Entfernen" Command="{Binding RemoveCommand}"/>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+          <Button Content="+ Neue Regel" Command="{Binding AddCommand}"
+                  ToolTip.Tip="{Binding AddRuleLockReason}"/>
+          <Button Content="Löschen" Command="{Binding RemoveCommand}"/>
         </StackPanel>
       </Grid>
     </Border>
 
-    <!-- Formular -->
-    <Border Grid.Row="2" Classes="card" Margin="0,12,0,0">
-      <Grid RowDefinitions="Auto,Auto,*">
-        <StackPanel Grid.Row="0" Spacing="8" IsVisible="{Binding HasSelected}">
-          <TextBlock Text="Regel" Classes="card-title" Margin="0"/>
+    <!-- ================================================ Formular + Erprobung ==== -->
+    <ScrollViewer Grid.Column="2">
+      <StackPanel Spacing="12">
 
-          <!-- Eine gespiegelte Regel des anderen Bereichs ist nur lesend,
-               "Dort bearbeiten" fuehrt zum eigentlichen Formular. -->
-          <StackPanel Orientation="Horizontal" Spacing="8"
-                      IsVisible="{Binding Selected.IsOtherArea}">
-            <TextBlock Classes="muted small" VerticalAlignment="Center" TextWrapping="Wrap"
-                       Text="{Binding Selected.AreaLabel, StringFormat='Nur lesend — {0}.'}"/>
-            <Button Content="Dort bearbeiten" Classes="flat"
-                    Command="{Binding Selected.SwitchToOtherAreaCommand}"/>
-          </StackPanel>
+        <Border Classes="card" IsVisible="{Binding HasSelected}">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Regel" Classes="card-title" Margin="0"/>
 
-          <TextBlock Classes="warning small" TextWrapping="Wrap"
-                     IsVisible="{Binding Selected.IsReadOnlyOwnArea}"
-                     Text="Dieser Bereich ist schreibgeschützt."/>
+            <!-- 1. Sperr- oder Ersetzt-Hinweis: bleibt bedienbar, auch wenn
+                 der Rest des Formulars unten gesperrt ist. -->
+            <TextBlock Classes="warning small" TextWrapping="Wrap"
+                       IsVisible="{Binding Selected.IsLocked}"
+                       Text="{Binding Selected.ScopeLockReason, StringFormat='Diese Regel gehört zu den hauseigenen Mustern und ist gerade nicht bearbeitbar: {0}'}"/>
+            <Button Content="Für dieses Projekt anpassen" Classes="flat"
+                    IsVisible="{Binding Selected.CanAdjustForProject}"
+                    Command="{Binding Selected.AdjustForProjectCommand}"
+                    ToolTip.Tip="Legt eine gleichnamige Regel in diesem Projekt an, die die hauseigene Regel hier ersetzt."/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       IsVisible="{Binding Selected.IsOverridden}"
+                       Text="In diesem Projekt durch eine gleichnamige Regel ersetzt — diese Fassung greift hier nicht."/>
 
-          <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
-                RowSpacing="8" ColumnSpacing="8"
-                IsEnabled="{Binding !Selected.IsReadOnly}">
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Name"
-                       Classes="muted" VerticalAlignment="Center"/>
-            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Selected.Name}"/>
+            <StackPanel Spacing="10" IsEnabled="{Binding Selected.IsEditable}">
 
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="Muster"
-                       Classes="muted" VerticalAlignment="Center"/>
-            <TextBox Grid.Row="1" Grid.Column="1" Classes="mono"
-                     Text="{Binding Selected.Pattern}"
-                     PlaceholderText="Regulärer Ausdruck"/>
+              <!-- Bezeichnung: steht oben statt unter "Erweitert", denn unter
+                   diesem Namen erscheint die Regel in der Fundliste der
+                   Textansicht und in der Erprobung; ein vorgeschlagenes
+                   "begriff" soll man sofort zu "Kreditkartennummer" machen
+                   koennen. Verweise aus Freitextfeldern zieht "Übernehmen"
+                   nach (SettingsViewModel.RewriteFieldRuleReferences). -->
+              <StackPanel Spacing="4">
+                <TextBlock Text="Bezeichnung" Classes="muted"/>
+                <TextBox Text="{Binding Selected.Name}" PlaceholderText="z. B. Kreditkartennummer"
+                         ToolTip.Tip="Unter diesem Namen erscheint die Regel in der Fundliste und in der Erprobung. Andere Projekte, die eine Regel für alle Projekte in einem Freitextfeld namentlich auswählen, müssen eine Umbenennung selbst nachziehen."/>
+                <TextBlock Text="{Binding Selected.NameHint}" Classes="warning small" TextWrapping="Wrap"
+                           IsVisible="{Binding Selected.HasNameHint}"/>
+              </StackPanel>
 
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="Generator"
-                       Classes="muted" VerticalAlignment="Center"/>
-            <ComboBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch"
-                      ItemsSource="{Binding Generators}"
-                      SelectedItem="{Binding Selected.Generator}">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:GeneratorOption">
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{Binding Name}" MinWidth="96"/>
-                    <TextBlock Text="{Binding Description}" Classes="muted"/>
+              <!-- 2. Was wird gesucht? -->
+              <StackPanel Spacing="4">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Text="Was wird gesucht?" Classes="muted" VerticalAlignment="Center"/>
+                  <views:PatternHelpButton/>
+                </StackPanel>
+                <TextBox Text="{Binding Selected.Sample}" Classes="mono" PlaceholderText="z. B. FW123456"
+                         IsEnabled="{Binding !Selected.IsCustomMode}"
+                         ToolTip.Tip="Einen Beispielwert eintippen, ausgedacht oder aus dem Text. Das Muster leitet das Programm daraus ab."/>
+
+                <RadioButton GroupName="erfassungsmodus" IsChecked="{Binding Selected.IsShapeMode}"
+                             IsVisible="{Binding Selected.CanUseShape}">
+                  <StackPanel Spacing="1">
+                    <TextBlock Text="Alles dieser Form"/>
+                    <TextBlock Text="{Binding Selected.ShapeDescription}" Classes="muted small"/>
                   </StackPanel>
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
+                </RadioButton>
+                <RadioButton GroupName="erfassungsmodus" IsChecked="{Binding Selected.IsExactMode}">
+                  <StackPanel Spacing="1">
+                    <TextBlock Text="Genau dieser Wert"/>
+                    <TextBlock Text="{Binding Selected.ExactDescription}" Classes="muted small"/>
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton GroupName="erfassungsmodus" Content="Eigener Ausdruck (für Profis)"
+                             IsChecked="{Binding Selected.IsCustomMode}"/>
 
-            <TextBlock Grid.Row="3" Grid.Column="0" Text="Priorität"
-                       Classes="muted" VerticalAlignment="Center"/>
-            <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="12">
-              <NumericUpDown Value="{Binding Selected.Priority}" Width="110"
-                             Minimum="0" Maximum="1000" Increment="10"
-                             FormatString="0"/>
-              <CheckBox Content="Groß-/Kleinschreibung egal"
-                        IsChecked="{Binding Selected.IgnoreCase}"
-                        VerticalAlignment="Center"/>
+                <StackPanel Spacing="2" IsVisible="{Binding Selected.IsCustomMode}">
+                  <TextBox Text="{Binding Selected.Pattern}" Classes="mono"
+                           ToolTip.Tip="Regulärer Ausdruck – Hilfe und Beispiele unter „?“. Eine KI kann ihn schreiben, bitte keine echten Werte hineingeben."/>
+                  <TextBlock Text="{Binding Selected.PatternError}" TextWrapping="Wrap" Classes="small"
+                             IsVisible="{Binding Selected.HasPatternError}"
+                             Classes.muted="{Binding Selected.IsPatternEmpty}"
+                             Classes.error="{Binding !Selected.IsPatternEmpty}"/>
+                  <TextBlock Text="{Binding Selected.PatternWarning}" Classes="warning small" TextWrapping="Wrap"
+                             IsVisible="{Binding Selected.HasPatternWarning}"/>
+                </StackPanel>
+
+                <TextBlock Classes="muted small mono" TextWrapping="Wrap"
+                           IsVisible="{Binding !Selected.IsCustomMode}"
+                           Text="{Binding Selected.Pattern, StringFormat='Ausdruck: {0}'}"/>
+              </StackPanel>
+
+              <!-- 3. Ersetzen durch -->
+              <StackPanel Spacing="4">
+                <TextBlock Text="Ersetzen durch" Classes="muted"/>
+                <ComboBox HorizontalAlignment="Stretch"
+                          ItemsSource="{Binding Generators}"
+                          SelectedItem="{Binding Selected.Generator}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:GeneratorOption">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Name}" MinWidth="96"/>
+                        <TextBlock Text="{Binding Description}" Classes="muted"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </StackPanel>
             </StackPanel>
 
-            <TextBlock Grid.Row="4" Grid.Column="1" Classes="muted small"
-                       TextWrapping="Wrap"
-                       Text="höhere Priorität gewinnt bei Überlappung"/>
-          </Grid>
+            <!-- 4. Gilt für, bewusst ausserhalb der Sperre oben: der Wechsel
+                 selbst bleibt moeglich, solange CanChangeScope zutrifft, auch
+                 wenn die Regel gerade nicht editierbar ist (globale Regel). -->
+            <StackPanel Spacing="4">
+              <TextBlock Text="Gilt für" Classes="muted"/>
+              <StackPanel Spacing="4" IsEnabled="{Binding Selected.CanChangeScope}"
+                          ToolTip.Tip="{Binding Selected.ScopeLockReason}">
+                <RadioButton GroupName="gilt-fuer" Content="Dieses Projekt"
+                             IsChecked="{Binding Selected.IsProjectScope}"
+                             IsVisible="{Binding HasProfile}"/>
+                <RadioButton GroupName="gilt-fuer" Content="Alle Projekte"
+                             IsChecked="{Binding Selected.IsGlobalScope}"/>
+              </StackPanel>
+            </StackPanel>
 
-          <Button Content="{Binding Selected.MoveLabel}" Classes="flat"
-                  IsVisible="{Binding Selected.HasMoveLabel}"
-                  Command="{Binding Selected.MoveCommand}"/>
-        </StackPanel>
+            <!-- 5. Erweitert -->
+            <StackPanel IsEnabled="{Binding Selected.IsEditable}">
+              <Expander Header="Erweitert">
+                <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto"
+                      RowSpacing="8" ColumnSpacing="8" Margin="0,8,0,0">
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="Priorität" Classes="muted" VerticalAlignment="Center"/>
+                  <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                    <NumericUpDown Value="{Binding Selected.Priority}" Width="110"
+                                   Minimum="0" Maximum="1000" Increment="10"
+                                   FormatString="0"/>
+                    <CheckBox Content="Groß-/Kleinschreibung egal"
+                              IsChecked="{Binding Selected.IgnoreCase}"
+                              VerticalAlignment="Center"/>
+                  </StackPanel>
+
+                  <TextBlock Grid.Row="1" Grid.Column="1" Classes="muted small"
+                             TextWrapping="Wrap"
+                             Text="höhere Priorität gewinnt bei Überlappung"/>
+                </Grid>
+              </Expander>
+            </StackPanel>
+          </StackPanel>
+        </Border>
 
         <!-- Erprobung -->
-        <Border Grid.Row="2" Classes="card" Margin="0,12,0,0">
-          <Grid RowDefinitions="Auto,*,Auto,Auto">
+        <Border Classes="card">
+          <Grid RowDefinitions="Auto,Auto,Auto,Auto">
             <TextBlock Grid.Row="0" Text="Erprobung" Classes="card-title"/>
 
             <TextBox Grid.Row="1" Classes="mono" AcceptsReturn="True"
@@ -121,23 +211,21 @@
             <TextBlock Grid.Row="2" Text="{Binding MatchSummary}"
                        Classes="muted small" Margin="0,8,0,4"/>
 
-            <ScrollViewer Grid.Row="3" MaxHeight="100">
-              <ItemsControl ItemsSource="{Binding Matches}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:MatchPreview">
-                    <Grid ColumnDefinitions="110,60,*" Margin="0,1">
-                      <TextBlock Grid.Column="0" Text="{Binding Rule}" Classes="small accent"/>
-                      <TextBlock Grid.Column="1" Classes="small muted"
-                                 Text="{Binding Line, StringFormat='Zeile {0}'}"/>
-                      <TextBlock Grid.Column="2" Text="{Binding Value}" Classes="small mono"/>
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
+            <ItemsControl Grid.Row="3" ItemsSource="{Binding Matches}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:MatchPreview">
+                  <Grid ColumnDefinitions="110,60,*" Margin="0,1">
+                    <TextBlock Grid.Column="0" Text="{Binding Rule}" Classes="small accent"/>
+                    <TextBlock Grid.Column="1" Classes="small muted"
+                               Text="{Binding Line, StringFormat='Zeile {0}'}"/>
+                    <TextBlock Grid.Column="2" Text="{Binding Value}" Classes="small mono"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
           </Grid>
         </Border>
-      </Grid>
-    </Border>
+      </StackPanel>
+    </ScrollViewer>
   </Grid>
 </UserControl>

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Obfuskation.Core.Configuration;
 
 namespace Obfuskation.Core.Tests;
@@ -148,5 +149,59 @@ public sealed class ProfileStoreTests : IDisposable
         File.WriteAllText(pfad, "{ kein gueltiges json");
 
         Assert.True(ProfileStore.LooksLikeProfile(pfad));
+    }
+
+    // ------------------------------------------------------------ Classify
+
+    [Fact]
+    public void Classify_erkennt_ein_kommentiertes_Profil()
+    {
+        var pfad = Path.Combine(_verzeichnis, "x.json");
+        File.WriteAllText(pfad, """
+            {
+              // von Hand kommentiert
+              "profileName": "x"
+            }
+            """);
+
+        Assert.Equal(ProfileStore.JsonFileKind.Profile, ProfileStore.Classify(pfad));
+    }
+
+    [Fact]
+    public void Classify_erkennt_fremdes_JSON_als_Other()
+    {
+        var pfad = Path.Combine(_verzeichnis, "x.json");
+        File.WriteAllText(pfad, """{ "generators": {}, "textRules": [], "fieldRules": [] }""");
+
+        Assert.Equal(ProfileStore.JsonFileKind.Other, ProfileStore.Classify(pfad));
+    }
+
+    [Fact]
+    public void Classify_erkennt_kaputtes_JSON_als_Unreadable()
+    {
+        var pfad = Path.Combine(_verzeichnis, "x.json");
+        File.WriteAllText(pfad, "{ kein gueltiges json");
+
+        Assert.Equal(ProfileStore.JsonFileKind.Unreadable, ProfileStore.Classify(pfad));
+    }
+
+    [Fact]
+    public void Classify_erkennt_eine_unlesbare_Datei_als_Other()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || Environment.UserName == "root")
+            return; // Dateirechte gibt es unter Windows so nicht, und root liest ohnehin alles.
+
+        var pfad = Path.Combine(_verzeichnis, "x.json");
+        File.WriteAllText(pfad, """{ "profileName": "x" }""");
+        File.SetUnixFileMode(pfad, UnixFileMode.None);
+
+        try
+        {
+            Assert.Equal(ProfileStore.JsonFileKind.Other, ProfileStore.Classify(pfad));
+        }
+        finally
+        {
+            File.SetUnixFileMode(pfad, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 }

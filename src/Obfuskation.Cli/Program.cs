@@ -484,9 +484,17 @@ Command BuildExtensionsCommand()
         var resolution = ExtensionLibrary.ResolvePath();
 
         if (resolution.Path is not null)
+        {
+            // Laedt zur Pruefung mit -- eine kaputte Datei wird seit Plan A1
+            // gewaehlt statt uebergangen und soll hier scheitern, nicht erst
+            // beim naechsten obfuscate/deobfuscate/scan (siehe CommandContext.Run).
+            ExtensionLibrary.Load(resolution.Path);
             Console.Out.WriteLine(resolution.Path);
+        }
         else
+        {
             ConsoleOutput.WriteInfo("Keine Erweiterungsdatei gefunden. Geprueft:");
+        }
 
         foreach (var candidate in resolution.Candidates)
         {

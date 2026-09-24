@@ -14,88 +14,45 @@
         Background="{DynamicResource BrushBackground}">
 
   <!--
-      Zwei Reiter: das geladene Projekt und die hauseigene Erweiterungsdatei,
-      die in jedes Projekt einfliesst. Ersetzt das fruehere Fenster
-      "Textregeln" und den rein lesenden Dialog "Hauseigene Muster…" (siehe
-      Plan Teil B). Das Ansichtsmodell arbeitet auf Kopien: "Abbrechen"
-      verwirft sie einfach, "Übernehmen" prueft und schreibt zurueck.
+      Vier Reiter nach Thema statt nach Ablageort (Plan Teil B1): "Textregeln"
+      zeigt die gemeinsame Liste aus Projekt- und Erweiterungsregeln,
+      "Eigene Generatoren" und "Spalten-Vorschläge" bleiben nach Bereich
+      gegliedert (Profil bzw. hauseigen), "Ablageort" beantwortet, wo die
+      Erweiterungsdatei liegt und wer sie aendern darf, vorher nur ueber
+      'obfuskation extensions path' zu erfahren. Das Fenster arbeitet weiter
+      auf Kopien: "Übernehmen" prueft und schreibt zurueck, "Abbrechen"
+      verwirft sie.
   -->
-  <Grid RowDefinitions="*,Auto" Margin="12">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="12">
 
-    <TabControl Grid.Row="0" SelectedIndex="{Binding SelectedTabIndex}">
+    <!-- Sperrleiste, nur sichtbar, wenn der globale Bereich gesperrt ist. -->
+    <Border Grid.Row="0" Classes="card" Margin="0,0,0,10" BorderBrush="{DynamicResource BrushWarning}"
+            IsVisible="{Binding ShowLockBar}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0" Text="{Binding LockBarText}" Classes="warning" TextWrapping="Wrap"
+                   VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Content="Details" Classes="flat" Command="{Binding ShowLocationDetailsCommand}"/>
+      </Grid>
+    </Border>
 
-      <!-- ============================================ Dieses Projekt ==== -->
-      <TabItem Header="{Binding ProjectTabTitle}">
-       <Panel>
-        <Grid RowDefinitions="Auto,*,12,Auto" Margin="0,10,0,0" IsVisible="{Binding HasProfile}">
-          <views:TextRulesPanel Grid.Row="1" DataContext="{Binding ProjectRules}"/>
+    <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}">
 
-          <Border Grid.Row="3" Classes="card">
-            <Grid RowDefinitions="Auto,*,Auto">
-              <TextBlock Grid.Row="0" Text="Eigene Generatoren" Classes="card-title"/>
-              <ScrollViewer Grid.Row="1" MaxHeight="140">
-                <ItemsControl ItemsSource="{Binding ProjectGenerators}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:GeneratorEntryViewModel">
-                      <Grid ColumnDefinitions="160,90,*,Auto" ColumnSpacing="8" Margin="0,3">
-                        <TextBox Grid.Column="0" Text="{Binding Name}" IsEnabled="{Binding CanEdit}"/>
-                        <TextBlock Grid.Column="1" Text="{Binding TypeLabel}" Classes="muted small" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="2" Text="{Binding Prefix}" IsEnabled="{Binding CanEdit}"
-                                 PlaceholderText="Präfix"/>
-                        <Button Grid.Column="3" Content="Entfernen" Classes="flat"
-                                Command="{Binding RemoveCommand}"
-                                ToolTip.Tip="{Binding RemoveTooltip}"/>
-                      </Grid>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </ScrollViewer>
-              <TextBlock Grid.Row="1" Text="Keine eigenen Generatoren." Classes="muted small"
-                         IsVisible="{Binding !HasProjectGenerators}"/>
-            </Grid>
-          </Border>
-        </Grid>
-
-        <TextBlock Margin="0,24,0,0" Classes="muted" TextWrapping="Wrap"
-                   IsVisible="{Binding !HasProfile}"
-                   Text="Kein Profil geladen. Ein Profil laden oder anlegen, um Projektregeln zu bearbeiten."/>
-       </Panel>
+      <!-- ================================================== Textregeln ==== -->
+      <TabItem Header="Textregeln">
+        <views:TextRulesPanel Margin="0,10,0,0" DataContext="{Binding TextRules}"/>
       </TabItem>
 
-      <!-- ======================================= Alle Projekte (hauseigen) ==== -->
-      <TabItem Header="Alle Projekte (hauseigen)">
-        <Grid RowDefinitions="Auto,Auto,*,12,Auto,12,Auto" Margin="0,10,0,0">
+      <!-- ============================================ Eigene Generatoren ==== -->
+      <TabItem Header="Eigene Generatoren">
+        <ScrollViewer Margin="0,10,0,0">
+          <StackPanel Spacing="12">
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Varianten der eingebauten Ersetzungen, etwa ein Token mit Kennzeichnung FW~ – entstehen meist über „Immer ersetzen“."/>
 
-          <!-- Kopfzeile: Pfad und Zustand -->
-          <Border Grid.Row="0" Classes="card">
-            <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto" RowSpacing="4" ColumnSpacing="8">
-              <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Text="{Binding GlobalPath}"
-                         Classes="mono small" TextWrapping="Wrap"/>
-              <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding GlobalStateText}" Classes="muted"
-                         IsVisible="{Binding !HasGlobalWarning}"
-                         VerticalAlignment="Center" TextWrapping="Wrap"/>
-              <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding GlobalStateText}" Classes="warning"
-                         IsVisible="{Binding HasGlobalWarning}"
-                         VerticalAlignment="Center" TextWrapping="Wrap"/>
-              <Button Grid.Row="1" Grid.Column="1" Content="Ordner öffnen" Classes="flat"
-                      Command="{Binding OpenFolderCommand}"/>
-              <Button Grid.Row="1" Grid.Column="2" Content="Im Editor öffnen" Classes="flat"
-                      Command="{Binding OpenEditorCommand}"/>
-            </Grid>
-          </Border>
-
-          <TextBlock Grid.Row="1" Classes="warning small" Margin="0,6,0,0" TextWrapping="Wrap"
-                     IsVisible="{Binding HasGlobalComments}"
-                     Text="Diese Datei enthält von Hand gepflegte Kommentare — vor dem Speichern entsteht eine Sicherungskopie (.bak)."/>
-
-          <views:TextRulesPanel Grid.Row="2" Margin="0,10,0,0" DataContext="{Binding GlobalRules}"/>
-
-          <!-- Eigene Generatoren -->
-          <Border Grid.Row="4" Classes="card">
-            <Grid RowDefinitions="Auto,*">
-              <TextBlock Grid.Row="0" Text="Eigene Generatoren" Classes="card-title"/>
-              <ScrollViewer Grid.Row="1" MaxHeight="120">
-                <ItemsControl ItemsSource="{Binding GlobalGenerators}">
+            <Border Classes="card">
+              <Grid RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Text="Dieses Projekt" Classes="card-title"/>
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding ProjectGenerators}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:GeneratorEntryViewModel">
                       <Grid ColumnDefinitions="160,90,*,Auto" ColumnSpacing="8" Margin="0,3">
@@ -110,53 +67,146 @@
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-              </ScrollViewer>
-              <TextBlock Grid.Row="1" Text="Keine eigenen Generatoren." Classes="muted small"
-                         IsVisible="{Binding !HasGlobalGenerators}"/>
-            </Grid>
-          </Border>
+                <TextBlock Grid.Row="1" Text="Keine eigenen Generatoren." Classes="muted small"
+                           IsVisible="{Binding !HasProjectGenerators}"/>
+              </Grid>
+            </Border>
 
-          <!-- Spaltenmuster -->
-          <Border Grid.Row="6" Classes="card">
-            <Grid RowDefinitions="Auto,*,Auto">
-              <TextBlock Grid.Row="0" Text="Spaltenmuster" Classes="card-title"/>
-              <ScrollViewer Grid.Row="1" MaxHeight="140">
-                <ItemsControl ItemsSource="{Binding FieldRules}">
+            <Border Classes="card">
+              <Grid RowDefinitions="Auto,Auto">
+                <TextBlock Grid.Row="0" Text="Alle Projekte 🔒" Classes="card-title"
+                           IsVisible="{Binding !CanEditGlobal}"/>
+                <TextBlock Grid.Row="0" Text="Alle Projekte" Classes="card-title"
+                           IsVisible="{Binding CanEditGlobal}"/>
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding GlobalGenerators}">
                   <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:FieldNameRuleViewModel">
-                      <Grid ColumnDefinitions="*,140,Auto,*" ColumnSpacing="8" Margin="0,3">
-                        <TextBox Grid.Column="0" Classes="mono" Text="{Binding Pattern}"
-                                 IsEnabled="{Binding CanEdit}" PlaceholderText="Muster für den Feldnamen"/>
-                        <ComboBox Grid.Column="1" ItemsSource="{Binding Generators}"
-                                  SelectedItem="{Binding Generator}" IsEnabled="{Binding CanEdit}">
-                          <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:GeneratorOption">
-                              <TextBlock Text="{Binding Name}"/>
-                            </DataTemplate>
-                          </ComboBox.ItemTemplate>
-                        </ComboBox>
-                        <CheckBox Grid.Column="2" Content="Groß/klein egal" IsChecked="{Binding IgnoreCase}"
-                                  IsEnabled="{Binding CanEdit}" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="3" Text="{Binding Comment}" IsEnabled="{Binding CanEdit}"
-                                 PlaceholderText="Kommentar"/>
+                    <DataTemplate x:DataType="vm:GeneratorEntryViewModel">
+                      <Grid ColumnDefinitions="160,90,*,Auto" ColumnSpacing="8" Margin="0,3">
+                        <TextBox Grid.Column="0" Text="{Binding Name}" IsEnabled="{Binding CanEdit}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding TypeLabel}" Classes="muted small" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="2" Text="{Binding Prefix}" IsEnabled="{Binding CanEdit}"
+                                 PlaceholderText="Präfix"/>
+                        <Button Grid.Column="3" Content="Entfernen" Classes="flat"
+                                Command="{Binding RemoveCommand}"
+                                ToolTip.Tip="{Binding RemoveTooltip}"/>
                       </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-              </ScrollViewer>
-              <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
-                <Button Content="Hinzufügen" Command="{Binding AddFieldRuleCommand}"/>
-                <Button Content="Entfernen" Command="{Binding RemoveFieldRuleCommand}"/>
-              </StackPanel>
-            </Grid>
-          </Border>
+                <TextBlock Grid.Row="1" Text="Keine eigenen Generatoren." Classes="muted small"
+                           IsVisible="{Binding !HasGlobalGenerators}"/>
+              </Grid>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
+
+      <!-- ============================================ Spalten-Vorschläge ==== -->
+      <TabItem Header="Spalten-Vorschläge">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,10,0,0" IsEnabled="{Binding CanEditGlobal}">
+          <TextBlock Grid.Row="0" Classes="muted small" TextWrapping="Wrap" Margin="0,0,0,10"
+                     Text="Beim Anlegen eines Profils aus einer Datei schlägt das Programm je Spalte eine Ersetzung vor. Maßgeblich ist der Spaltenname, die erste passende Zeile gewinnt."/>
+
+          <!-- Kopf und Zeilen mit denselben festen Spaltenbreiten: Auto-Spalten
+               fielen in Kopf (leer bzw. Beschriftung) und Zeile (Pfeile bzw.
+               Haekchen) verschieden breit aus, und die Kopfzeile stand
+               versetzt. Rechts 14 Punkte fuer die eingeblendete Bildlaufleiste,
+               die sonst ueber "Entfernen" laege. -->
+          <Grid Grid.Row="1" ColumnDefinitions="52,*,140,100,*,96" ColumnSpacing="8" Margin="0,0,14,4">
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+              <TextBlock Text="Muster für den Spaltennamen" Classes="muted small"/>
+              <views:PatternHelpButton IsFieldNameContext="True"/>
+            </StackPanel>
+            <TextBlock Grid.Column="2" Text="Ersetzen durch" Classes="muted small"/>
+            <TextBlock Grid.Column="3" Text="Groß/klein egal" Classes="muted small"/>
+            <TextBlock Grid.Column="4" Text="Kommentar" Classes="muted small"/>
+          </Grid>
+
+          <ScrollViewer Grid.Row="2">
+            <ItemsControl ItemsSource="{Binding FieldRules}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:FieldNameRuleViewModel">
+                  <Grid ColumnDefinitions="52,*,140,100,*,96" ColumnSpacing="8" Margin="0,3,14,3">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                      <Button Content="↑" Classes="flat" Padding="4,0" Command="{Binding MoveUpCommand}"/>
+                      <Button Content="↓" Classes="flat" Padding="4,0" Command="{Binding MoveDownCommand}"/>
+                    </StackPanel>
+                    <TextBox Grid.Column="1" Classes="mono" Text="{Binding Pattern}"
+                             IsEnabled="{Binding CanEdit}" PlaceholderText="Muster für den Spaltennamen"
+                             ToolTip.Tip="Regulärer Ausdruck – Hilfe und Beispiele unter „?“. Eine KI kann ihn schreiben, bitte keine echten Werte hineingeben."/>
+                    <ComboBox Grid.Column="2" HorizontalAlignment="Stretch" ItemsSource="{Binding Generators}"
+                              SelectedItem="{Binding Generator}" IsEnabled="{Binding CanEdit}">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:GeneratorOption">
+                          <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <CheckBox Grid.Column="3" IsChecked="{Binding IgnoreCase}"
+                              IsEnabled="{Binding CanEdit}" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="4" Text="{Binding Comment}" IsEnabled="{Binding CanEdit}"
+                             PlaceholderText="Kommentar"/>
+                    <Button Grid.Column="5" Content="Entfernen" Classes="flat" Command="{Binding RemoveCommand}"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <Button Grid.Row="3" Content="Hinzufügen" Margin="0,8,0,0" Command="{Binding AddFieldRuleCommand}"/>
         </Grid>
+      </TabItem>
+
+      <!-- ==================================================== Ablageort ==== -->
+      <TabItem Header="Ablageort">
+        <ScrollViewer Margin="0,10,0,0">
+          <StackPanel Spacing="12">
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding GlobalPath}" Classes="mono" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding GlobalReachText}" Classes="muted small" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding GlobalStateText}" Classes="muted" TextWrapping="Wrap"
+                           IsVisible="{Binding CanEditGlobal}"/>
+                <TextBlock Text="{Binding GlobalStateText}" Classes="warning" TextWrapping="Wrap"
+                           IsVisible="{Binding !CanEditGlobal}"/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="Ordner öffnen" Command="{Binding OpenFolderCommand}"/>
+                  <Button Content="Im Editor öffnen" Command="{Binding OpenEditorCommand}"/>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <Grid RowDefinitions="Auto,*">
+                <TextBlock Grid.Row="0" Text="Geprüfte Fundorte" Classes="card-title"/>
+                <ItemsControl Grid.Row="1" ItemsSource="{Binding Candidates}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExtensionCandidateInfo">
+                      <Grid ColumnDefinitions="*,140,120" Margin="0,3">
+                        <TextBlock Grid.Column="0" Text="{Binding Path}" Classes="mono small" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Grid.Column="1" Text="{Binding OriginLabel}" Classes="muted small"/>
+                        <TextBlock Grid.Column="2" Text="{Binding StateLabel}" Classes="muted small"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Grid>
+            </Border>
+
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Für alle Anwender: Datei neben die Programmdatei legen und nur Verwaltern Schreibrecht geben."/>
+          </StackPanel>
+        </ScrollViewer>
       </TabItem>
     </TabControl>
 
     <!-- ====================================================== Fusszeile ==== -->
-    <Grid Grid.Row="1" RowDefinitions="Auto,Auto" Margin="0,12,0,0">
-      <Border Grid.Row="0" Classes="card" BorderBrush="{DynamicResource BrushError}" Margin="0,0,0,8"
+    <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto" Margin="0,12,0,0">
+      <TextBlock Grid.Row="0" Classes="warning small" Margin="0,0,0,8" TextWrapping="Wrap"
+                 IsVisible="{Binding ShowGlobalCommentsWarning}"
+                 Text="Diese Datei enthält von Hand gepflegte Kommentare — vor dem Speichern entsteht eine Sicherungskopie (.bak)."/>
+
+      <Border Grid.Row="1" Classes="card" BorderBrush="{DynamicResource BrushError}" Margin="0,0,0,8"
               IsVisible="{Binding HasValidationErrors}">
         <StackPanel Spacing="4">
           <TextBlock Text="Vor dem Übernehmen zu beheben:" Classes="error" FontWeight="SemiBold"/>
@@ -170,7 +220,7 @@
         </StackPanel>
       </Border>
 
-      <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
         <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
         <Button Content="Übernehmen" Classes="primary" Command="{Binding ApplyCommand}"/>
       </StackPanel>

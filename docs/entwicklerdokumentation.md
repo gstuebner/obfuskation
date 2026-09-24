@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.8.0
+version: 1.9.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 23.09.2026
+date: 24.09.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.8.0 · Stand 23. September 2026
+Fassung 1.9.0 · Stand 24. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -497,32 +497,105 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
   mit drei Schaltflächen nach (`DialogService.ShowSettingsAsync`, demselben
   Closing-Umweg wie `App.axaml.cs`, siehe oben).
 
-  `TextRulesViewModel` wurde verallgemeinert statt verdoppelt: statt fest an
-  `Profile.TextRules` zu hängen, nimmt der Konstruktor die editierbare Liste
-  eines Bereichs (`List<TextRule>`), eine Funktion, die live die Regeln des
-  jeweils anderen Bereichs liefert (schreibgeschützt gespiegelt,
-  `TextRuleViewModel.IsOtherArea`, mit Knopf „Dort bearbeiten“), eine
-  Funktion für die Probe-Vereinigung (`ExtensionLibrary.MergeTextRules`,
-  unverändert dieselbe wie zuvor) sowie `isReadOnly` für einen komplett
-  gesperrten Bereich. `Views/TextRulesPanel.axaml` (neues `UserControl`,
-  Inhalt des früheren `TextRulesWindow.axaml`) bedient beide Reiter des
-  `Views/SettingsWindow.axaml` (`TabControl`, `SelectedTabIndex` statt eines
-  eigenen Konverters). Eine Regel lässt sich zwischen den Bereichen
-  verschieben (`SettingsViewModel.MoveRule`): ein eigener Generator, den sie
-  nutzt und den es im Ziel noch nicht gibt, wird **kopiert, nicht
-  verschoben** — die Quelle behält ihre eigene Fassung, falls dort noch
-  etwas anderes ihn braucht; der Name wird über den neuen, gemeinsamen
-  Helfer `TextRuleNaming.MakeUnique` eindeutig gehalten (auch von
-  `AlwaysReplaceViewModel` genutzt, das dieselbe Logik vorher für sich
-  allein hatte). `AlwaysReplaceViewModel.EditManuallyCommand` heißt jetzt
-  „In den Einstellungen bearbeiten…“ und löst statt der früheren Übergabe
-  eines fertigen `TextRulesViewModel` das Ereignis
-  `EditRulesRequested(SettingsTab)` aus — der Reiter folgt `UseExtension`;
-  `DialogService.ShowAlwaysReplaceAsync` schließt nur noch den Dialog,
-  `MainViewModel.ShowAlwaysReplaceAsync` öffnet danach die Einstellungen.
-  Dieselbe Quelle bedient `TextViewModel.EditRuleCommand`/`EditRulesCommand`
-  aus der Fundleiste der Textansicht (neuer Callback `onEditRuleRequested`,
-  analog zu `onRemoveRuleRequested`).
+  **Themen statt Ablageort (1.9.0):** `SettingsTab` trägt seither die Werte
+  `TextRules, Generators, FieldRules, Location` — die früheren Werte
+  `Project`/`Global` sind entfallen, ein eigener Reiter je Ablageort gibt es
+  nicht mehr. Neu `RuleScope { Project, Global }`: wo eine Regel gilt, steht
+  jetzt an ihr selbst statt am Reiter. `TextRulesViewModel`
+  (`src/Obfuskation.Gui/ViewModels/TextRulesViewModel.cs`) wurde dafür
+  vollständig umgebaut — statt zwei Instanzen (eine je Bereich, mit
+  schreibgeschützt gespiegelten Zeilen des jeweils anderen Bereichs,
+  `IsOtherArea`) gibt es jetzt genau **eine**, die `Profile?` und
+  `ExtensionLibrary` direkt hält: `Rules` enthält zuerst die Projektregeln,
+  dann die globalen, jede als `TextRuleViewModel` mit `Scope`, `IsEditable`
+  (Projekt immer, global nur bei beschreibbarer Erweiterungsdatei),
+  `IsLocked` (global und nicht beschreibbar) und `IsOverridden` (eine
+  globale Regel, deren Name eine Projektregel schon vergeben hat — dieselbe
+  Logik wie `ExtensionLibrary.MergeTextRules`). Eine Filter-ComboBox
+  (`RuleFilterOption`, `SelectedFilterOption`) blendet auf „alle“, „dieses
+  Projekt“ oder „alle Projekte“ ein; ohne Profil bleibt sie verborgen
+  (`ShowFilter`).
+
+  Der Bereichswechsel läuft jetzt über die Regel selbst:
+  `TextRuleViewModel.IsProjectScope`/`IsGlobalScope` (ein RadioButton-Paar
+  mit Settern, wie `AlwaysReplaceViewModel.UseProfile/UseExtension`) ruft
+  `TextRulesViewModel.ChangeScope` (vormals `SettingsViewModel.MoveRule`,
+  unverändertes Verhalten: ein eigener Generator, den die Regel nutzt und
+  den es im Ziel noch nicht gibt, wird **kopiert, nicht verschoben**, der
+  Name bleibt über `TextRuleNaming.MakeUnique` eindeutig). Eine gesperrte,
+  noch nicht überschriebene globale Regel trägt zusätzlich
+  `CanAdjustForProject`/`AdjustForProjectCommand`: „Für dieses Projekt
+  anpassen“ legt per `ProfileStore.DeepCopy` eine gleichnamige Kopie im
+  Profil an, die die globale Regel damit für dieses Projekt überschreibt,
+  ohne die Erweiterungsdatei anzufassen.
+
+  Neu je Regel der **Erfassungsmodus** (`enum PatternMode { Exact, Shape,
+  Custom }`, `IsExactMode`/`IsShapeMode`/`IsCustomMode`): beim Aufbau
+  entscheidet `PatternFromSample.TryRecognize(rule.Pattern)` (neu, siehe
+  unten), ob eine bestehende Regel als „Alles dieser Form“ oder „Genau
+  dieser Wert“ wieder erkannt wird, samt einem passenden Beispielwert; ein
+  leeres Muster startet im Formmodus mit leerem Beispiel, alles andere gilt
+  als „Eigener Ausdruck“ (Custom). Der `Sample`-Setter erzeugt außerhalb des
+  Custom-Modus das Muster neu (Form nur bei `CanUseShape`, sonst wörtlich)
+  und hält, solange der Name automatisch ist (`_nameIsAuto`, nur bei einer
+  frisch über „+ Neue Regel“ angelegten Regel und nur bis zur ersten
+  Handänderung am Namensfeld), den Namen über `PatternFromSample.SuggestRuleName`
+  plus denselben `TextRuleNaming.MakeUnique`-Helfer nach. `PatternDescription`
+  (zweite Zeile der Liste) nutzt dieselbe Erkennung, sonst das gekürzte
+  Muster; `PatternError`/`PatternWarning` melden ein leeres bzw. ungültiges
+  Muster oder einen Treffer auf den leeren Text live im Formular. Ein
+  Wechsel aus Custom zurück nach Exact/Shape bildet das Muster nur neu, wenn
+  schon ein Beispielwert da ist — sonst löschte ein Klick einen eigenen
+  Ausdruck. `IsExactMode` gilt auch bei gewählter Form ohne Ziffern im
+  Beispiel (wie `AlwaysReplaceViewModel.UseLiteral`).
+
+  **Umbenennen.** Die Bezeichnung (`Name`) steht oben im Formular;
+  `NameHint` (über `TextRulesViewModel.DescribeNameConflict`) meldet beim
+  Tippen einen doppelten Namen im selben Bereich bzw. eine gleichnamige Regel
+  im anderen Bereich (Überschreiben nach `MergeTextRules`). Freitextfelder
+  wählen Regeln per Namen aus (`FieldRule.TextRules`); damit ein Umbenennen —
+  von Hand oder beim Bereichswechsel mit `MakeUnique` — diese Auswahl nicht
+  bricht, merkt sich `SettingsViewModel` beim Öffnen je Feld die genannten
+  Namen und je Name das damals gemeinte Regelobjekt (Projekt vor global).
+  `RewriteFieldRuleReferences` bildet daraus bei „Übernehmen“, **vor** der
+  Prüfung, jedes Mal frisch die heutigen Namen; Zwischenstände beim Tippen
+  (kurzzeitig gleichnamig mit einer anderen Regel) spielen so keine Rolle.
+  Die Feldauswahl wird dann zusammen mit den Regeln ins Profil
+  zurückgeschrieben. Andere Profile, die eine globale Regel namentlich
+  auswählen, kennt das Fenster nicht — dafür steht ein Hinweis im Tooltip.
+
+  `AlwaysReplaceViewModel` hat dafür das Feld „Bezeichnung“
+  (`RuleNameInput`, folgt `SuggestedRuleName` bis zur ersten Eingabe,
+  leer fällt auf den Vorschlag zurück; `RuleNameHint` sagt eine angehängte
+  Nummer vorher). `PatternFromSample.SuggestRuleName` schlägt ohne Buchstaben,
+  aber mit Ziffern `nummer` vor (sonst weiter `begriff`), `Describe` nennt
+  Leerzeichen am Rand eines wörtlichen Stücks „Leerzeichen“ statt `„ “`.
+
+  `Views/TextRulesPanel.axaml` (`UserControl`, Inhalt des früheren
+  `TextRulesWindow.axaml`) bedient jetzt genau einen Reiter des
+  `Views/SettingsWindow.axaml` (vier `TabItem`, `SelectedTabIndex` als
+  direktes Casting auf `SettingsTab`, keine feste Höhe/`MaxHeight` mehr —
+  Ursache des in der Messung gefundenen abgeschnittenen Formulars). Neu
+  `Views/PatternHelpButton.axaml(.cs)`: ein „?“-Knopf mit Flyout (Spickzettel,
+  KI-Hinweis, „Anfrage für die KI kopieren“ über
+  `TopLevel.GetTopLevel(this)?.Clipboard`), `StyledProperty<bool>
+  IsFieldNameContext` unterscheidet die Beispiele für Textregeln von denen
+  für Spaltennamen; der Flyout-Inhalt bindet mit `x:CompileBindings="False"`
+  über `#Root` auf diese Eigenschaft, weil sein eigentlicher `DataContext`
+  die jeweilige Regel ist, nicht der Knopf selbst.
+
+  `AlwaysReplaceViewModel.EditManuallyCommand` heißt weiter „In den
+  Einstellungen bearbeiten…“, das Ereignis `EditRulesRequested` ist jetzt
+  aber **parameterlos** — der Reiter selbst kennt keine Ablageorte mehr;
+  `MainViewModel.ShowAlwaysReplaceAsync` liest stattdessen `UseExtension`
+  direkt und übergibt den passenden `RuleScope` als Filter-Vorgabe an
+  `ShowSettingsAsync(SettingsTab.TextRules, scope: …)`. Dieselbe erweiterte
+  Signatur (`SettingsTab tab, string? ruleName, RuleScope? scope`) bedient
+  `TextViewModel.EditRuleCommand`/`EditRulesCommand` aus der Fundleiste der
+  Textansicht (`onEditRuleRequested`, analog zu `onRemoveRuleRequested`) —
+  `MainViewModel.EditTextRuleAsync` bestimmt den Bereich selbst aus dem
+  Profilbestand: bei Namensgleichheit gewinnt das Projekt, weil dessen
+  Fassung tatsächlich greift.
 
   **Ersetzungstabelle bearbeitbar:** `MappingViewModel` bekommt neu
   `Func<IDialogService> dialogs` und `Action onChanged`. Werte bleiben
@@ -787,31 +860,56 @@ Erweiterungsdatei, die eigentlich im Programmverzeichnis liegt und dort
 schreibgeschützt ist, wäre nach dem nächsten Neustart also wirkungslos
 gewesen, weil `ResolvePath` weiterhin die (unveränderte) Datei im
 Programmverzeichnis gefunden hätte. Die Oberfläche sperrt stattdessen den
-betroffenen Bereich (der globale Reiter der Einstellungen, siehe Abschnitt
+betroffenen Bereich (die globalen Regeln der Einstellungen, siehe Abschnitt
 7) und nennt den Grund, statt in eine Datei zu schreiben, die beim nächsten
 Start ohnehin nicht gilt. Alle Aufrufer wurden auf `GetWriteState`
 umgestellt (`AlwaysReplaceViewModel.ExtensionPath`/`CanUseExtension`,
 `MainViewModel.RemoveTextRuleAsync`, `SettingsViewModel`); `ResolveWritePath`
 existiert nicht mehr.
 
-**Abgrenzung zur Profildatei:** Die Projektdatei heißt seit dieser Fassung
+**Ordnerprüfung (1.9.0):** Ist die gefundene Datei selbst beschreibbar, prüft
+`GetWriteState` zusätzlich das Schreibrecht auf ihren **Ordner** — eine
+Probedatei `.obfuskation-schreibprobe-<guid>` mit `FileOptions.DeleteOnClose`
+entscheidet, plattformunabhängig ohne verlässlichere API. Ohne dieses Recht
+liefert `Save` (Nebendatei, ggf. `.bak`, dann `Move`) sonst erst beim
+tatsächlichen Speichern einen Fehler, mitten im geöffneten
+Einstellungsfenster, statt schon beim Öffnen zu sperren.
+
+**Abgrenzung zur Profildatei:** Die Projektdatei heißt seit Fassung 1.6.0
 `obfuskation-projekt.json` (`ProfileStore.DefaultFileName`); der
 unqualifizierte, frühere Name `obfuskation.json`
 (`ProfileStore.LegacyFileName`) bleibt als Profil lesbar, sofern er wie
 eines aussieht. Beide Rollen können also denselben Dateinamen tragen, etwa
 bei einer tragbaren Ablage, in der Programmdatei und Datenbestand im
-selben Ordner liegen. Aufgelöst wird das am Inhalt, mit einem Helfer, den
-es schon vorher gab — `ProfileStore.LooksLikeProfile(path)` prüft, ob eine
-Datei `profileName` oder `fields` trägt. `ExtensionLibrary.ResolvePath`
-prüft an jedem Fundort zusätzlich diese Methode: trifft sie zu, liegt dort
-eine Projektdatei, keine Erweiterungsdatei, der Kandidat wird als
-`SkippedAsProfile` markiert und der nächste Ort geprüft. Umgekehrt prüft
-`ProfileStore.Discover` dieselbe Methode, um eine gefundene
-`LegacyFileName` nicht ungeprüft als Profil zu übernehmen — sie könnte an
-derselben Stelle auch die Erweiterungsdatei sein, die weder `profileName`
-noch `fields` trägt; ohne diese Prüfung bliebe die Suche an ihr hängen,
-statt eine Ebene höher nach einem tatsächlichen Profil weiterzusuchen. Ein
-einziger Helfer für beide Richtungen, damit sie nicht auseinanderlaufen.
+selben Ordner liegen.
+
+Aufgelöst wird das am Inhalt, mit `ProfileStore.Classify(path)` (neu in
+1.9.0, ersetzt das reine Ja/Nein), das drei Werte liefert:
+`JsonFileKind.Profile` (trägt `profileName` oder `fields`), `.Other`
+(gültiges JSON, aber kein Profil — etwa eine Erweiterungsdatei) und
+`.Unreadable` (kein gültiges JSON; `Load` liefert dazu die eigentliche
+Fehlermeldung). Geparst wird dafür mit denselben `JsonDocumentOptions` wie
+beim eigentlichen Laden (`CommentHandling = Skip`, `AllowTrailingCommas =
+true`) — vorher parste `LooksLikeProfile` ohne diese Optionen, eine von Hand
+kommentierte Erweiterungsdatei löste dabei eine `JsonException` aus, galt
+damit als „nicht beurteilbar“ und wurde durchgelassen (`true`), also wie ein
+Profil behandelt und von `ExtensionLibrary.ResolvePath` übersprungen: die
+hauseigenen Muster wirkten nie, ohne dass irgendetwas das meldete (Fehler 2
+der Messung zu 1.9.0, sicherheitsrelevant). `LooksLikeProfile(path)` bleibt
+als schmaler Wrapper (`Classify(path) is Profile or Unreadable`) für
+`ProfileStore.Discover` (eine gefundene `LegacyFileName` zählt nur als
+Profil, wenn sie auch wie eines aussieht — sonst bliebe die Suche an der
+Erweiterungsdatei hängen, statt eine Ebene höher nach einem tatsächlichen
+Profil weiterzusuchen) und `ProfileCatalog` (siebt fremde Dateien im
+zentralen Ordner aus) erhalten. `ExtensionLibrary.ResolvePath` ruft dagegen
+`Classify` **direkt** auf und überspringt nur noch bei `JsonFileKind.Profile`
+— eine kaputte Datei (`Unreadable`) wird jetzt **gewählt**, und `Load` wirft
+dafür `ConfigurationException` mit Pfad in der Meldung; die CLI meldet den
+Konfigurationsfehler-Exitcode (`extensions path` lädt dafür zur Prüfung mit,
+`extensions list` ohnehin), die Oberfläche sperrt mit der Fehlermeldung.
+`ExtensionLibrary.Load` fängt zusätzlich `IOException`/
+`UnauthorizedAccessException` (eine geparste, aber nicht mehr öffnenbare
+Datei) und wickelt auch sie in eine `ConfigurationException`.
 
 Klasse `ExtensionLibrary`
 (`src/Obfuskation.Core/Configuration/ExtensionLibrary.cs`), dieselben
@@ -850,11 +948,12 @@ einzelnen Lauf.
 
 Oberfläche: Erweiterungseinträge erscheinen in der Generatorauswahl mit
 Herkunftszusatz. Seit Fassung 1.8.0 lässt sich die Erweiterungsdatei auch
-ohne Texteditor bearbeiten, im globalen Reiter des Einstellungsfensters
-(Abschnitt 7) — der Texteditor bleibt weiterhin ein gleichberechtigter Weg,
-keiner verdrängt den anderen. Lässt sich die Erweiterungsdatei nicht laden,
+ohne Texteditor bearbeiten, in den Reitern „Textregeln“, „Eigene
+Generatoren“ und „Spalten-Vorschläge“ des Einstellungsfensters (Abschnitt 7)
+— der Texteditor bleibt weiterhin ein gleichberechtigter Weg, keiner
+verdrängt den anderen. Lässt sich die Erweiterungsdatei nicht laden,
 erscheint eine Statuszeile mit dem Pfad, das Programm arbeitet ohne sie
-weiter, und der globale Reiter bleibt gesperrt (Fehler 1 des Plans zu
+weiter, und die globalen Regeln bleiben gesperrt (Fehler 1 des Plans zu
 1.8.0: ohne diese Sperre hätte ein „Übernehmen“ die kaputte Datei mit nur
 den neu angelegten Einträgen überschrieben, statt sie unangetastet zu
 lassen, bis sie von Hand repariert ist) — eine kaputte Erweiterungsdatei
