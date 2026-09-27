@@ -594,6 +594,84 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.True(gepruft);
     }
 
+    // --------------------------------- Umstellung eines eingebauten Generators (Plan P3c)
+
+    [Fact]
+    public void Eine_Umstellung_zeigt_den_richtigen_TypeLabel_und_den_Zusatz_in_der_Liste()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            Generators = { ["email"] = new GeneratorSettings { Domain = "firma.test" } },
+        };
+
+        var modell = Modell(null, extensions);
+
+        var eintrag = Assert.Single(modell.GlobalGenerators, g => g.Name == "email");
+        Assert.Equal("email", eintrag.TypeLabel);
+        Assert.Contains("stellt den eingebauten Generator um", eintrag.DescriptionLabel);
+    }
+
+    [Fact]
+    public void Entfernen_einer_Umstellung_ist_trotz_Verwendung_durch_eine_Regel_moeglich()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            Generators = { ["email"] = new GeneratorSettings { Domain = "firma.test" } },
+            TextRules = { new TextRule { Name = "mail-regel", Generator = "email", Pattern = "@" } },
+        };
+
+        var modell = Modell(null, extensions);
+
+        var eintrag = Assert.Single(modell.GlobalGenerators, g => g.Name == "email");
+        Assert.True(eintrag.IsInUse);
+        Assert.True(eintrag.RemoveCommand.CanExecute(null));
+
+        eintrag.RemoveCommand.Execute(null);
+        Assert.DoesNotContain(modell.GlobalGenerators, g => g.Name == "email");
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Applied, string.Join("; ", modell.ValidationErrors));
+        Assert.False(extensions.Generators.ContainsKey("email"));
+
+        // Die Regel bleibt bestehen und verweist weiter auf "email" -- das
+        // laeuft jetzt einfach mit dem eingebauten Verhalten.
+        Assert.Contains(extensions.TextRules, r => r.Generator == "email");
+    }
+
+    // -------------------------------------------------------------- captureGroup
+
+    [Fact]
+    public void CaptureGroup_wird_in_die_Regel_geschrieben()
+    {
+        var session = Sitzung();
+        var modell = Modell(session, ExtensionLibrary.Empty);
+
+        modell.TextRules.AddCommand.Execute(null);
+        var regel = modell.TextRules.Selected!;
+        regel.Pattern = @"IBAN:\s*(\S+)";
+
+        regel.CaptureGroup = 1;
+
+        Assert.Equal(1, regel.Rule.CaptureGroup);
+    }
+
+    [Fact]
+    public void CaptureGroupWarning_erscheint_bei_einer_Gruppe_die_das_Muster_nicht_hat()
+    {
+        var session = Sitzung();
+        var modell = Modell(session, ExtensionLibrary.Empty);
+
+        modell.TextRules.AddCommand.Execute(null);
+        var regel = modell.TextRules.Selected!;
+        regel.Pattern = @"IBAN:\s*(\S+)";
+
+        regel.CaptureGroup = 2;
+
+        Assert.True(regel.HasCaptureGroupWarning);
+        Assert.Contains("keine Gruppe 2", regel.CaptureGroupWarning);
+    }
+
     // -------------------------------------------------------- Spaltenmuster
 
     [Fact]

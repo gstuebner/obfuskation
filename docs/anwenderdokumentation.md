@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.12.0
+version: 1.13.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 27.09.2026
+date: 28.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.10.0 · Stand 26. September 2026
+Fassung 1.13.0 · Stand 28. September 2026
 
 Die Bilder zeigen teilweise noch den Stand 1.9.
 
@@ -547,21 +547,30 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
    Kopie mit demselben Namen im Profil an, die die hauseigene Regel für
    dieses Projekt ersetzt, ohne die Erweiterungsdatei anzufassen.
 
-   Unter „Erweitert“ stehen Priorität (höhere gewinnt bei Überlappung) und
-   „Groß-/Kleinschreibung egal“. Die **Erprobung** darunter
+   Unter „Erweitert“ stehen Priorität (höhere gewinnt bei Überlappung),
+   „Groß-/Kleinschreibung egal“ und **„Ersetzte Gruppe“**: `0` ersetzt den
+   ganzen Treffer, eine höhere Zahl nur die genannte Gruppe des Musters —
+   bei einem eigenen Ausdruck wie `IBAN:\s*(\S+)` mit Gruppe 1 bleibt
+   „IBAN:“ stehen. Hat das Muster diese Gruppe gar nicht, warnt das Feld
+   sofort: die Regel fände sonst nie etwas. Die **Erprobung** darunter
    zeigt sofort, was im Probetext greift — dieselbe Vereinigung aus Profil-
    und Erweiterungsregeln wie ein echter Lauf.
 2. **„Eigene Generatoren“** — wie zuvor die Abschnitte „Dieses Projekt“ und
    „Alle Projekte“ (🔒 bei gesperrter Erweiterungsdatei), jetzt aber nur noch
    zum Lesen: Name, Art (in Worten, etwa „allgemeine Kennung (TOK_…), mit
-   Kennzeichnung davor“) und eine Kurzfassung der wichtigsten Option, etwa
-   „Kennzeichnung FW~“ oder „3 Werte“. Oben der Knopf **„+ Neuer
+   Kennzeichnung davor“) und eine Kurzfassung der wichtigsten Optionen, etwa
+   „Kennzeichnung FW~“ oder „bis ± 30 Tage · 2 eigene Formate“. Ein Eintrag,
+   der einen eingebauten Generator umstellt (Kapitel 11), trägt zusätzlich
+   „· stellt den eingebauten Generator um“. Oben der Knopf **„+ Neuer
    Generator…“**, an jeder Zeile **„Bearbeiten…“** und **„Entfernen“** —
    Name, Art und alle Optionen ändert man jetzt ausschließlich im
    Generator-Dialog (siehe unten), nicht mehr in der Zeile selbst.
-   „Entfernen“ ist weiterhin gesperrt, solange noch eine Regel oder ein Feld
-   den Generator nutzt, mit einem Tooltip, der sie nennt; „Bearbeiten…“
-   bleibt dabei möglich, sperrt in diesem Fall aber Name und Art im Dialog.
+   „Entfernen“ ist gesperrt, solange noch eine Regel oder ein Feld den
+   Generator nutzt, mit einem Tooltip, der sie nennt — außer bei einer
+   Umstellung: dort setzt „Entfernen“ nur die eingebaute Vorgabe zurück und
+   bleibt darum auch bei Verwendung möglich. „Bearbeiten…“ bleibt bei
+   Verwendung ebenfalls möglich, sperrt in diesem Fall aber Name und Art im
+   Dialog.
 3. **„Spalten-Vorschläge“** — die **Spaltenmuster** (`fieldRules`, Kapitel
    11) der Erweiterungsdatei: Muster für den Spaltennamen (mit demselben
    „?“-Knopf, hier mit Beispielen für Spaltennamen wie `.*iban.*`),
@@ -578,29 +587,41 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
 **Der Generator-Dialog** (neu, „+ Neuer Generator…“ bzw. „Bearbeiten…“) fragt
 Bezeichnung, **Grundlage** und die zur Grundlage passenden Optionen ab. Die
 Grundlage ist **nicht** dieselbe Liste wie unter „Ersetzen durch“: dort stehen
-alle eingebauten Generatoren, hier nur die neun, die überhaupt eigene
+alle eingebauten Generatoren, hier nur die zwölf, die überhaupt eigene
 Einstellungen haben — `token`, `expression`, `pattern`, `wordlist`,
-`partialMask`, `redact`, `dateShift`, `dateRange` und `dateGeneralize`, jede
-Zeile mit Titel und Beispielwert. Bei „Datum verschoben“ (`dateShift`) stellt
-man die **höchste Verschiebung** in Tagen ein (1 bis 36 500, Vorgabe 400);
-die tatsächliche Verschiebung wird daraus je Projekt fest ausgewürfelt.
-Achtung beim Bearbeiten: Diese Art hat keine Ersetzungstabelle, sie rechnet
-nur zurück. Wer den Wert eines schon benutzten Generators ändert, kann ältere
-Pseudodateien danach nicht mehr korrekt zurückführen — der Dialog warnt
-davor, sobald der Wert abweicht. Für die drei Datumsarten nimmt die Vorschau
-ein Datum als Beispiel. Die übrigen eingebauten Generatoren (etwa `numericId`)
-lassen sich weiterhin als eigener Namensraum nutzen, aber nur noch über die
-Konfigurationsdatei anlegen; ein so angelegter Generator bekommt beim
-Bearbeiten einen eigenen Listeneintrag mit dem Hinweis „Diese Art hat hier
-keine Einstellungen – sie trennt nur die Ersetzungstabelle.“ Darunter „Gilt
-für“ (beim Anlegen wählbar, beim Bearbeiten nur als Text) und eine
-**Vorschau**: zu einem Beispielwert bis zu drei Ergebnisse, eines je Zeile,
-mit gleichbleibendem Zufall während des Tippens, dazu der Hinweis „Nur
-Beispiele – die echten Werte entstehen beim Lauf.“ Wird der Generator schon irgendwo verwendet,
-sperrt der Dialog Bezeichnung und Grundlage, mit einem Hinweis, wer ihn
-verwendet — nur die Optionen bleiben änderbar. Derselbe Dialog öffnet sich
-auch aus dem Formular einer Textregel heraus („Neuer Generator…“ neben
-„Ersetzen durch“) und aus dem Dialog „Immer ersetzen…“.
+`partialMask`, `redact`, `email`, `iban`, `bic`, `dateShift`, `dateRange` und
+`dateGeneralize`, jede Zeile mit Titel und Beispielwert. Drei eigene Blöcke
+dazu: **„Domain“** (nur `email`, Vorgabe `example.invalid`), **„Land“** (nur
+`iban`/`bic`, zweistelliger Ländercode, Vorgabe `DE`) und **„Eigene
+Datumsformate“** (für alle drei Datumsarten, ein Format je Zeile, geprüft vor
+den eingebauten). Eine Domain, die nicht erkennbar reserviert ist (etwa nicht
+auf `.test` oder `.invalid` endet), bekommt eine Warnung: die erzeugten
+Adressen könnten sonst echten Postfächern gehören. Bei „Datum verschoben“
+(`dateShift`) stellt man zusätzlich die **höchste Verschiebung** in Tagen ein
+(1 bis 36 500, Vorgabe 400); die tatsächliche Verschiebung wird daraus je
+Projekt fest ausgewürfelt. Achtung beim Bearbeiten: Diese Art hat keine
+Ersetzungstabelle, sie rechnet nur zurück. Wer den Wert eines schon
+benutzten Generators ändert, kann ältere Pseudodateien danach nicht mehr
+korrekt zurückführen — der Dialog warnt davor, sobald der Wert abweicht. Für
+die drei Datumsarten nimmt die Vorschau ein Datum als Beispiel, für `email`,
+`iban` und `bic` einen passenden Musterwert. Die übrigen eingebauten
+Generatoren (etwa `numericId`) lassen sich weiterhin als eigener Namensraum
+nutzen, aber nur noch über die Konfigurationsdatei anlegen; ein so
+angelegter Generator bekommt beim Bearbeiten einen eigenen Listeneintrag mit
+dem Hinweis „Diese Art hat hier keine Einstellungen – sie trennt nur die
+Ersetzungstabelle.“ Ein Eintrag, der stattdessen einen eingebauten
+Generator **umstellt** (Kapitel 11), öffnet mit fest stehender Bezeichnung
+und Grundlage, samt Hinweis, dass beides am Namen hängt; „Entfernen“ setzt
+in diesem Fall nur die eingebaute Vorgabe zurück und bleibt darum auch dann
+möglich, wenn noch Regeln den Namen verwenden. Darunter „Gilt für“ (beim
+Anlegen wählbar, beim Bearbeiten nur als Text) und eine **Vorschau**: zu
+einem Beispielwert bis zu drei Ergebnisse, eines je Zeile, mit
+gleichbleibendem Zufall während des Tippens, dazu der Hinweis „Nur Beispiele
+– die echten Werte entstehen beim Lauf.“ Wird der Generator schon irgendwo
+verwendet, sperrt der Dialog Bezeichnung und Grundlage, mit einem Hinweis,
+wer ihn verwendet — nur die Optionen bleiben änderbar. Derselbe Dialog
+öffnet sich auch aus dem Formular einer Textregel heraus („Neuer
+Generator…“ neben „Ersetzen durch“) und aus dem Dialog „Immer ersetzen…“.
 
 Ist die Erweiterungsdatei gesperrt, erscheint zusätzlich eine **Sperrleiste**
 oben im Fenster, auf jeder Seite: „🔒 Regeln für alle Projekte sind nur
@@ -1144,6 +1165,91 @@ zweite Datei im Konfigurationsordner anzulegen, die beim nächsten Start
 ohnehin nicht gelesen würde. Dasselbe gilt, wenn die Datei zwar selbst
 beschreibbar ist, ihr Ordner aber nicht — dort ließe sich weder die
 Zwischendatei noch eine nötige Sicherungskopie anlegen.
+
+### Aufbau der Datei: alle Einträge
+
+Die Datei hat vier Einträge auf oberster Ebene. Die Spalte „Oberfläche“
+nennt, ob sich ein Wert in **„Regeln & Generatoren“** einstellen lässt;
+„nur Datei“ heißt: nur mit einem Texteditor.
+
+| Eintrag | Bedeutung | Oberfläche |
+|---|---|---|
+| `version` | Format der Datei, derzeit immer `1` | – |
+| `generators` | eigene Generatoren; der Schlüssel ist ihr Name | Reiter „Eigene Generatoren“ |
+| `textRules` | Regeln, die Werte im Freitext finden | Reiter „Textregeln“ |
+| `fieldRules` | Spalten-Vorschläge anhand des Spaltennamens | Reiter „Spalten-Vorschläge“ |
+
+**Generatoren (`generators`).** Der Schlüssel eines Eintrags ist zugleich
+sein Namensraum in der Ersetzungstabelle: Zwei Generatoren derselben Art
+unter verschiedenen Namen vergeben voneinander unabhängige Pseudonyme.
+`type` nennt die Grundlage, also einen eingebauten Generator. Fehlt `type`
+oder gleicht er dem Schlüssel, ist der Schlüssel selbst die Grundlage — ein
+Eintrag wie `"email": { "domain": "firma.test" }` stellt so den eingebauten
+Generator „email“ für alle Projekte um: Er gilt überall, wo „email“ gewählt
+ist. Eine solche Umstellung lässt sich im Reiter „Eigene Generatoren“
+bearbeiten und entfernen (Entfernen setzt dabei nur den eingebauten
+Generator auf seine Vorgaben zurück); **anlegen** geht weiterhin nur in der
+Datei, der Generator-Dialog lässt beim Anlegen keinen eingebauten Namen zu.
+
+| Eintrag | gilt für | Bedeutung, Vorgabe | Oberfläche |
+|---|---|---|---|
+| `type` | alle | Grundlage, siehe oben | ja für die zwölf einstellbaren Arten; `numericId`, `firstName` und die übrigen nur Datei |
+| `prefix` | `token` | Kennzeichnung vor dem Pseudonym, etwa `FW~`; endet auf `~` oder `_`, höchstens 32 Zeichen (Kapitel 7) | ja |
+| `placeholder` | `redact` | eigener Ersatztext; ohne Angabe gilt der Platzhalter des Projekts (`***`) | ja |
+| `from`, `to` | `dateRange` | Zeitraum, beide oder keiner, als JJJJ-MM-TT; ohne Angabe bleibt das Kalenderjahr des Originals | ja |
+| `granularity` | `dateGeneralize` | `month`, `quarter` oder `year`; Vorgabe `month` | ja |
+| `pattern` | `pattern` | Zeichenmaske (unten); ohne Angabe aus dem Original abgeleitet | ja |
+| `values` | `wordlist` | Werteliste, Pflicht; unter fünf Werten warnt die Prüfung | ja |
+| `keepFirst`, `keepLast` | `partialMask` | sichtbare Zeichen am Anfang bzw. Ende; stehen beide auf 0, bleiben die letzten vier sichtbar | ja |
+| `maskChar` | `partialMask` | Maskierungszeichen, genau ein Zeichen; Vorgabe `*` | ja |
+| `expression`, `tables` | `expression` | Ausdruck und Tabellen (unten) | ja |
+| `maxDays` | `dateShift` | höchste Verschiebung in Tagen, 1 bis 36 500; Vorgabe 400. Nachträglich geändert, lassen sich ältere Pseudodateien nicht mehr zurückführen (Kapitel 5) | ja |
+| `formats` | `dateShift`, `dateRange`, `dateGeneralize` | zusätzliche Datumsformate, etwa `["dd.MM.yy"]`; sie werden vor den eingebauten geprüft | ja, Block „Eigene Datumsformate“ |
+| `country` | `iban`, `bic` | Ländercode für Originale ohne erkennbaren Ländercode; Vorgabe `DE` | ja, Block „Land“ |
+| `domain` | `email` | Domain der erzeugten Adressen; Vorgabe `example.invalid` | ja, Block „Domain“ |
+
+Eine Option an der falschen Grundlage — etwa `values` an einem
+`pattern`-Generator, oder `country` an einem `token` — meldet die Prüfung
+als Fehler.
+
+**Textregeln (`textRules`).**
+
+| Eintrag | Bedeutung, Vorgabe | Oberfläche |
+|---|---|---|
+| `name` | Bezeichnung, erscheint in der Fundliste; eine Projektregel gleichen Namens verdrängt in ihrem Projekt die Regel für alle Projekte | ja |
+| `pattern` | Suchausdruck (regulärer Ausdruck) | ja — „Alles dieser Form“, „Genau dieser Wert“ oder „Eigener Ausdruck“ |
+| `generator` | Generator für die Treffer; Vorgabe `token` | ja, „Ersetzen durch“ |
+| `priority` | bei überlappenden Treffern gewinnt der höhere Wert; Vorgabe 50, neue Regeln aus der Oberfläche bekommen 60 | ja, unter „Erweitert“ |
+| `ignoreCase` | Groß-/Kleinschreibung egal; Vorgabe `false` | ja, unter „Erweitert“ |
+| `captureGroup` | nur diese Gruppe des Treffers ersetzen, `0` heißt der ganze Treffer — so bleibt etwa ein vorangestelltes „IBAN:“ stehen | ja, unter „Erweitert“, Feld „Ersetzte Gruppe“ |
+
+**Spalten-Vorschläge (`fieldRules`)**, Einzelheiten weiter unten:
+
+| Eintrag | Bedeutung, Vorgabe | Oberfläche |
+|---|---|---|
+| `pattern` | regulärer Ausdruck für den **ganzen** Spaltennamen | ja |
+| `generator` | vorgeschlagener Generator, oder `scanText` für Freitext | ja |
+| `ignoreCase` | Groß-/Kleinschreibung egal; Vorgabe `true`, anders als bei Textregeln | ja |
+| `comment` | Notiz ohne Wirkung | ja |
+
+Die erste passende Regel gewinnt; die Reihenfolge lässt sich in der
+Oberfläche verschieben.
+
+**Nur mit dem Texteditor** gehen damit noch: Generatoren auf Basis der neun
+übrigen, nicht einstellbaren Arten (etwa ein eigener Namensraum mit
+`"type": "numericId"` oder `"type": "firstName"`), und das **Anlegen** einer
+Umstellung eines eingebauten Generators über seinen Namen — Bearbeiten und
+Entfernen gehen jetzt im Reiter „Eigene Generatoren“.
+
+**Vorgabewerte in der Datei.** Die Oberfläche speichert nur, was jemand
+tatsächlich eingestellt hat: `maxDays`, `keepFirst`, `keepLast`,
+`captureGroup` und `ignoreCase` stehen nur dann in der Datei, wenn ihr Wert
+von der Vorgabe abweicht. Eine ältere Datei mit `"maxDays": 400` oder
+`"ignoreCase": false` an jedem Eintrag wird beim nächsten Speichern aus der
+Oberfläche entsprechend aufgeräumt — die Werte wirken unverändert weiter,
+nur ihre Erwähnung verschwindet. Kommentare in der Datei gehen beim
+Speichern aus der Oberfläche verloren; vorher legt sie eine Sicherungskopie
+`obfuskation.json.bak` an.
 
 ### Was eine Maske ist
 

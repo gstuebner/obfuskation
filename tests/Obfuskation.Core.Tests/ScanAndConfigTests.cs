@@ -478,6 +478,15 @@ public class ScanAndConfigTests
             b.Severity == ValidationSeverity.Error && b.Path == "generators.weit.maxDays");
     }
 
+    [Theory]
+    [InlineData("example.com", true)]
+    [InlineData("mail.example.com", true)]
+    [InlineData("firma.test", true)]
+    [InlineData("example.com.firma.de", false)]
+    [InlineData("myexample.com", false)]
+    public void Reservierte_Domains_schliessen_ihre_Unterdomains_ein(string domain, bool reserviert)
+        => Assert.Equal(reserviert, ProfileValidator.IsReservedDomain(domain));
+
     [Fact]
     public void Ein_fehlender_Ausdruck_wird_bemaengelt()
     {
@@ -619,6 +628,167 @@ public class ScanAndConfigTests
 
         Assert.Contains(befunde, b =>
             b.Severity == ValidationSeverity.Warning && b.Path == "generators.klein.expression");
+    }
+
+    // -------------------------------------------------- Mehrere Besitzer
+
+    [Fact]
+    public void Country_an_bic_ist_kein_Befund()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["bic"] = new GeneratorSettings { Type = "bic", Country = "AT" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.DoesNotContain(befunde, b => b.Path == "generators.bic.country");
+    }
+
+    [Fact]
+    public void Country_an_token_ist_ein_Fehler_der_iban_und_bic_nennt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["fw"] = new GeneratorSettings { Type = "token", Country = "AT" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        var befund = Assert.Single(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.fw.country");
+        Assert.Contains("'iban' und 'bic'", befund.Message);
+    }
+
+    [Fact]
+    public void Formats_an_dateRange_ist_in_Ordnung()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["dateRange"] = new GeneratorSettings { Formats = ["dd.MM.yy"] };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.DoesNotContain(befunde, b => b.Path == "generators.dateRange.formats");
+    }
+
+    [Fact]
+    public void Formats_an_email_ist_ein_Fehler()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["email"] = new GeneratorSettings { Type = "email", Formats = ["dd.MM.yy"] };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.email.formats");
+    }
+
+    // -------------------------------------------------------- country/domain/formats
+
+    [Fact]
+    public void Ein_dreistelliger_Laendercode_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["iban"] = new GeneratorSettings { Type = "iban", Country = "DEU" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.iban.country");
+    }
+
+    [Fact]
+    public void Eine_Domain_mit_Leerraum_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["email"] = new GeneratorSettings { Type = "email", Domain = "firma test" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.email.domain");
+    }
+
+    [Fact]
+    public void Eine_Domain_ohne_Punkt_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["email"] = new GeneratorSettings { Type = "email", Domain = "firma" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.email.domain");
+    }
+
+    [Fact]
+    public void Ein_leerer_Formats_Eintrag_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["dateShift"] = new GeneratorSettings { Formats = ["dd.MM.yy", ""] };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.dateShift.formats");
+    }
+
+    [Fact]
+    public void Eine_erreichbar_wirkende_Domain_wird_angemahnt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["email"] = new GeneratorSettings { Type = "email", Domain = "firma.de" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Warning && b.Path == "generators.email.domain");
+    }
+
+    [Theory]
+    [InlineData("firma.test")]
+    [InlineData("@example.org")]
+    public void Eine_reservierte_Domain_ist_kein_Befund(string domain)
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["email"] = new GeneratorSettings { Type = "email", Domain = domain };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.DoesNotContain(befunde, b => b.Path == "generators.email.domain");
+    }
+
+    // -------------------------------------------------------------- captureGroup
+
+    [Fact]
+    public void CaptureGroup_2_bei_nur_einer_Gruppe_wird_bemaengelt()
+    {
+        var profile = new Profile
+        {
+            ProfileName = "test",
+            TextRules = [new TextRule
+            {
+                Name = "iban", Pattern = @"IBAN:\s*(\S+)", Generator = "token", CaptureGroup = 2,
+            }],
+        };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "textRules[0].captureGroup");
+    }
+
+    [Fact]
+    public void CaptureGroup_1_bei_IBAN_Muster_ist_in_Ordnung()
+    {
+        var profile = new Profile
+        {
+            ProfileName = "test",
+            TextRules = [new TextRule
+            {
+                Name = "iban", Pattern = @"IBAN:\s*(\S+)", Generator = "token", CaptureGroup = 1,
+            }],
+        };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.DoesNotContain(befunde, b => b.Path == "textRules[0].captureGroup");
     }
 
     [Fact]

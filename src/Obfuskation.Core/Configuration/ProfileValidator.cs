@@ -50,17 +50,23 @@ public static class ProfileValidator
     private const long ExpressionValuePoolCap = 1_000_000;
 
     /// <summary>
-    /// Ordnet jede generatorspezifische Option ihrem einzig zulaessigen
-    /// Basistyp zu. Ersetzt die fruehere Sonderbehandlung einzelner Optionen:
+    /// Ordnet jede generatorspezifische Option ihrem bzw. ihren zulaessigen
+    /// Basistypen zu. Ersetzt die fruehere Sonderbehandlung einzelner Optionen:
     /// alle gesetzten Optionen eines Generator-Eintrags werden gegen diese
-    /// Tabelle geprueft, statt fuer jede Option einen eigenen Codepfad zu pflegen.
+    /// Tabelle geprueft, statt fuer jede Option einen eigenen Codepfad zu
+    /// pflegen. Anders als der Name vermuten laesst, ist der Basistyp nicht
+    /// je Option eindeutig: <c>formats</c> gilt fuer drei Datumsarten,
+    /// <c>country</c> fuer <c>iban</c> und <c>bic</c> -- eine Option darf
+    /// darum mehrfach in dieser Liste stehen.
     /// </summary>
     /// <remarks>
     /// Oeffentlich, weil die Oberflaeche dieselbe Zuordnung braucht, um zu
     /// entscheiden, welche Optionen sie zu einem Generator anzeigt. Zwei
     /// Kopien liefen bei jedem neuen Generator auseinander -- die Oberflaeche
     /// zeigte dann ein Feld, das der Validator bemaengelt, oder verbaerge
-    /// eines, das gebraucht wird.
+    /// eines, das gebraucht wird. Fuer die Abfrage stehen die Helfer
+    /// <see cref="OptionBelongsTo"/> und <see cref="OwnersOf"/> bereit, statt
+    /// dass jeder Aufrufer diese Liste selbst durchsucht.
     /// </remarks>
     public static readonly (string Option, string BaseType)[] OptionOwnership =
     [
@@ -77,7 +83,57 @@ public static class ProfileValidator
         ("expression", "expression"),
         ("tables", "expression"),
         ("maxDays", "dateShift"),
+        ("formats", "dateShift"),
+        ("formats", "dateRange"),
+        ("formats", "dateGeneralize"),
+        ("country", "iban"),
+        ("country", "bic"),
+        ("domain", "email"),
     ];
+
+    /// <summary>
+    /// Ob <paramref name="option"/> unter den Basistypen von
+    /// <paramref name="baseType"/> gefuehrt wird -- ohne Ruecksicht auf
+    /// Gross-/Kleinschreibung. Ersetzt das fruehere, in der Oberflaeche
+    /// gespiegelte Woerterbuch Option -&gt; Basistyp, das mit einer Option je
+    /// mehreren Basistypen (<c>formats</c>, <c>country</c>) nicht mehr
+    /// auskam.
+    /// </summary>
+    public static bool OptionBelongsTo(string option, string baseType)
+        => OptionOwnership.Any(eintrag =>
+            string.Equals(eintrag.Option, option, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(eintrag.BaseType, baseType, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Alle Basistypen, fuer die <paramref name="option"/> etwas bewirkt -- fuer die Fehlermeldung bei mehreren Besitzern.</summary>
+    public static IReadOnlyList<string> OwnersOf(string option)
+        => OptionOwnership
+            .Where(eintrag => string.Equals(eintrag.Option, option, StringComparison.OrdinalIgnoreCase))
+            .Select(eintrag => eintrag.BaseType)
+            .ToArray();
+
+    /// <summary>
+    /// Domains, unter denen mit Sicherheit kein echtes Postfach liegt: die
+    /// vier von RFC 2606 fuer genau diesen Zweck reservierten Endungen, dazu
+    /// die drei Beispieldomains derselben RFC. Gemeinsamer Massstab fuer die
+    /// Warnung in <see cref="ValidateGeneratorEntry"/> und die gleichnamige
+    /// Anzeige im Generator-Dialog (<c>GeneratorEditorViewModel.DomainWarning</c>),
+    /// damit beide dieselbe Domain gleich beurteilen.
+    /// </summary>
+    private static readonly string[] ReservedDomainSuffixes = [".invalid", ".test", ".example", ".localhost"];
+
+    private static readonly string[] ReservedDomainNames = ["example.com", "example.net", "example.org"];
+
+    /// <summary>Ob <paramref name="domain"/> (ohne fuehrendes '@') zu den reservierten Domains zaehlt.</summary>
+    public static bool IsReservedDomain(string domain)
+    {
+        var trimmed = domain.Trim();
+        // Auch Unterdomains sind reserviert: "mail.example.com" gehoert so
+        // wenig jemandem wie "example.com" selbst (RFC 2606).
+        return ReservedDomainNames.Any(name =>
+                   string.Equals(trimmed, name, StringComparison.OrdinalIgnoreCase)
+                   || trimmed.EndsWith("." + name, StringComparison.OrdinalIgnoreCase))
+            || ReservedDomainSuffixes.Any(suffix => trimmed.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    }
 
     public static IReadOnlyList<ValidationIssue> Validate(Profile profile, ExtensionLibrary? extensions = null)
     {
@@ -211,22 +267,106 @@ public static class ProfileValidator
 
         if (string.Equals(baseName, "expression", StringComparison.OrdinalIgnoreCase))
             ValidateExpression(pathPrefix, key, settings, issues);
+
+        if (!string.IsNullOrWhiteSpace(settings.Country))
+            ValidateCountry(pathPrefix, key, baseName, settings, issues);
+
+        if (!string.IsNullOrWhiteSpace(settings.Domain))
+            ValidateDomain(pathPrefix, key, settings, issues);
+
+        if (settings.Formats is { Count: > 0 })
+            ValidateFormats(pathPrefix, key, settings, issues);
     }
 
     /// <summary>
+    /// Prueft <c>country</c>: <see cref="IbanGenerator.Configure"/> und
+    /// <see cref="BicGenerator.Configure"/> uebernehmen nur genau zwei
+    /// ASCII-Buchstaben und ignorieren jeden anderen Wert stillschweigend --
+    /// wer sich auf einen falschen Laendercode verlaesst, soll das vorher
+    /// erfahren, statt dass der Generator kommentarlos bei der Vorgabe bleibt.
+    /// </summary>
+    private static void ValidateCountry(
+        string pathPrefix, string key, string baseName, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        var country = settings.Country!;
+        if (country.Length == 2 && country.All(char.IsAsciiLetter))
+            return;
+
+        issues.Add(new ValidationIssue($"{pathPrefix}.{key}.country", ValidationSeverity.Error,
+            $"'{country}' ist kein gültiger Ländercode. Erwartet sind genau zwei Buchstaben, etwa 'DE' " +
+            $"oder 'AT' – jeder andere Wert wird von '{baseName}' stillschweigend übergangen und die " +
+            "eingebaute Vorgabe bleibt bestehen."));
+    }
+
+    /// <summary>
+    /// Prueft <c>domain</c>: <see cref="EmailGenerator.Configure"/> entfernt
+    /// zuerst ein fuehrendes '@' und haengt den Rest unveraendert an jede
+    /// erzeugte Adresse an, ohne selbst auf Gueltigkeit zu pruefen. Zusaetzlich
+    /// eine Warnung, wenn die Domain nicht zu den reservierten
+    /// (<see cref="IsReservedDomain"/>) gehoert: eine erreichbare Domain
+    /// koennte echten Postfaechern gehoeren, die die erzeugten Adressen dann
+    /// unbeabsichtigt treffen.
+    /// </summary>
+    private static void ValidateDomain(string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        var original = settings.Domain!;
+        var domain = original.TrimStart('@');
+
+        var ungueltig = domain.Length == 0
+            || domain.Any(char.IsWhiteSpace)
+            || domain.Contains('@')
+            || !domain.Contains('.');
+
+        if (ungueltig)
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.domain", ValidationSeverity.Error,
+                $"'{original}' ist keine gültige Domain. Erwartet wird ein Domainname wie 'firma.test', " +
+                "ohne Leerraum und ohne weiteres '@'."));
+            return;
+        }
+
+        if (!IsReservedDomain(domain))
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.domain", ValidationSeverity.Warning,
+                $"Die Domain '{domain}' ist möglicherweise echt erreichbar – erzeugte Adressen könnten " +
+                "echten Postfächern gehören. Eine reservierte Domain wie firma.test ist sicherer."));
+        }
+    }
+
+    /// <summary>Prueft <c>formats</c>: ein leerer Eintrag koennte nie mit einem echten Datumsformat gemeint sein.</summary>
+    private static void ValidateFormats(string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        if (settings.Formats!.Any(string.IsNullOrEmpty))
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.formats", ValidationSeverity.Error,
+                "Ein Eintrag unter 'formats' darf nicht leer sein."));
+        }
+    }
+
+    /// <summary>Die unterschiedlichen Optionsnamen aus <see cref="OptionOwnership"/>, je einmal.</summary>
+    private static readonly string[] DistinctOptions =
+        OptionOwnership.Select(eintrag => eintrag.Option).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    /// <summary>
     /// Prueft jede gesetzte Option gegen <see cref="OptionOwnership"/>: eine
-    /// Option, die an einem anderen Basistyp haengt als dem, fuer den sie
-    /// gedacht ist, hat dort keine Wirkung und ist ein Konfigurationsfehler.
+    /// Option, deren Besitzer (<see cref="OwnersOf"/>) den Basistyp dieses
+    /// Generators nicht enthaelt, hat dort keine Wirkung und ist ein
+    /// Konfigurationsfehler. Gepruft werden die <b>verschiedenen</b>
+    /// Optionsnamen, nicht jedes Paar einzeln -- sonst gaebe es bei einer
+    /// Option mit mehreren Besitzern (<c>formats</c>, <c>country</c>) einen
+    /// Befund je nicht passendem Paar statt einem einzigen, der alle
+    /// zulaessigen Basistypen nennt.
     /// </summary>
     private static void ValidateOptionOwnership(
         string pathPrefix, string key, string baseName, GeneratorSettings settings, List<ValidationIssue> issues)
     {
-        foreach (var (option, allowedBaseType) in OptionOwnership)
+        foreach (var option in DistinctOptions)
         {
             if (!IsOptionSet(settings, option))
                 continue;
 
-            if (string.Equals(baseName, allowedBaseType, StringComparison.OrdinalIgnoreCase))
+            var owners = OwnersOf(option);
+            if (owners.Contains(baseName, StringComparer.OrdinalIgnoreCase))
                 continue;
 
             if (option == "prefix")
@@ -242,10 +382,23 @@ public static class ProfileValidator
                 continue;
             }
 
+            var ziel = owners.Count == 1
+                ? $"den Generatortyp '{owners[0]}'"
+                : $"die Generatortypen {FormatOwnerList(owners)}";
+
             issues.Add(new ValidationIssue($"{pathPrefix}.{key}.{option}", ValidationSeverity.Error,
-                $"'{option}' gilt nur für den Generatortyp '{allowedBaseType}'. Generator '{key}' " +
+                $"'{option}' gilt nur für {ziel}. Generator '{key}' " +
                 $"erzeugt Werte vom Typ '{baseName}' und wertet '{option}' nicht aus."));
         }
+    }
+
+    /// <summary>Formatiert mehrere Basistypen als Aufzaehlung, etwa <c>'iban' und 'bic'</c>.</summary>
+    private static string FormatOwnerList(IReadOnlyList<string> owners)
+    {
+        var quoted = owners.Select(o => $"'{o}'").ToList();
+        return quoted.Count == 1
+            ? quoted[0]
+            : string.Join(", ", quoted.Take(quoted.Count - 1)) + " und " + quoted[^1];
     }
 
     private static bool IsOptionSet(GeneratorSettings settings, string option) => option switch
@@ -266,6 +419,9 @@ public static class ProfileValidator
         // gespeicherte Profile tragen den Vorgabewert 400 bei jedem Generator.
         // Gesetzt heisst darum "weder Vorgabe noch 0" (0 wirkt wie die Vorgabe).
         "maxDays" => settings.MaxDays is not (0 or GeneratorSettings.DefaultMaxDays),
+        "formats" => settings.Formats is { Count: > 0 },
+        "country" => !string.IsNullOrWhiteSpace(settings.Country),
+        "domain" => !string.IsNullOrWhiteSpace(settings.Domain),
         _ => false,
     };
 
@@ -544,6 +700,7 @@ public static class ProfileValidator
                     $"Der Name '{rule.Name}' ist mehrfach vergeben."));
             }
 
+            Regex? compiled = null;
             if (string.IsNullOrWhiteSpace(rule.Pattern))
             {
                 issues.Add(new ValidationIssue($"{path}.pattern", ValidationSeverity.Error,
@@ -553,7 +710,7 @@ public static class ProfileValidator
             {
                 try
                 {
-                    _ = new Regex(rule.Pattern);
+                    compiled = new Regex(rule.Pattern);
                 }
                 catch (ArgumentException ex)
                 {
@@ -568,6 +725,15 @@ public static class ProfileValidator
             {
                 issues.Add(new ValidationIssue($"{path}.captureGroup", ValidationSeverity.Error,
                     "Die Gruppennummer darf nicht negativ sein."));
+            }
+            else if (rule.CaptureGroup > 0 && compiled is not null && rule.CaptureGroup > compiled.GetGroupNumbers().Max())
+            {
+                // Heute laeuft die Regel dann still ins Leere (TextRuleEngine:
+                // "group.Success" ist falsch) -- sie faende nie etwas, ohne
+                // dass das irgendwo auffiele. Das schon kompilierte Regex-Objekt
+                // wird hier wiederverwendet statt ein zweites Mal gebaut.
+                issues.Add(new ValidationIssue($"{path}.captureGroup", ValidationSeverity.Error,
+                    $"Das Muster hat keine Gruppe {rule.CaptureGroup} – die Regel fände nie etwas."));
             }
         }
     }

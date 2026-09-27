@@ -476,6 +476,75 @@ public sealed class ExtensionLibrarySaveTests : IDisposable
         Assert.False(ExtensionLibrary.HasComments(pfad));
     }
 
+    // ---------------------------------------------- Nur gesetzte Werte (Plan P2)
+
+    [Fact]
+    public void Vorgabewerte_stehen_nicht_in_der_geschriebenen_Datei()
+    {
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        var erweiterung = new ExtensionLibrary
+        {
+            Generators = { ["fw"] = new GeneratorSettings { Type = "token", Prefix = "FW~" } },
+            TextRules = { new TextRule { Name = "fw", Pattern = @"\bFW\d{6}\b", Generator = "fw" } },
+            FieldRules = { new FieldNameRule { Pattern = "fw", Generator = "fw" } }, // IgnoreCase bleibt bei der Vorgabe true
+        };
+
+        erweiterung.Save(pfad);
+        var inhalt = File.ReadAllText(pfad);
+
+        Assert.DoesNotContain("maxDays", inhalt, StringComparison.Ordinal);
+        Assert.DoesNotContain("keepFirst", inhalt, StringComparison.Ordinal);
+        Assert.DoesNotContain("keepLast", inhalt, StringComparison.Ordinal);
+        Assert.DoesNotContain("captureGroup", inhalt, StringComparison.Ordinal);
+        Assert.DoesNotContain("ignoreCase", inhalt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Abweichende_Werte_stehen_in_der_geschriebenen_Datei_und_ueberstehen_die_Rundreise()
+    {
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        var erweiterung = new ExtensionLibrary
+        {
+            Generators = { ["dateShift"] = new GeneratorSettings { Type = "dateShift", MaxDays = 30, KeepLast = 2 } },
+            TextRules = { new TextRule
+            {
+                Name = "iban", Pattern = @"IBAN:\s*(\S+)", Generator = "token", CaptureGroup = 1,
+            } },
+            FieldRules = { new FieldNameRule { Pattern = "iban", Generator = "token", IgnoreCase = false } },
+        };
+
+        erweiterung.Save(pfad);
+        var inhalt = File.ReadAllText(pfad);
+
+        Assert.Contains("\"maxDays\": 30", inhalt, StringComparison.Ordinal);
+        Assert.Contains("\"keepLast\": 2", inhalt, StringComparison.Ordinal);
+        Assert.Contains("\"captureGroup\": 1", inhalt, StringComparison.Ordinal);
+        Assert.Contains("\"ignoreCase\": false", inhalt, StringComparison.Ordinal);
+
+        var gelesen = ExtensionLibrary.Load(pfad);
+        Assert.Equal(30, gelesen.Generators["dateShift"].MaxDays);
+        Assert.Equal(2, gelesen.Generators["dateShift"].KeepLast);
+        Assert.Equal(1, gelesen.TextRules[0].CaptureGroup);
+        Assert.False(gelesen.FieldRules[0].IgnoreCase);
+    }
+
+    [Fact]
+    public void Eine_alte_Datei_mit_maxDays_400_wird_beim_naechsten_Speichern_aufgeraeumt()
+    {
+        var pfad = Path.Combine(_programVerzeichnis, ExtensionLibrary.FileName);
+        File.WriteAllText(pfad,
+            """{ "version": 1, "generators": { "dateShift": { "type": "dateShift", "maxDays": 400 } } }""");
+
+        var geladen = ExtensionLibrary.Load(pfad);
+        geladen.Save(pfad);
+
+        Assert.DoesNotContain("maxDays", File.ReadAllText(pfad), StringComparison.Ordinal);
+
+        // Der Wert selbst bleibt die Vorgabe -- nur die Erwaehnung in der
+        // Datei verschwindet, nicht die Wirkung.
+        Assert.Equal(GeneratorSettings.DefaultMaxDays, ExtensionLibrary.Load(pfad).Generators["dateShift"].MaxDays);
+    }
+
     [Fact]
     public void Ohne_vorhandene_Datei_wird_in_den_Konfigurationsordner_geschrieben()
     {

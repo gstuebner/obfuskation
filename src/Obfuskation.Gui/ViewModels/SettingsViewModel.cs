@@ -803,7 +803,12 @@ public sealed class GeneratorEntryViewModel : ObservableObject
                 _owner.Remove(_name);
                 onRemoved();
             },
-            () => CanEdit && Users.Count == 0);
+            // Eine Umstellung (siehe IsBuiltInOverride) darf auch dann
+            // entfernt werden, wenn Regeln den Namen verwenden: Entfernen
+            // setzt nur den eingebauten Generator auf seine Vorgaben zurueck,
+            // die Regeln selbst verweisen weiter auf denselben Namen und
+            // laufen einfach mit dem eingebauten Verhalten weiter.
+            () => CanEdit && (Users.Count == 0 || IsBuiltInOverride));
     }
 
     private GeneratorSettings Settings => _owner[_name];
@@ -813,16 +818,39 @@ public sealed class GeneratorEntryViewModel : ObservableObject
 
     public string Name => _name;
 
-    public string TypeLabel => string.IsNullOrWhiteSpace(Settings.Type) ? "token" : Settings.Type!;
-
-    /// <summary>Deutsche Erklaerung der Art, etwa "allgemeine Kennung (TOK_…), mit Kennzeichnung davor".</summary>
-    public string DescriptionLabel => GeneratorDescriptions.For(TypeLabel);
+    /// <summary>
+    /// Der Basistyp: <see cref="GeneratorSettings.Type"/>, wenn gesetzt,
+    /// sonst der Schluessel selbst -- dieselbe Regel wie
+    /// <see cref="Core.Generation.GeneratorRegistry.Build"/> und
+    /// <see cref="ProfileValidator"/> sie anwenden. Vorher fiel ein leerer
+    /// <c>Type</c> hier faelschlich auf "token" zurueck: ein Eintrag wie
+    /// <c>"email": { "domain": "firma.test" }</c> erschien dann als
+    /// Kennung mit Kennzeichnung statt als E-Mail-Adresse (Fehler 1 des
+    /// Plans).
+    /// </summary>
+    public string TypeLabel => string.IsNullOrWhiteSpace(Settings.Type) ? Name : Settings.Type!;
 
     /// <summary>
-    /// Kurzfassung der wichtigsten Option, etwa "Kennzeichnung FW~" oder
-    /// "3 Werte" -- sonst leer. Nur eine Auswahl, keine vollstaendige
-    /// Wiedergabe aller Optionen: die Zeile soll knapp bleiben, Einzelheiten
-    /// zeigt der Generator-Dialog.
+    /// Ob dieser Eintrag einen eingebauten Generator umstellt: sein
+    /// Schluessel ist ein eingebauter Generatorname, und sein <c>Type</c> ist
+    /// leer oder gleicht dem Schluessel (beides ohne
+    /// Gross-/Kleinunterscheidung) -- etwa <c>"email": { "domain": "firma.test" }</c>
+    /// oder <c>"dateShift": { "maxDays": 30 }</c>.
+    /// </summary>
+    public bool IsBuiltInOverride
+        => GeneratorRegistry.KnownNames.Contains(Name, StringComparer.OrdinalIgnoreCase)
+           && (string.IsNullOrWhiteSpace(Settings.Type) || string.Equals(Settings.Type, Name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Deutsche Erklaerung der Art, etwa "allgemeine Kennung (TOK_…), mit Kennzeichnung davor", bei einer Umstellung mit Zusatz.</summary>
+    public string DescriptionLabel => GeneratorDescriptions.For(TypeLabel)
+        + (IsBuiltInOverride ? " · stellt den eingebauten Generator um" : "");
+
+    /// <summary>
+    /// Kurzfassung der wichtigsten Optionen, mehrere Teile verbunden mit
+    /// " · " -- etwa "Kennzeichnung FW~" oder "bis ± 30 Tage · 2 eigene
+    /// Formate" -- sonst leer. Keine vollstaendige Wiedergabe aller
+    /// Optionen: die Zeile soll knapp bleiben, Einzelheiten zeigt der
+    /// Generator-Dialog.
     /// </summary>
     public string OptionsSummary
     {
@@ -830,26 +858,27 @@ public sealed class GeneratorEntryViewModel : ObservableObject
         {
             var settings = Settings;
             var baseType = TypeLabel;
+            var teile = new List<string>();
 
             if (string.Equals(baseType, "token", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(settings.Prefix))
-                return $"Kennzeichnung {settings.Prefix}";
+                teile.Add($"Kennzeichnung {settings.Prefix}");
 
             if (string.Equals(baseType, "pattern", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(settings.Pattern))
-                return $"Maske {settings.Pattern}";
+                teile.Add($"Maske {settings.Pattern}");
 
             if (string.Equals(baseType, "wordlist", StringComparison.OrdinalIgnoreCase) && settings.Values is { Count: > 0 } werte)
-                return werte.Count == 1 ? "1 Wert" : $"{werte.Count} Werte";
+                teile.Add(werte.Count == 1 ? "1 Wert" : $"{werte.Count} Werte");
 
             if (string.Equals(baseType, "dateRange", StringComparison.OrdinalIgnoreCase)
                 && (!string.IsNullOrWhiteSpace(settings.From) || !string.IsNullOrWhiteSpace(settings.To)))
             {
-                return $"Zeitraum {settings.From ?? "…"} bis {settings.To ?? "…"}";
+                teile.Add($"Zeitraum {settings.From ?? "…"} bis {settings.To ?? "…"}");
             }
 
             if (string.Equals(baseType, "dateShift", StringComparison.OrdinalIgnoreCase))
             {
                 var tage = settings.MaxDays > 0 ? settings.MaxDays : GeneratorSettings.DefaultMaxDays;
-                return $"bis ± {tage} Tage";
+                teile.Add($"bis ± {tage} Tage");
             }
 
             if (string.Equals(baseType, "expression", StringComparison.OrdinalIgnoreCase)
@@ -863,23 +892,51 @@ public sealed class GeneratorEntryViewModel : ObservableObject
                 if (settings.Tables is { Count: > 0 } tabellen)
                     text += tabellen.Count == 1 ? " · 1 Tabelle" : $" · {tabellen.Count} Tabellen";
 
-                return text;
+                teile.Add(text);
             }
 
-            return "";
+            if (string.Equals(baseType, "email", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(settings.Domain))
+                teile.Add($"Domain {settings.Domain}");
+
+            if ((string.Equals(baseType, "iban", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(baseType, "bic", StringComparison.OrdinalIgnoreCase))
+                && !string.IsNullOrWhiteSpace(settings.Country))
+            {
+                teile.Add($"Land {settings.Country}");
+            }
+
+            // Gilt fuer alle drei Datumsarten, darum ausserhalb der
+            // einzelnen "if"-Zweige -- bei dateShift steht es nach "bis ± … Tage".
+            if ((string.Equals(baseType, "dateShift", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(baseType, "dateRange", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(baseType, "dateGeneralize", StringComparison.OrdinalIgnoreCase))
+                && settings.Formats is { Count: > 0 } formate)
+            {
+                teile.Add(formate.Count == 1 ? "1 eigenes Format" : $"{formate.Count} eigene Formate");
+            }
+
+            return string.Join(" · ", teile);
         }
     }
 
     public bool HasOptionsSummary => OptionsSummary.Length > 0;
 
-    /// <summary>Wer diesen Generator gerade nutzt -- gesperrt, solange die Liste nicht leer ist.</summary>
+    /// <summary>Wer diesen Generator gerade nutzt -- gesperrt, solange die Liste nicht leer ist (ausser bei einer Umstellung, siehe <see cref="IsBuiltInOverride"/>).</summary>
     public IReadOnlyList<string> Users => _findUsers(_name);
 
     public bool IsInUse => Users.Count > 0;
 
-    public string RemoveTooltip => IsInUse
-        ? "Wird verwendet von: " + string.Join(", ", Users)
-        : "";
+    /// <summary>
+    /// Erklaert den Zustand von "Entfernen": bei einer Umstellung, was
+    /// Entfernen tatsaechlich bewirkt (der eingebaute Generator wird
+    /// zurueckgesetzt, nicht geloescht), sonst -- falls in Verwendung --, wer
+    /// den Namen braucht.
+    /// </summary>
+    public string RemoveTooltip => IsBuiltInOverride
+        ? $"Entfernen setzt den eingebauten Generator „{Name}“ auf seine Vorgaben zurück."
+        : IsInUse
+            ? "Wird verwendet von: " + string.Join(", ", Users)
+            : "";
 
     /// <summary>Oeffnet den Generator-Dialog (Plan P3d) fuer diesen Eintrag.</summary>
     public AsyncRelayCommand EditCommand { get; }

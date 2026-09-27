@@ -698,6 +698,61 @@ public sealed class TextRuleViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Nummer der Gruppe, deren Inhalt ersetzt wird (Plan P4). 0 bedeutet den
+    /// gesamten Treffer, wie schon <see cref="TextRule.CaptureGroup"/> selbst
+    /// vorgibt. Aenderungen stossen wie bei <see cref="Priority"/> Erprobung
+    /// und Pruefung erneut an -- eine ungueltige Gruppe soll sofort auffallen,
+    /// nicht erst nach dem Speichern.
+    /// </summary>
+    public int CaptureGroup
+    {
+        get => Rule.CaptureGroup;
+        set
+        {
+            if (!IsEditable || Rule.CaptureGroup == value)
+                return;
+            Rule.CaptureGroup = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CaptureGroupWarning));
+            OnPropertyChanged(nameof(HasCaptureGroupWarning));
+            _onChanged();
+        }
+    }
+
+    /// <summary>
+    /// Warnt, wenn das (gueltige) Muster keine Gruppe mit der Nummer
+    /// <see cref="CaptureGroup"/> hat -- die Regel faende dann nie etwas,
+    /// weil <c>TextRuleEngine</c> die fehlende Gruppe als "kein Treffer"
+    /// wertet, ohne das irgendwo zu melden (siehe <see cref="ProfileValidator"/>,
+    /// dieselbe Pruefung). Bei <c>0</c> oder einem ungueltigen Muster ist sie
+    /// <c>null</c> -- ein ungueltiges Muster meldet schon <see cref="PatternError"/>.
+    /// </summary>
+    public string? CaptureGroupWarning
+    {
+        get
+        {
+            if (Rule.CaptureGroup <= 0)
+                return null;
+
+            Regex regex;
+            try
+            {
+                regex = new Regex(Rule.Pattern);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+
+            return Rule.CaptureGroup > regex.GetGroupNumbers().Max()
+                ? $"Das Muster hat keine Gruppe {Rule.CaptureGroup} – die Regel fände nie etwas."
+                : null;
+        }
+    }
+
+    public bool HasCaptureGroupWarning => CaptureGroupWarning is not null;
+
     public bool IgnoreCase
     {
         get => Rule.IgnoreCase;
@@ -915,6 +970,8 @@ public sealed class TextRuleViewModel : ObservableObject
         OnPropertyChanged(nameof(IsPatternEmpty));
         OnPropertyChanged(nameof(PatternWarning));
         OnPropertyChanged(nameof(HasPatternWarning));
+        OnPropertyChanged(nameof(CaptureGroupWarning));
+        OnPropertyChanged(nameof(HasCaptureGroupWarning));
     }
 
     /// <summary>Zeile 2 der Liste: erkannte Beschreibung, sonst das gekuerzte Muster, sonst "noch kein Muster", dazu der Generator.</summary>

@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.12.0
+version: 1.13.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 27.09.2026
+date: 28.09.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.10.0 · Stand 26. September 2026
+Fassung 1.13.0 · Stand 28. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -715,12 +715,19 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
   `ResultSettings` und `ResultScope`, nachdem `ApplyCommand` `Confirmed`
   gesetzt hat — dasselbe Muster wie `AlwaysReplaceViewModel`. Die
   Optionsfelder (`ShowPrefix`/`Prefix`, `ShowPatternMask`/`Pattern`, …)
-  spiegeln `FieldRuleViewModel` und richten ihre Sichtbarkeit nach
-  `ProfileValidator.OptionOwnership`; `BuildResult()` setzt `Type` auf die
+  spiegeln `FieldRuleViewModel` und richten ihre Sichtbarkeit seit 1.13.0
+  über `ProfileValidator.OptionBelongsTo(option, selectedBaseTypeName)`
+  statt über ein eigenes, im GUI-Code gespiegeltes Wörterbuch (siehe unten,
+  „Mehrere Basistypen je Option“); `BuildResult()` setzt `Type` auf die
   gewählte `SelectedBaseType` und verwirft dabei alle Optionen anderer
-  Basistypen (ein fremdes `MaxDays` fällt auf die Vorgabe 400 zurück), lässt
-  aber `Formats`/`Country`/`Domain` unangetastet, damit von Hand gepflegtes
-  JSON beim Bearbeiten nicht verloren geht. Seit 1.12.0 steht `maxDays` in
+  Basistypen (ein fremdes `MaxDays` fällt auf die Vorgabe 400 zurück) — seit
+  1.13.0 gilt das auch für `Formats`, `Country` und `Domain`, die jetzt
+  ebenfalls in `OptionOwnership` stehen. Stellt der Entwurf einen
+  eingebauten Generator um (`_isBuiltInOverride`, siehe „Fehler: eine
+  Umstellung erschien als `token`“ unten), bleibt `Type` davon ausgenommen
+  und unverändert, wie er im Entwurf stand — sonst bekäme
+  `"email": { "domain": … }` beim nächsten Speichern plötzlich ein
+  überflüssiges `"type": "email"`. Seit 1.12.0 steht `maxDays` in
   `OptionOwnership` (Basistyp `dateShift`); als gesetzt gilt es dort nur,
   wenn der Wert weder 0 noch 400 ist, weil gespeicherte Profile den
   Vorgabewert an jedem Generator tragen. Beim Bearbeiten eines bestehenden
@@ -969,8 +976,8 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 | `type` | `string?` | `null` | Zugrundeliegender eingebauter Generator; leer heißt: wie der Schlüssel selbst — ein anderer Wert erzeugt einen eigenen Namensraum auf Basis dieses Typs |
 | `maxDays` | `int` | `400` | Maximaler Betrag der Datumsverschiebung in Tagen (nur `dateShift`), höchstens 36 500; 0 wirkt wie die Vorgabe |
 | `formats` | `List<string>?` | `null` | Zusätzlich erkannte Datumsformate (`dateShift`, `dateRange`, `dateGeneralize`), vor den eingebauten Formaten geprüft |
-| `country` | `string?` | `null` | Ländercode für `iban`/`bic`, falls sich keiner aus dem Originalwert ableiten lässt |
-| `domain` | `string?` | `null` | Domain für `email` |
+| `country` | `string?` | `null` (wirkt wie `"DE"`) | Ländercode für `iban`/`bic`, falls sich keiner aus dem Originalwert ableiten lässt; nur zweistellige Werte wirken |
+| `domain` | `string?` | `null` (wirkt wie `"example.invalid"`) | Domain für `email`, ein führendes `@` wird entfernt |
 | `from` | `string?` | `null` | Untere Grenze des Zeitraums für `dateRange`, ISO-Datum (`yyyy-MM-dd`); nur zusammen mit `to` wirksam |
 | `to` | `string?` | `null` | Obere Grenze des Zeitraums für `dateRange`; ohne `from`+`to` bleibt das Kalenderjahr des Originals erhalten |
 | `granularity` | `string?` | `null` (wirkt wie `"month"`) | Rundungsstufe für `dateGeneralize`: `month`, `quarter` oder `year` |
@@ -981,17 +988,127 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 | `maskChar` | `string?` | `null` (wirkt wie `"*"`) | Maskierungszeichen für `partialMask`, muss genau ein Zeichen lang sein |
 | `placeholder` | `string?` | `null` | Eigener Platzhalter, nur für `redact`; ohne Angabe gilt `defaults.redactionPlaceholder`. Getrennt von `domain`, damit ein eigener `redact`-Namensraum einen abweichenden Platzhalter behalten kann, der nicht von der Profilvorgabe überschrieben wird |
 | `prefix` | `string?` | `null` | Kennzeichnung, die jedem erzeugten Pseudonym vorangestellt wird (nur `token`); Muster `^[A-Za-z0-9ÄÖÜäöüß_-]+[~_]$`, höchstens 32 Zeichen — geprüft von `ProfileValidator` |
+| `expression` | `string?` | `null` | Ausdruck für `expression`, Pflicht; Schreibweise siehe Abschnitt „Ausdrucksgenerator“ in Kapitel 6 |
+| `tables` | `Dictionary<string, List<string>>?` | `null` | Tabellen für `{name}`-Verweise im Ausdruck (nur `expression`); Namen `^[A-Za-z][A-Za-z0-9_-]*$`, ohne Rücksicht auf Groß-/Kleinschreibung aufgelöst |
 
-Welche Option zu welchem Generatortyp gehört, steht nicht in verstreutem
-Einzelfallcode, sondern in einer einzigen Tabelle:
-`ProfileValidator.OptionOwnership`
-(`src/Obfuskation.Core/Configuration/ProfileValidator.cs:50`). Sie ist
-öffentlich, damit die Oberfläche dieselbe Zuordnung nutzt, um zu
-entscheiden, welche Optionsfelder sie zu einem gewählten Generator anzeigt
-— zwei getrennt gepflegte Kopien liefen bei jedem neuen Generator
-auseinander. Eine Option, die an einem falschen Basistyp hängt (etwa
-`values` an einem `pattern`-Eintrag), ist ein Validierungsfehler
-(`ValidationSeverity.Error`), kein stillschweigend wirkungsloses Feld.
+**`OmitFromJsonWhenAttribute`** (seit 1.13.0,
+`src/Obfuskation.Core/Configuration/OmitFromJsonWhenAttribute.cs`): Bis
+1.12.0 schrieb `ProfileStore` `int`- und `bool`-Felder immer mit, denn
+`JsonIgnoreCondition.WhenWritingNull` überspringt nur `null` — jede
+gespeicherte Datei trug darum `maxDays: 400`, `keepFirst: 0` und
+`keepLast: 0` an jedem Generator sowie `captureGroup: 0` und
+`ignoreCase: false` an jeder Textregel, unabhängig davon, ob jemand den Wert
+je angefasst hatte. `JsonIgnoreCondition.WhenWritingDefault` hilft nicht,
+weil es mit `default(T)` vergleicht, `maxDays` aber `400` als Vorgabe hat.
+Das neue Attribut trägt stattdessen den tatsächlichen Vorgabewert:
+
+```csharp
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class OmitFromJsonWhenAttribute(object value) : Attribute
+{
+    public object Value { get; } = value;
+}
+```
+
+Angebracht an `GeneratorSettings.MaxDays` (`DefaultMaxDays`), `KeepFirst`
+und `KeepLast` (`0`), `TextRule.CaptureGroup` (`0`), `TextRule.IgnoreCase`
+(`false`) und `FieldNameRule.IgnoreCase` (`true`). Ausgewertet von
+`ProfileStore.OmitConfiguredDefaults`, einem `Action<JsonTypeInfo>`-Modifier
+in `ProfileStore.JsonOptions.TypeInfoResolver`
+(`new DefaultJsonTypeInfoResolver { Modifiers = { OmitConfiguredDefaults } }`):
+er geht `typeInfo.Properties` durch, liest ein an der Eigenschaft
+hinterlegtes Attribut über `property.AttributeProvider` und setzt bei einem
+Treffer `property.ShouldSerialize = (_, value) => !Equals(value, attribute.Value)`.
+Das greift auch beim Laden und Wiederspeichern einer **alten** Datei — eine
+dort stehende `"maxDays": 400` verschwindet beim nächsten Speichern von
+selbst, ohne eigene Migration. Beim Einlesen ändert sich nichts: eine
+fehlende Eigenschaft behält ihre Vorgabe, wie zuvor. Betroffen sind alle
+Aufrufer von `ProfileStore.JsonOptions` — Profile, `ExtensionLibrary.Save`
+und `DeepCopy`; `MappingStore` und `ProfileIndex` haben eigene Optionen und
+bleiben unberührt. `ProfileValidator.IsOptionSet` behandelt die
+Vorgabewerte der Generator-Optionen weiterhin gesondert als „nicht gesetzt“
+(`keepFirst`/`keepLast` bei 0, `maxDays` bei 0 oder 400) — das ist eine
+andere Frage als die hier, nämlich ob eine Option beim jeweiligen Basistyp
+überhaupt etwas bewirkt, nicht ob sie geschrieben wird.
+
+**Was die Oberfläche nicht einstellt** (Stand 1.13.0): ein `type` außerhalb
+von `GeneratorKindOption.Configurable` (etwa ein eigener Namensraum mit
+`"type": "numericId"`) und das **Anlegen** eines Eintrags, dessen Schlüssel
+ein eingebauter Generatorname ist (`GeneratorEditorViewModel.NameError`
+verbietet das weiterhin). `formats`, `country`, `domain` und
+`TextRule.captureGroup` lassen sich seit 1.13.0 im Generator- bzw.
+Textregel-Formular einstellen (siehe oben); das **Bearbeiten** und
+**Entfernen** einer Umstellung eines eingebauten Generators geht seit
+1.13.0 ebenfalls über die Oberfläche (Reiter „Eigene Generatoren“, siehe
+unten „Mehrere Basistypen je Option“ und den Abschnitt zu
+`GeneratorEntryViewModel.IsBuiltInOverride`).
+
+**Mehrere Basistypen je Option.** Welche Option zu welchem Generatortyp
+gehört, steht nicht in verstreutem Einzelfallcode, sondern in einer
+einzigen Tabelle: `ProfileValidator.OptionOwnership`
+(`src/Obfuskation.Core/Configuration/ProfileValidator.cs`), eine Liste von
+Paaren `(Option, BaseType)`. Sie ist öffentlich, damit die Oberfläche
+dieselbe Zuordnung nutzt, um zu entscheiden, welche Optionsfelder sie zu
+einem gewählten Generator anzeigt — zwei getrennt gepflegte Kopien liefen
+bei jedem neuen Generator auseinander. Eine Option, die an einem falschen
+Basistyp hängt (etwa `values` an einem `pattern`-Eintrag), ist ein
+Validierungsfehler (`ValidationSeverity.Error`), kein stillschweigend
+wirkungsloses Feld.
+
+Seit 1.13.0 darf eine Option **mehrfach** in der Liste stehen: `formats`
+gilt für `dateShift`, `dateRange` und `dateGeneralize`, `country` für
+`iban` und `bic`. Zwei öffentliche Helfer ersparen es jedem Aufrufer, die
+Liste selbst zu durchsuchen:
+
+- `OptionBelongsTo(string option, string baseType)` — ob die Option zu
+  diesem Basistyp gehört, ohne Rücksicht auf Groß-/Kleinschreibung. Ersetzt
+  das frühere, sowohl in `GeneratorEditorViewModel` als auch in
+  `FieldRuleViewModel` gespiegelte Wörterbuch Option → Basistyp, das mit
+  mehreren Basistypen je Option nicht mehr auskam (`Dictionary` verlangt
+  eindeutige Schlüssel; `ToDictionary` über `OptionOwnership` warf seit
+  1.13.0 eine `ArgumentException`).
+- `OwnersOf(string option)` — alle Basistypen einer Option, für die
+  Fehlermeldung bei mehreren Besitzern.
+
+`ValidateOptionOwnership` geht seither die **verschiedenen** Optionsnamen
+durch (nicht mehr jedes `(Option, BaseType)`-Paar einzeln), prüft je Option
+`OwnersOf(option).Contains(baseName)` und formuliert bei genau einem
+Besitzer wie gehabt („gilt nur für den Generatortyp 'x'“), bei mehreren mit
+Aufzählung („gilt nur für die Generatortypen 'iban' und 'bic'“). Neu
+geprüft, jeweils nur wenn gesetzt: `country` muss genau zwei
+ASCII-Buchstaben sein (sonst übergeht `IbanGenerator`/`BicGenerator` den
+Wert stillschweigend), `domain` muss nach `TrimStart('@')` nicht leer sein,
+ohne Leerraum, ohne weiteres `@`, mit mindestens einem Punkt, dazu eine
+`Warning`, wenn `ProfileValidator.IsReservedDomain` verneint (Endungen
+`.invalid`/`.test`/`.example`/`.localhost` oder `example.com`/`.net`/`.org`
+— dieselbe Liste nutzt der Generator-Dialog für `DomainWarning`), und
+`formats` darf keinen leeren Eintrag enthalten. `TextRule.CaptureGroup`
+bekommt einen Fehler, wenn das (gültige) Muster keine Gruppe mit dieser
+Nummer hat (`regex.GetGroupNumbers().Max()`, dasselbe `Regex`-Objekt wie
+die Musterprüfung, kein zweites `new Regex(...)`) — vorher lief die Regel
+still ins Leere (`TextRuleEngine`: `group.Success` bleibt falsch).
+
+**Fehler: eine Umstellung erschien als `token`.** Ein Eintrag, dessen
+Schlüssel ein eingebauter Generatorname ist und der kein `type` hat (oder
+`type` gleich dem Schlüssel), stellt diesen eingebauten Generator um — der
+Begriff zieht sich durch `GeneratorEntryViewModel.IsBuiltInOverride`
+(Schlüssel in `GeneratorRegistry.KnownNames`, `Type` leer oder gleich dem
+Schlüssel, ohne Rücksicht auf Groß-/Kleinschreibung) und
+`GeneratorEditorViewModel._isBuiltInOverride`
+(`IsEditMode && KnownNames.Contains(existingName)`, beim Bearbeiten
+einfacher gefasst als die Anzeige-Definition, weil der Name beim Bearbeiten
+schon feststeht). Vor 1.13.0 fiel `GeneratorEntryViewModel.TypeLabel` bei
+leerem `Type` auf `"token"` zurück, statt auf den Schlüssel — ein Eintrag
+wie `"email": { "domain": "firma.test" }` erschien in der Liste fälschlich
+als `token`, „Bearbeiten…“ öffnete den Dialog mit der Art `token`, und die
+Namensprüfung sperrte „Übernehmen“, weil `email` dort als eingebauter Name
+galt. `TypeLabel` liefert jetzt `Type`, wenn gesetzt, sonst den Schlüssel —
+dieselbe Regel wie in `GeneratorRegistry.Build` und `ProfileValidator`.
+`GeneratorEditorViewModel` setzt bei einer Umstellung `_selectedBaseTypeName`
+auf den Schlüssel (statt auf `"token"`), hält `CanRename`/`CanChangeType`
+auf `false`, `NameError` auf `null` und zeigt stattdessen `OverrideHint`;
+`RemoveCommand` bleibt trotz Verwendung ausführbar, weil Entfernen nur den
+eingebauten Generator zurücksetzt, nicht die Regeln, die ihn referenzieren.
 
 ### Erweiterungsdatei
 

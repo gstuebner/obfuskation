@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Obfuskation.Core.Configuration;
 
@@ -35,7 +36,41 @@ public static class ProfileStore
         // Mustern als \u-Folgen; die Konfiguration soll von Hand lesbar bleiben.
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+
+        // Blendet Eigenschaften mit OmitFromJsonWhenAttribute aus, sobald ihr
+        // Wert dem dort hinterlegten Vorgabewert entspricht -- siehe
+        // OmitConfiguredDefaults.
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver { Modifiers = { OmitConfiguredDefaults } },
     };
+
+    /// <summary>
+    /// Modifier fuer <see cref="JsonOptions"/>: traegt eine Eigenschaft ein
+    /// <see cref="OmitFromJsonWhenAttribute"/>, wird sie beim Schreiben
+    /// uebersprungen, sobald ihr Wert dem dort hinterlegten Vorgabewert
+    /// entspricht. Das greift auch beim Laden und Wiederspeichern einer alten
+    /// Datei -- eine dort stehende "maxDays": 400 verschwindet dadurch beim
+    /// naechsten Speichern von selbst, ohne dass die Datei eigens dafuer
+    /// migriert werden muesste. Beim Einlesen aendert sich nichts: eine
+    /// fehlende Eigenschaft behaelt ihre Vorgabe, wie zuvor.
+    /// </summary>
+    private static void OmitConfiguredDefaults(JsonTypeInfo typeInfo)
+    {
+        if (typeInfo.Kind != JsonTypeInfoKind.Object)
+            return;
+
+        foreach (var property in typeInfo.Properties)
+        {
+            var attribute = property.AttributeProvider?
+                .GetCustomAttributes(typeof(OmitFromJsonWhenAttribute), inherit: true)
+                .OfType<OmitFromJsonWhenAttribute>()
+                .FirstOrDefault();
+
+            if (attribute is null)
+                continue;
+
+            property.ShouldSerialize = (_, value) => !Equals(value, attribute.Value);
+        }
+    }
 
     public static Profile Load(string path)
     {

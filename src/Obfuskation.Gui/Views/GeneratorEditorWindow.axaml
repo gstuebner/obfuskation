@@ -36,8 +36,12 @@
                      IsVisible="{Binding HasNameError}"/>
           <TextBlock Text="{Binding NameHint}" Classes="warning small" TextWrapping="Wrap"
                      IsVisible="{Binding HasNameHint}"/>
+          <!-- Plan P3c: eine Umstellung eines eingebauten Generators nennt
+               Name und Grundlage als fest, statt der Verwendungswarnung. -->
+          <TextBlock Text="{Binding OverrideHint}" Classes="muted small" TextWrapping="Wrap"
+                     IsVisible="{Binding HasOverrideHint}"/>
           <TextBlock Text="{Binding UsersHint}" Classes="muted small" TextWrapping="Wrap"
-                     IsVisible="{Binding HasUsers}"/>
+                     IsVisible="{Binding HasUsersHint}"/>
         </StackPanel>
 
         <!-- 2. Grundlage — nur die einstellbaren Arten (Plan P2a). Die
@@ -159,6 +163,24 @@
                      Text="Ersetzt den Wert vollständig. Ohne Angabe gilt der Platzhalter aus den Profilvorgaben."/>
         </StackPanel>
 
+        <!-- Domain (email) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowDomain}">
+          <TextBlock Text="Domain" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Domain}" PlaceholderText="example.invalid"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ohne Angabe example.invalid – eine reservierte Domain, unter der es keine echten Postfächer gibt. Eine eigene Domain sollte ebenso wenig erreichbar sein, etwa firma.test."/>
+          <TextBlock Text="{Binding DomainWarning}" Classes="warning small" TextWrapping="Wrap"
+                     IsVisible="{Binding HasDomainWarning}"/>
+        </StackPanel>
+
+        <!-- Land (iban, bic) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowCountry}">
+          <TextBlock Text="Land" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Country}" MaxLength="2" Width="80" HorizontalAlignment="Left" PlaceholderText="DE"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Zweistelliger Ländercode, etwa AT oder CH. Gilt nur, wenn das Original selbst keinen Ländercode erkennen lässt; ohne Angabe DE."/>
+        </StackPanel>
+
         <!-- Verschiebung (dateShift). Beim Bearbeiten warnt MaxDaysChangeWarning,
              sobald der Wert abweicht: die Verschiebung wird aus ihm abgeleitet,
              und ohne Ersetzungstabelle liessen sich aeltere Pseudodaten dann
@@ -198,6 +220,16 @@
                     SelectedItem="{Binding SelectedGranularity}"/>
           <TextBlock Classes="muted small" TextWrapping="Wrap"
                      Text="Rundet auf den Anfang von Monat, Quartal oder Jahr. Nicht umkehrbar: „Klartext wiederherstellen“ lässt dieses Feld unverändert."/>
+        </StackPanel>
+
+        <!-- Eigene Datumsformate (dateShift, dateRange, dateGeneralize) —
+             steht nach den drei Datumsarten, weil sie fuer alle drei gilt. -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowFormats}">
+          <TextBlock Text="Eigene Datumsformate" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding FormatsText}" Classes="mono" AcceptsReturn="True"
+                   MinHeight="60" TextWrapping="Wrap" PlaceholderText="z. B. dd.MM.yy"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="{Binding BuiltInFormatsText, StringFormat='Werden vor den eingebauten Formaten geprüft. Schreibweise: dd Tag, MM Monat, yyyy Jahr, yy zweistellig, HH:mm Uhrzeit. Eingebaut: {0}'}"/>
         </StackPanel>
 
         <!-- Maske (pattern) -->

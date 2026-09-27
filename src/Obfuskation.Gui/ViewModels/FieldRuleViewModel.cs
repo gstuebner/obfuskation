@@ -171,19 +171,6 @@ public sealed class FieldRuleViewModel : ObservableObject
     public bool NeedsGenerator => _action == FieldAction.Pseudonymize;
 
     /// <summary>
-    /// Ordnet jede Option ihrem einzig zulaessigen Basistyp zu -- dieselbe
-    /// Zuordnung wie <c>ProfileValidator.OptionOwnership</c> in der
-    /// Bibliothek. Core-Code ist fuer diese Etappe gesperrt, darum steht die
-    /// Zuordnung hier gespiegelt statt von dort gelesen; sie ist aber genau
-    /// einmal im GUI-Code hinterlegt und bestimmt von hier aus, wann
-    /// Schaltflaeche, Optionsdialog und die inline Kennzeichnung etwas
-    /// anzeigen -- nirgends sonst wird diese Zuordnung nachgebaut.
-    /// </summary>
-    private static readonly Dictionary<string, string> OptionBaseTypes =
-        ProfileValidator.OptionOwnership.ToDictionary(
-            eintrag => eintrag.Option, eintrag => eintrag.BaseType, StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
     /// Der Basistyp des aktuellen Generators: bei einem eigenen Namensraum
     /// (im Profil oder in der Erweiterung) dessen <c>Type</c> (oder, falls
     /// leer, der Schluessel selbst), sonst der eingebaute Name unmittelbar.
@@ -212,10 +199,19 @@ public sealed class FieldRuleViewModel : ObservableObject
         }
     }
 
-    /// <summary>Ob der aktuelle Generator bei "pseudonymize" auf dem genannten Basistyp beruht.</summary>
-    private bool IsBaseType(string baseType)
+    /// <summary>
+    /// Ob der aktuelle Generator bei "pseudonymize" eine Option zeigen soll --
+    /// geprueft ueber <see cref="ProfileValidator.OptionBelongsTo"/>, dieselbe
+    /// Zuordnung, die auch der Validator nutzt. Frueher stand hier ein im
+    /// GUI-Code gespiegeltes Woerterbuch, weil der Bibliothekscode fuer jene
+    /// Etappe gesperrt war; das gilt nicht mehr, und eine Option mit mehreren
+    /// Basistypen (<c>formats</c>, <c>country</c>) liesse sich in einem
+    /// Woerterbuch ohnehin nicht mehr eindeutig ablegen.
+    /// </summary>
+    private bool IsBaseType(string option)
         => _action == FieldAction.Pseudonymize
-           && string.Equals(BaseType, baseType, StringComparison.OrdinalIgnoreCase);
+           && BaseType is not null
+           && ProfileValidator.OptionBelongsTo(option, BaseType);
 
     /// <summary>
     /// Die Einstellungen des aktuellen Generators, sofern er schon einen
@@ -236,7 +232,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// ein Praefix wuerde das zerstoeren; das prueft schon der
     /// <see cref="ProfileValidator"/>, hier geht es nur um die Sichtbarkeit.
     /// </summary>
-    public bool ShowPrefix => IsBaseType(OptionBaseTypes["prefix"]);
+    public bool ShowPrefix => IsBaseType("prefix");
 
     /// <summary>
     /// Die Kennzeichnung, die dem erzeugten Pseudonym vorangestellt wird.
@@ -252,7 +248,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     }
 
     /// <summary>Ob "placeholder" (nur <c>redact</c>) angezeigt werden soll.</summary>
-    public bool ShowPlaceholder => IsBaseType(OptionBaseTypes["placeholder"]);
+    public bool ShowPlaceholder => IsBaseType("placeholder");
 
     /// <summary>Eigener Platzhalter fuer <c>redact</c>. Ohne Angabe gilt die Profilvorgabe.</summary>
     public string? Placeholder
@@ -262,7 +258,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     }
 
     /// <summary>Ob "from"/"to" (nur <c>dateRange</c>) angezeigt werden sollen.</summary>
-    public bool ShowDateRange => IsBaseType(OptionBaseTypes["from"]);
+    public bool ShowDateRange => IsBaseType("from");
 
     /// <summary>Untere Grenze des Zeitraums, ISO-Datum. Ohne Angabe gilt das Kalenderjahr des Originals.</summary>
     public string? From
@@ -279,7 +275,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     }
 
     /// <summary>Ob "granularity" (nur <c>dateGeneralize</c>) angezeigt werden soll.</summary>
-    public bool ShowGranularity => IsBaseType(OptionBaseTypes["granularity"]);
+    public bool ShowGranularity => IsBaseType("granularity");
 
     /// <summary>Die Rundungsstufe fuer <c>dateGeneralize</c>, als Listeneintrag. Ohne Angabe "month".</summary>
     public GranularityOption SelectedGranularity
@@ -292,7 +288,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     }
 
     /// <summary>Ob "pattern" (nur <c>pattern</c>) angezeigt werden soll.</summary>
-    public bool ShowPatternMask => IsBaseType(OptionBaseTypes["pattern"]);
+    public bool ShowPatternMask => IsBaseType("pattern");
 
     /// <summary>Die Zeichenmaske. Ohne Angabe wird sie aus dem Original abgeleitet.</summary>
     public string? Pattern
@@ -302,7 +298,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     }
 
     /// <summary>Ob "values" (nur <c>wordlist</c>) angezeigt werden soll.</summary>
-    public bool ShowWordlist => IsBaseType(OptionBaseTypes["values"]);
+    public bool ShowWordlist => IsBaseType("values");
 
     /// <summary>
     /// Die Werteliste als mehrzeiliger Text, ein Wert je Zeile -- fuer ein
@@ -315,7 +311,7 @@ public sealed class FieldRuleViewModel : ObservableObject
     }
 
     /// <summary>Ob "keepFirst"/"keepLast"/"maskChar" (nur <c>partialMask</c>) angezeigt werden sollen.</summary>
-    public bool ShowPartialMask => IsBaseType(OptionBaseTypes["keepFirst"]);
+    public bool ShowPartialMask => IsBaseType("keepFirst");
 
     /// <summary>Anzahl der am Anfang sichtbar bleibenden Zeichen.</summary>
     public int KeepFirst
@@ -350,12 +346,13 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// <summary>
     /// Ob der gewaehlte Generator ueberhaupt Optionen kennt -- steuert, ob
     /// die Schaltflaeche zum Optionsdialog neben der Generator-Auswahl
-    /// erscheint. Bewusst ohne "expression" und "dateShift": Ausdruck und
-    /// Tabellen bzw. die Hoechstverschiebung haben hier keinen eigenen
-    /// Block, sie werden ausschliesslich im Generator-Dialog unter
+    /// erscheint. Bewusst ohne "expression", "maxDays", "formats", "country"
+    /// und "domain": Ausdruck und Tabellen, die Hoechstverschiebung, die
+    /// eigenen Datumsformate, das Land und die Domain haben hier keinen
+    /// eigenen Block, sie werden ausschliesslich im Generator-Dialog unter
     /// "Regeln &amp; Generatoren" bearbeitet (<see cref="GeneratorEditorViewModel"/>).
-    /// Bei "dateShift" ist das gewollt: dort warnt der Dialog, dass eine
-    /// Aenderung aeltere Pseudodaten unumkehrbar macht.
+    /// Bei "maxDays" (dateShift) ist das gewollt: dort warnt der Dialog, dass
+    /// eine Aenderung aeltere Pseudodaten unumkehrbar macht.
     /// </summary>
     public bool HasOptions
         => ShowPrefix || ShowPlaceholder || ShowDateRange || ShowGranularity

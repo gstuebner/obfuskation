@@ -282,7 +282,31 @@
          liessen sich aeltere Pseudodaten nicht mehr zurueckrechnen. Dazu
          nimmt die Vorschau fuer die drei Datumsarten ein Datum als
          vorgegebenes Beispiel statt "Beispiel 4711". -->
-    <Version>1.12.0</Version>
+    <!-- 1.13.0: Ein Generator-Eintrag ohne "type", dessen Schluessel ein
+         eingebauter Generatorname ist (etwa "email": { "domain": "firma.test" }),
+         erschien im Reiter "Eigene Generatoren" faelschlich als "token"
+         (GeneratorEntryViewModel.TypeLabel fiel bei leerem Type darauf
+         zurueck statt auf den Schluessel), und "Bearbeiten..." sperrte
+         "Uebernehmen" mit dem Namensfehler "eingebauter Generator". Beides
+         behoben: TypeLabel und der Generator-Dialog behandeln eine solche
+         Umstellung jetzt als das, was sie ist — Name und Grundlage stehen
+         fest, "Entfernen" setzt nur die eingebaute Vorgabe zurueck und bleibt
+         darum auch bei Verwendung durch eine Regel moeglich. Zweitens
+         speichert die Oberflaeche jetzt nur noch gesetzte Werte:
+         OmitFromJsonWhenAttribute samt Modifier in ProfileStore.JsonOptions
+         blendet "maxDays": 400, "keepFirst"/"keepLast": 0, "captureGroup": 0
+         und "ignoreCase": false aus, sobald sie ihrer Vorgabe entsprechen —
+         auch eine aeltere Datei raeumt sich damit beim naechsten Speichern
+         von selbst auf. Drittens drei bislang nur per Texteditor erreichbare
+         Optionen jetzt im Generator-Dialog: "formats" (eigene Datumsformate,
+         fuer dateShift, dateRange und dateGeneralize), "country" (Land fuer
+         iban/bic) und "domain" (fuer email, mit Warnung bei einer
+         moeglicherweise echt erreichbaren Adresse); dazu "captureGroup" im
+         Textregel-Formular ("Ersetzte Gruppe"), mit einer Warnung, wenn das
+         Muster die gewaehlte Gruppe gar nicht hat. ProfileValidator.OptionOwnership
+         erlaubt dafuer erstmals mehrere Basistypen je Option, mit den neuen
+         Helfern OptionBelongsTo und OwnersOf. -->
+    <Version>1.13.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

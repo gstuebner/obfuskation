@@ -130,8 +130,10 @@ public sealed class TextRule
     /// Nummer der Gruppe, deren Inhalt ersetzt wird. 0 bedeutet den gesamten
     /// Treffer. Nuetzlich, um Praefixe wie <c>IBAN:</c> stehen zu lassen.
     /// </summary>
+    [OmitFromJsonWhen(0)]
     public int CaptureGroup { get; set; }
 
+    [OmitFromJsonWhen(false)]
     public bool IgnoreCase { get; set; }
 }
 
@@ -161,6 +163,7 @@ public sealed class FieldNameRule
     /// staendig, und das bisherige eingebaute Namensraten war ebenfalls
     /// unabhaengig davon.
     /// </summary>
+    [OmitFromJsonWhen(true)]
     public bool IgnoreCase { get; set; } = true;
 
     /// <summary>Freitext fuer den Menschen.</summary>
@@ -189,6 +192,7 @@ public sealed class GeneratorSettings
     /// Verschiebung, und frueher erzeugte Pseudodaten lassen sich nicht mehr
     /// zurueckrechnen (siehe <see cref="Generation.DateShiftGenerator"/>).
     /// </summary>
+    [OmitFromJsonWhen(DefaultMaxDays)]
     public int MaxDays { get; set; } = DefaultMaxDays;
 
     /// <summary>Erkannte Datumsformate (<c>dateShift</c>, <c>dateRange</c>, <c>dateGeneralize</c>).</summary>
@@ -224,6 +228,7 @@ public sealed class GeneratorSettings
     public List<string>? Values { get; set; }
 
     /// <summary>Anzahl der am Anfang sichtbar bleibenden Zeichen (nur <c>partialMask</c>).</summary>
+    [OmitFromJsonWhen(0)]
     public int KeepFirst { get; set; }
 
     /// <summary>
@@ -232,6 +237,7 @@ public sealed class GeneratorSettings
     /// sichtbar lassen will, muss deshalb 'keepFirst' und die Maskierung ueber
     /// die Gesamtlaenge des Wertes steuern.
     /// </summary>
+    [OmitFromJsonWhen(0)]
     public int KeepLast { get; set; }
 
     /// <summary>Maskierungszeichen, genau ein Zeichen (nur <c>partialMask</c>). Ohne Angabe '*'.</summary>

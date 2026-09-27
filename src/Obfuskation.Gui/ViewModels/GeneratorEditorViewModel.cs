@@ -23,11 +23,6 @@ namespace Obfuskation.Gui.ViewModels;
 /// </summary>
 public sealed class GeneratorEditorViewModel : ObservableObject
 {
-    /// <summary>Zuordnung Option -&gt; Basistyp, wie in <see cref="FieldRuleViewModel"/> aus der Bibliothek gespiegelt.</summary>
-    private static readonly Dictionary<string, string> OptionBaseTypes =
-        ProfileValidator.OptionOwnership.ToDictionary(
-            eintrag => eintrag.Option, eintrag => eintrag.BaseType, StringComparer.OrdinalIgnoreCase);
-
     private static readonly Regex NamePattern =
         new(@"^[A-Za-z0-9ÄÖÜäöüß_-]+$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
@@ -38,6 +33,17 @@ public sealed class GeneratorEditorViewModel : ObservableObject
     private readonly string? _existingName;
     private readonly RuleScope? _lockScopeTo;
     private readonly IReadOnlyList<string> _users;
+
+    /// <summary>
+    /// Ob dieser Entwurf einen eingebauten Generator umstellt (Plan P3c,
+    /// Fehler 1): der Schluessel ist beim Bearbeiten schon ein Name aus
+    /// <see cref="GeneratorRegistry.KnownNames"/>. Name und Grundlage stehen
+    /// dann fest -- der Name, weil er ja gerade der eingebaute Generator ist,
+    /// den der Eintrag umstellt, und die Grundlage, weil <see cref="SelectedBaseType"/>
+    /// sonst faelschlich "token" zeigen wuerde, sobald <c>Type</c> im Entwurf
+    /// leer ist (der eigentliche, mit P3c behobene Fehler).
+    /// </summary>
+    private readonly bool _isBuiltInOverride;
 
     /// <summary>Der Entwurf, auf dem alle Optionsfelder direkt arbeiten -- Kopie eines bestehenden Eintrags, oder ein frischer.</summary>
     private readonly GeneratorSettings _draft;
@@ -102,7 +108,16 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         var vorhanden = IsEditMode ? FindExisting(existingName!, Scope) : null;
         _draft = vorhanden is not null ? ProfileStore.DeepCopy(vorhanden) : new GeneratorSettings { Type = "token" };
 
-        _selectedBaseTypeName = !string.IsNullOrWhiteSpace(_draft.Type) ? _draft.Type! : "token";
+        _isBuiltInOverride = existingName is not null
+            && GeneratorRegistry.KnownNames.Contains(existingName, StringComparer.OrdinalIgnoreCase);
+
+        // Die Grundlage ist, wie ueberall sonst (GeneratorRegistry.Build,
+        // ProfileValidator), "type" -- und nur wenn das fehlt, der Schluessel.
+        // Ein von Hand angelegtes "email": { "type": "wordlist" } ist darum
+        // eine Werteliste unter dem Namen "email", keine E-Mail-Umstellung.
+        _selectedBaseTypeName = !string.IsNullOrWhiteSpace(_draft.Type)
+            ? _draft.Type!
+            : _isBuiltInOverride ? existingName! : "token";
         if (!GeneratorRegistry.KnownNames.Contains(_selectedBaseTypeName, StringComparer.OrdinalIgnoreCase))
             _selectedBaseTypeName = "token";
 
@@ -191,6 +206,13 @@ public sealed class GeneratorEditorViewModel : ObservableObject
     {
         get
         {
+            // Eine Umstellung heisst zwangslaeufig wie der eingebaute
+            // Generator, den sie umstellt -- ohne diesen Vorrang wuerde die
+            // Pruefung weiter unten genau das als "eingebauter Generator"
+            // bemaengeln.
+            if (_isBuiltInOverride)
+                return null;
+
             var name = _name.Trim();
 
             if (name.Length == 0)
@@ -301,20 +323,44 @@ public sealed class GeneratorEditorViewModel : ObservableObject
     /// <summary>Ob dieser Generator schon verwendet wird -- dann lassen sich Name und Art nicht mehr aendern.</summary>
     public bool HasUsers => _users.Count > 0;
 
-    public bool CanRename => !HasUsers;
+    public bool CanRename => !HasUsers && !_isBuiltInOverride;
 
-    public bool CanChangeType => !HasUsers;
+    public bool CanChangeType => !HasUsers && !_isBuiltInOverride;
 
-    public string? UsersHint => HasUsers
+    /// <summary>
+    /// Hinweis bei einer Umstellung (Plan P3c): Name und Grundlage stehen
+    /// fest, unabhaengig davon, ob schon eine Regel darauf zeigt --
+    /// <see cref="UsersHint"/> bleibt darum verborgen, sein Grund waere hier
+    /// ohnehin nicht "wird verwendet", sondern "ist der eingebaute Generator".
+    /// </summary>
+    public string? OverrideHint => _isBuiltInOverride
+        ? $"Dieser Eintrag trägt den Namen des eingebauten Generators „{_existingName}“ und gilt überall, " +
+          $"wo „{_existingName}“ gewählt ist. Name und Grundlage stehen deshalb fest."
+        : null;
+
+    public bool HasOverrideHint => OverrideHint is not null;
+
+    public string? UsersHint => HasUsers && !_isBuiltInOverride
         ? $"Wird verwendet von {string.Join(", ", _users)}: Name und Art lassen sich erst ändern, " +
           "wenn nichts mehr darauf verweist."
         : null;
+
+    public bool HasUsersHint => UsersHint is not null;
 
     // ------------------------------------------------------------- Optionen
 
     private bool IsBaseType(string baseType) => string.Equals(_selectedBaseTypeName, baseType, StringComparison.OrdinalIgnoreCase);
 
-    public bool ShowPrefix => IsBaseType(OptionBaseTypes["prefix"]);
+    /// <summary>
+    /// Ob die gewaehlte Art die genannte Option kennt -- geprueft ueber
+    /// <see cref="ProfileValidator.OptionBelongsTo"/>, dieselbe Zuordnung, die
+    /// auch der Validator nutzt. Ersetzt das fruehere, hier gespiegelte
+    /// Woerterbuch Option -&gt; Basistyp, das mit einer Option zu mehreren
+    /// Basistypen (<c>formats</c>, <c>country</c>) nicht mehr auskam.
+    /// </summary>
+    private bool ShowOption(string option) => ProfileValidator.OptionBelongsTo(option, _selectedBaseTypeName);
+
+    public bool ShowPrefix => ShowOption("prefix");
 
     public string? Prefix
     {
@@ -322,7 +368,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         set => SetOption(s => s.Prefix = string.IsNullOrWhiteSpace(value) ? null : value);
     }
 
-    public bool ShowPlaceholder => IsBaseType(OptionBaseTypes["placeholder"]);
+    public bool ShowPlaceholder => ShowOption("placeholder");
 
     public string? Placeholder
     {
@@ -330,7 +376,53 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         set => SetOption(s => s.Placeholder = string.IsNullOrWhiteSpace(value) ? null : value);
     }
 
-    public bool ShowDateRange => IsBaseType(OptionBaseTypes["from"]);
+    // ------------------------------------------------------------ Land
+
+    public bool ShowCountry => ShowOption("country");
+
+    /// <summary>
+    /// Zweistelliger Laendercode fuer <c>iban</c>/<c>bic</c>. Der Setter
+    /// schreibt Grossbuchstaben, damit <see cref="ProfileValidator"/> beim
+    /// naechsten Pruefen nicht sofort eine Kleinschreibung bemaengelt, die
+    /// hier ohnehin niemand beabsichtigt hat; leer wird <c>null</c>.
+    /// </summary>
+    public string? Country
+    {
+        get => _draft.Country;
+        set
+        {
+            var neu = (value ?? "").Trim().ToUpperInvariant();
+            SetOption(s => s.Country = neu.Length == 0 ? null : neu);
+        }
+    }
+
+    // ----------------------------------------------------------- Domain
+
+    public bool ShowDomain => ShowOption("domain");
+
+    public string? Domain
+    {
+        get => _draft.Domain;
+        set => SetOption(s => s.Domain = string.IsNullOrWhiteSpace(value) ? null : value);
+    }
+
+    /// <summary>
+    /// Warnt, wenn die eingetragene Domain nicht zu den reservierten
+    /// (<see cref="ProfileValidator.IsReservedDomain"/>) gehoert -- dieselbe
+    /// Bedingung wie die gleichnamige Warnung des Validators, damit Pruefung
+    /// und Oberflaeche eine Domain gleich beurteilen. Erscheint nicht in
+    /// <see cref="Errors"/>, die nur Fehler sammelt, sondern eigens hier, weil
+    /// eine erreichbare Domain kein Fehler ist, nur ein Risiko.
+    /// </summary>
+    public string? DomainWarning
+        => !string.IsNullOrWhiteSpace(Domain) && !ProfileValidator.IsReservedDomain(Domain!.TrimStart('@'))
+            ? $"Die Domain '{Domain}' ist möglicherweise echt erreichbar – erzeugte Adressen könnten " +
+              "echten Postfächern gehören. Eine reservierte Domain wie firma.test ist sicherer."
+            : null;
+
+    public bool HasDomainWarning => DomainWarning is not null;
+
+    public bool ShowDateRange => ShowOption("from");
 
     public string? From
     {
@@ -344,7 +436,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         set => SetOption(s => s.To = string.IsNullOrWhiteSpace(value) ? null : value);
     }
 
-    public bool ShowGranularity => IsBaseType(OptionBaseTypes["granularity"]);
+    public bool ShowGranularity => ShowOption("granularity");
 
     public IReadOnlyList<GranularityOption> GranularityOptions { get; } = GranularityOption.All;
 
@@ -354,7 +446,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         set => SetOption(s => s.Granularity = value.Value == GranularityOption.Default ? null : value.Value);
     }
 
-    public bool ShowPatternMask => IsBaseType(OptionBaseTypes["pattern"]);
+    public bool ShowPatternMask => ShowOption("pattern");
 
     public string? Pattern
     {
@@ -362,7 +454,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         set => SetOption(s => s.Pattern = string.IsNullOrEmpty(value) ? null : value);
     }
 
-    public bool ShowWordlist => IsBaseType(OptionBaseTypes["values"]);
+    public bool ShowWordlist => ShowOption("values");
 
     public string ValuesText
     {
@@ -370,7 +462,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         set => SetOption(s => s.Values = SplitValues(value));
     }
 
-    public bool ShowPartialMask => IsBaseType(OptionBaseTypes["keepFirst"]);
+    public bool ShowPartialMask => ShowOption("keepFirst");
 
     public int KeepFirst
     {
@@ -394,7 +486,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
 
     // ------------------------------------------------------- Verschiebung
 
-    public bool ShowMaxDays => IsBaseType(OptionBaseTypes["maxDays"]);
+    public bool ShowMaxDays => ShowOption("maxDays");
 
     /// <summary>
     /// Die Hoechstverschiebung in Tagen. Ein gespeichertes <c>0</c> wirkt im
@@ -430,9 +522,38 @@ public sealed class GeneratorEditorViewModel : ObservableObject
 
     private static int EffectiveMaxDays(int maxDays) => maxDays > 0 ? maxDays : GeneratorSettings.DefaultMaxDays;
 
+    // -------------------------------------------------------- Datumsformate
+
+    /// <summary>
+    /// Ob "Eigene Datumsformate" angezeigt wird -- gilt fuer alle drei
+    /// Datumsarten (<c>dateShift</c>, <c>dateRange</c>, <c>dateGeneralize</c>),
+    /// darum steht der Block im Dialog nach den dreien statt bei einer
+    /// einzelnen.
+    /// </summary>
+    public bool ShowFormats => ShowOption("formats");
+
+    /// <summary>
+    /// Die eigenen Formate als mehrzeiliger Text, ein Format je Zeile -- wie
+    /// <see cref="ValuesText"/>. Eine leere Liste wird als <c>null</c>
+    /// geschrieben, damit eine unberuehrte Eingabe kein leeres Feld in der
+    /// Datei hinterlaesst.
+    /// </summary>
+    public string FormatsText
+    {
+        get => _draft.Formats is { } formate ? string.Join('\n', formate) : "";
+        set => SetOption(s =>
+        {
+            var liste = SplitValues(value);
+            s.Formats = liste.Count > 0 ? liste : null;
+        });
+    }
+
+    /// <summary>Die eingebauten Formate als Aufzaehlung, fuer die Erklaerung unter dem Eingabefeld.</summary>
+    public string BuiltInFormatsText => string.Join(", ", DateValues.FallbackFormats);
+
     // ------------------------------------------------------------- Ausdruck
 
-    public bool ShowExpression => IsBaseType(OptionBaseTypes["expression"]);
+    public bool ShowExpression => ShowOption("expression");
 
     public string? Expression
     {
@@ -598,6 +719,12 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(Prefix));
         OnPropertyChanged(nameof(ShowPlaceholder));
         OnPropertyChanged(nameof(Placeholder));
+        OnPropertyChanged(nameof(ShowCountry));
+        OnPropertyChanged(nameof(Country));
+        OnPropertyChanged(nameof(ShowDomain));
+        OnPropertyChanged(nameof(Domain));
+        OnPropertyChanged(nameof(DomainWarning));
+        OnPropertyChanged(nameof(HasDomainWarning));
         OnPropertyChanged(nameof(ShowDateRange));
         OnPropertyChanged(nameof(From));
         OnPropertyChanged(nameof(To));
@@ -617,6 +744,8 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(MaxDays));
         OnPropertyChanged(nameof(MaxDaysChangeWarning));
         OnPropertyChanged(nameof(HasMaxDaysChangeWarning));
+        OnPropertyChanged(nameof(ShowFormats));
+        OnPropertyChanged(nameof(FormatsText));
     }
 
     private static List<string> SplitValues(string text)
@@ -743,13 +872,17 @@ public sealed class GeneratorEditorViewModel : ObservableObject
 
     /// <summary>
     /// Das vorgegebene Beispiel je Art: ein Datum fuer die drei Datumsarten,
-    /// die mit "Beispiel 4711" nur eine Fehlermeldung zeigen koennten, sonst
-    /// ein Wert mit Buchstaben und Ziffern.
+    /// die mit "Beispiel 4711" nur eine Fehlermeldung zeigen koennten, ein
+    /// passender Musterwert fuer <c>email</c>, <c>iban</c> und <c>bic</c>,
+    /// sonst ein Wert mit Buchstaben und Ziffern.
     /// </summary>
     private static string DefaultSampleFor(string baseType)
         => baseType.ToLowerInvariant() switch
         {
             "dateshift" or "daterange" or "dategeneralize" => "15.03.2024",
+            "email" => "anna.berg@firma.de",
+            "iban" => "AT611904300234573201",
+            "bic" => "COBADEFFXXX",
             _ => "Beispiel 4711",
         };
 
@@ -811,23 +944,36 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>Die unterschiedlichen Optionsnamen aus <see cref="ProfileValidator.OptionOwnership"/>, je einmal.</summary>
+    private static readonly string[] AllOptions =
+        ProfileValidator.OptionOwnership.Select(eintrag => eintrag.Option)
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
     /// <summary>
     /// Baut das Ergebnis aus dem Entwurf: die gewaehlte Art, dazu nur die
-    /// Optionen, die zu dieser Art gehoeren (<see cref="ProfileValidator.OptionOwnership"/>)
+    /// Optionen, die zu dieser Art gehoeren (<see cref="ProfileValidator.OptionBelongsTo"/>)
     /// -- alles andere (etwa ein Praefix aus einer fruehreren Wahl von
     /// "token") wird verworfen; ein fremdes <c>maxDays</c> faellt auf die
-    /// Vorgabe zurueck. Felder ausserhalb dieser Zuordnung (<c>formats</c>,
-    /// <c>country</c>, <c>domain</c>) bleiben aus dem Entwurf erhalten, damit
-    /// von Hand gepflegtes JSON beim Bearbeiten nicht verloren geht.
+    /// Vorgabe zurueck. Es gibt keine Felder mehr ausserhalb dieser Zuordnung:
+    /// auch <c>formats</c>, <c>country</c> und <c>domain</c> gehoeren jetzt
+    /// dazu.
+    ///
+    /// Stellt der Entwurf einen eingebauten Generator um (<see cref="_isBuiltInOverride"/>),
+    /// bleibt <see cref="GeneratorSettings.Type"/> unveraendert, so wie er im
+    /// Entwurf stand -- die Datei zeigt dann weiterhin unveraendert
+    /// <c>"email": { … }</c> ohne <c>type</c>, statt dass das Speichern eines
+    /// ohnehin vorgegebenen Namens zusaetzlich noch <c>type</c> eintraegt.
     /// </summary>
     private GeneratorSettings BuildResult()
     {
         var result = ProfileStore.DeepCopy(_draft);
-        result.Type = _selectedBaseTypeName;
 
-        foreach (var (option, baseType) in ProfileValidator.OptionOwnership)
+        if (!_isBuiltInOverride)
+            result.Type = _selectedBaseTypeName;
+
+        foreach (var option in AllOptions)
         {
-            if (!string.Equals(baseType, _selectedBaseTypeName, StringComparison.OrdinalIgnoreCase))
+            if (!ProfileValidator.OptionBelongsTo(option, _selectedBaseTypeName))
                 ClearOption(result, option);
         }
 
@@ -851,6 +997,9 @@ public sealed class GeneratorEditorViewModel : ObservableObject
             case "expression": settings.Expression = null; break;
             case "tables": settings.Tables = null; break;
             case "maxDays": settings.MaxDays = GeneratorSettings.DefaultMaxDays; break;
+            case "formats": settings.Formats = null; break;
+            case "country": settings.Country = null; break;
+            case "domain": settings.Domain = null; break;
         }
     }
 

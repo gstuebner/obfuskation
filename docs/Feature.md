@@ -1,6 +1,6 @@
 # Feature-Sammlung: Anwenderfreundlichkeit
 
-Fassung 1.12.0 · Stand 27. September 2026
+Fassung 1.13.0 · Stand 28. September 2026
 
 Arbeitsdokument für die nächste größere Version. Ziel ist ein echter Schub
 an Anwenderfreundlichkeit: Obfuskation soll sich **selbst erklären**, für
@@ -211,6 +211,30 @@ mitgelieferte Tabelle für das KFZ-Beispiel.
   „Grundlage“. Beim Bearbeiten warnt der Dialog, dass eine Änderung ältere
   Pseudodateien unumkehrbar macht. Teil von Idee C6.
 
+### 3.8 Umgesetzt in 1.13.0
+
+Aus der Prüfung der Erweiterungsdatei `obfuskation.json` (siehe
+`docs/anwenderdokumentation.md`, Kapitel 11):
+
+1. Ein Generator-Eintrag, dessen Schlüssel ein eingebauter Generatorname
+   ist und der kein `type` hat (etwa `"email": { "domain": "firma.test" }`),
+   erschien im Reiter „Eigene Generatoren“ fälschlich als `token` und ließ
+   sich über den Dialog nicht mehr übernehmen. Der Dialog behandelt eine
+   solche Umstellung jetzt richtig: Name und Grundlage stehen fest,
+   „Entfernen“ setzt nur die eingebaute Vorgabe zurück und bleibt darum auch
+   bei Verwendung durch eine Regel möglich.
+2. Die Oberfläche speichert jetzt nur noch tatsächlich gesetzte Werte —
+   `maxDays`, `keepFirst`, `keepLast`, `captureGroup` und `ignoreCase`
+   stehen nur noch in der Datei, wenn sie von der Vorgabe abweichen. Eine
+   ältere Datei räumt sich damit beim nächsten Speichern von selbst auf.
+3. Drei bislang nur per Texteditor erreichbare Optionen sind jetzt im
+   Generator-Dialog einstellbar: `formats` (eigene Datumsformate für die
+   drei Datumsarten), `country` (Land für `iban`/`bic`) und `domain` (für
+   `email`, mit Warnung bei einer möglicherweise echt erreichbaren Domain) —
+   Idee C6 ist damit vollständig umgesetzt. Dazu `captureGroup` neu im
+   Textregel-Formular („Ersetzte Gruppe“), mit einer Warnung, wenn das
+   Muster die gewählte Gruppe gar nicht hat.
+
 ## 4. Ideen
 
 Format: **Kennung · Titel.** Beschreibung. *Nutzen:* A = Anfänger,
@@ -281,9 +305,10 @@ P = Profi. *Aufwand:* S/M/L, grob geschätzt. Offene Fragen stehen kursiv.
   geführt, zum Beispiel bei der Frage „Was soll mit neuen Spalten passieren,
   die das Profil nicht kennt?“. *A+P · M*
 - **C6 · Mehr Optionen im Generator-Dialog einstellbar.** `domain` (`email`)
-  und `country` (`iban`/`bic`) sind heute nur per JSON zu setzen, obwohl der
-  Dialog seit 1.11.0 andere Arten einstellbar zeigt. `maxDays` (`dateShift`)
-  ist seit 1.12.0 erledigt. *P · S*
+  und `country` (`iban`/`bic`) sind seit 1.13.0 im Dialog einstellbar, dazu
+  `formats` (`dateShift`/`dateRange`/`dateGeneralize`). `maxDays`
+  (`dateShift`) war schon seit 1.12.0 erledigt — damit ist die Idee
+  vollständig umgesetzt. *P · S*
 - **C7 · Gewichte statt Gleichverteilung.** Beim Ausdruck-Generator zieht
   `?` mit 50 % und jede Tabellenzeile gleich wahrscheinlich — für ein
   KFZ-Kennzeichen etwa träfe eine Gewichtung nach echter Häufigkeit der

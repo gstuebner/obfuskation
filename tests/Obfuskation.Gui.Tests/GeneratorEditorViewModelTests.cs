@@ -164,6 +164,21 @@ public sealed class GeneratorEditorViewModelTests
     }
 
     [Fact]
+    public void Ein_eingebauter_Name_mit_eigenem_type_behaelt_diesen_type_als_Grundlage()
+    {
+        // Wie GeneratorRegistry.Build: "type" geht vor dem Schluessel. Ein von
+        // Hand angelegtes "email": { "type": "wordlist" } ist eine Werteliste.
+        var extensions = new ExtensionLibrary();
+        extensions.Generators["email"] = new GeneratorSettings { Type = "wordlist", Values = ["a", "b", "c", "d", "e"] };
+
+        var modell = Neu(extensions: extensions, existingName: "email");
+
+        Assert.Equal("wordlist", modell.SelectedBaseType.Name);
+        Assert.False(modell.CanRename);
+        Assert.False(modell.CanChangeType);
+    }
+
+    [Fact]
     public void Bearbeiten_eines_numericId_Generators_behaelt_numericId()
     {
         var profil = new Profile();
@@ -356,5 +371,119 @@ public sealed class GeneratorEditorViewModelTests
         Assert.Equal("token", modell.ResultSettings.Type);
         Assert.Null(modell.ResultSettings.Expression);
         Assert.Null(modell.ResultSettings.Tables);
+    }
+
+    // ------------------------------------- Umstellung eines eingebauten Generators (Plan P3c)
+
+    [Fact]
+    public void Bearbeiten_einer_Umstellung_oeffnet_mit_der_Art_des_umgestellten_Generators()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            Generators = { ["email"] = new GeneratorSettings { Domain = "firma.test" } },
+        };
+
+        var modell = Neu(extensions: extensions, existingName: "email");
+
+        Assert.Equal("email", modell.SelectedBaseType.Name);
+        Assert.True(modell.CanApply);
+        Assert.Null(modell.NameError);
+    }
+
+    [Fact]
+    public void Uebernehmen_einer_Umstellung_aendert_die_Domain_aber_nicht_den_Typ()
+    {
+        var extensions = new ExtensionLibrary
+        {
+            Generators = { ["email"] = new GeneratorSettings { Domain = "firma.test" } },
+        };
+
+        var modell = Neu(extensions: extensions, existingName: "email");
+        modell.Domain = "andere.test";
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Confirmed);
+        Assert.Null(modell.ResultSettings.Type);
+        Assert.Equal("andere.test", modell.ResultSettings.Domain);
+    }
+
+    // --------------------------------------------------- Neue Arten und Felder
+
+    [Fact]
+    public void Domain_landet_im_Ergebnis_und_ein_Wechsel_der_Art_leert_sie()
+    {
+        var modell = Neu();
+        modell.Name = "meinGenerator";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "email");
+        modell.Domain = "firma.test";
+
+        modell.ApplyCommand.Execute(null);
+        Assert.Equal("firma.test", modell.ResultSettings.Domain);
+
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "pattern");
+        modell.Pattern = "AA-9999";
+
+        modell.ApplyCommand.Execute(null);
+        Assert.Null(modell.ResultSettings.Domain);
+    }
+
+    [Fact]
+    public void Country_und_formats_landen_im_Ergebnis_und_ein_Wechsel_der_Art_leert_sie()
+    {
+        var modell = Neu();
+        modell.Name = "meinGenerator";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "iban");
+        modell.Country = "at";
+
+        Assert.Equal("AT", modell.Country);
+
+        modell.ApplyCommand.Execute(null);
+        Assert.Equal("AT", modell.ResultSettings.Country);
+
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "dateShift");
+        modell.FormatsText = "dd.MM.yy";
+
+        modell.ApplyCommand.Execute(null);
+        Assert.Equal(new List<string> { "dd.MM.yy" }, modell.ResultSettings.Formats);
+        Assert.Null(modell.ResultSettings.Country);
+    }
+
+    [Fact]
+    public void Country_wird_bei_der_Eingabe_zu_Grossbuchstaben()
+    {
+        var modell = Neu();
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "iban");
+
+        modell.Country = "at";
+
+        Assert.Equal("AT", modell.Country);
+    }
+
+    [Fact]
+    public void DomainWarning_erscheint_bei_firma_de_nicht_bei_firma_test()
+    {
+        var modell = Neu();
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "email");
+
+        modell.Domain = "firma.de";
+        Assert.True(modell.HasDomainWarning);
+
+        modell.Domain = "firma.test";
+        Assert.False(modell.HasDomainWarning);
+    }
+
+    [Fact]
+    public void Die_Vorschau_fuer_email_mit_eigener_Domain_endet_darauf()
+    {
+        var modell = Neu();
+        modell.Name = "meinGenerator";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "email");
+        modell.Domain = "firma.test";
+
+        Assert.Null(modell.PreviewError);
+        Assert.NotNull(modell.PreviewText);
+        Assert.All(modell.PreviewText!.Split('\n'),
+            zeile => Assert.EndsWith("@firma.test", zeile, StringComparison.Ordinal));
     }
 }
