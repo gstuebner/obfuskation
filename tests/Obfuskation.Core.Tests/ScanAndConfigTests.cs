@@ -442,6 +442,43 @@ public class ScanAndConfigTests
     }
 
     [Fact]
+    public void Ein_maxDays_an_einem_token_Generator_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kurz"] = new GeneratorSettings { Type = "token", MaxDays = 30 };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.kurz.maxDays");
+    }
+
+    [Fact]
+    public void Der_gespeicherte_Vorgabewert_maxDays_ist_an_keinem_Generator_ein_Befund()
+    {
+        // Gespeicherte Profile tragen "maxDays": 400 bei jedem Generator --
+        // das darf mit der neuen Zuordnung zu dateShift kein Fehler werden.
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kurz"] = new GeneratorSettings { Type = "token", MaxDays = GeneratorSettings.DefaultMaxDays };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.DoesNotContain(befunde, b => b.Path.StartsWith("generators.kurz", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Ein_maxDays_ueber_hundert_Jahren_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["weit"] = new GeneratorSettings { Type = "dateShift", MaxDays = GeneratorSettings.MaxDaysLimit + 1 };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.weit.maxDays");
+    }
+
+    [Fact]
     public void Ein_fehlender_Ausdruck_wird_bemaengelt()
     {
         var profile = new Profile { ProfileName = "test" };

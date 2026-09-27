@@ -2,7 +2,7 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.11.0
+version: 1.12.0
 author: Gregor Stübner & Claude (Anthropic)
 date: 27.09.2026
 lang: de
@@ -718,8 +718,16 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
   spiegeln `FieldRuleViewModel` und richten ihre Sichtbarkeit nach
   `ProfileValidator.OptionOwnership`; `BuildResult()` setzt `Type` auf die
   gewählte `SelectedBaseType` und verwirft dabei alle Optionen anderer
-  Basistypen, lässt aber `MaxDays`/`Formats`/`Country`/`Domain` unangetastet,
-  damit von Hand gepflegtes JSON beim Bearbeiten nicht verloren geht. Ist der
+  Basistypen (ein fremdes `MaxDays` fällt auf die Vorgabe 400 zurück), lässt
+  aber `Formats`/`Country`/`Domain` unangetastet, damit von Hand gepflegtes
+  JSON beim Bearbeiten nicht verloren geht. Seit 1.12.0 steht `maxDays` in
+  `OptionOwnership` (Basistyp `dateShift`); als gesetzt gilt es dort nur,
+  wenn der Wert weder 0 noch 400 ist, weil gespeicherte Profile den
+  Vorgabewert an jedem Generator tragen. Beim Bearbeiten eines bestehenden
+  `dateShift`-Generators meldet `MaxDaysChangeWarning` jede Abweichung vom
+  gespeicherten Wert: Die Verschiebung wird aus `maxDays` und dem Salt
+  abgeleitet (`DateShiftGenerator.SetOffsetFrom`), und ohne Tabelleneintrag
+  wären ältere Pseudodaten danach nicht mehr zurückzurechnen. Ist der
   Generator schon in Verwendung (`users`-Parameter), sperren `CanRename` und
   `CanChangeType` Name und Art. Die Vorschau läuft über das neue
   `Obfuskation.Core.Generation.GeneratorPreview.TryExample(key, settings,
@@ -959,7 +967,7 @@ Aus `src/Obfuskation.Core/Configuration/Profile.cs` und `Enums.cs`.
 | Feld | Typ | Vorgabe | Wirkung |
 |---|---|---|---|
 | `type` | `string?` | `null` | Zugrundeliegender eingebauter Generator; leer heißt: wie der Schlüssel selbst — ein anderer Wert erzeugt einen eigenen Namensraum auf Basis dieses Typs |
-| `maxDays` | `int` | `400` | Maximaler Betrag der Datumsverschiebung in Tagen (nur `dateShift`) |
+| `maxDays` | `int` | `400` | Maximaler Betrag der Datumsverschiebung in Tagen (nur `dateShift`), höchstens 36 500; 0 wirkt wie die Vorgabe |
 | `formats` | `List<string>?` | `null` | Zusätzlich erkannte Datumsformate (`dateShift`, `dateRange`, `dateGeneralize`), vor den eingebauten Formaten geprüft |
 | `country` | `string?` | `null` | Ländercode für `iban`/`bic`, falls sich keiner aus dem Originalwert ableiten lässt |
 | `domain` | `string?` | `null` | Domain für `email` |

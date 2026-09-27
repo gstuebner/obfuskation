@@ -2,7 +2,7 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.11.0
+version: 1.12.0
 author: Gregor Stübner & Claude (Anthropic)
 date: 27.09.2026
 lang: de
@@ -578,10 +578,17 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
 **Der Generator-Dialog** (neu, „+ Neuer Generator…“ bzw. „Bearbeiten…“) fragt
 Bezeichnung, **Grundlage** und die zur Grundlage passenden Optionen ab. Die
 Grundlage ist **nicht** dieselbe Liste wie unter „Ersetzen durch“: dort stehen
-alle eingebauten Generatoren, hier nur die acht, die überhaupt eigene
+alle eingebauten Generatoren, hier nur die neun, die überhaupt eigene
 Einstellungen haben — `token`, `expression`, `pattern`, `wordlist`,
-`partialMask`, `redact`, `dateRange` und `dateGeneralize`, jede Zeile mit
-Titel und Beispielwert. Die übrigen eingebauten Generatoren (etwa `numericId`)
+`partialMask`, `redact`, `dateShift`, `dateRange` und `dateGeneralize`, jede
+Zeile mit Titel und Beispielwert. Bei „Datum verschoben“ (`dateShift`) stellt
+man die **höchste Verschiebung** in Tagen ein (1 bis 36 500, Vorgabe 400);
+die tatsächliche Verschiebung wird daraus je Projekt fest ausgewürfelt.
+Achtung beim Bearbeiten: Diese Art hat keine Ersetzungstabelle, sie rechnet
+nur zurück. Wer den Wert eines schon benutzten Generators ändert, kann ältere
+Pseudodateien danach nicht mehr korrekt zurückführen — der Dialog warnt
+davor, sobald der Wert abweicht. Für die drei Datumsarten nimmt die Vorschau
+ein Datum als Beispiel. Die übrigen eingebauten Generatoren (etwa `numericId`)
 lassen sich weiterhin als eigener Namensraum nutzen, aber nur noch über die
 Konfigurationsdatei anlegen; ein so angelegter Generator bekommt beim
 Bearbeiten einen eigenen Listeneintrag mit dem Hinweis „Diese Art hat hier

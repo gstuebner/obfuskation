@@ -172,8 +172,24 @@ public sealed class GeneratorSettings
     /// <summary>Zugrundeliegender Generatortyp. Leer bedeutet: wie der Schluessel.</summary>
     public string? Type { get; set; }
 
-    /// <summary>Maximaler Betrag der Datumsverschiebung in Tagen (nur <c>dateShift</c>).</summary>
-    public int MaxDays { get; set; } = 400;
+    /// <summary>Vorgabe fuer <see cref="MaxDays"/>, auch fuer ein nicht gesetztes <c>0</c>.</summary>
+    public const int DefaultMaxDays = 400;
+
+    /// <summary>
+    /// Obergrenze fuer <see cref="MaxDays"/>: rund hundert Jahre. Weiter
+    /// reicht keine sinnvolle Verschiebung, und sehr grosse Werte fuehrten
+    /// ueber den Kalender hinaus (<see cref="DateTime.AddDays"/> wirft dann).
+    /// </summary>
+    public const int MaxDaysLimit = 36500;
+
+    /// <summary>
+    /// Maximaler Betrag der Datumsverschiebung in Tagen (nur <c>dateShift</c>).
+    /// Die tatsaechliche Verschiebung wird daraus und aus dem Salt des
+    /// Projekts abgeleitet -- wer den Wert aendert, aendert damit auch die
+    /// Verschiebung, und frueher erzeugte Pseudodaten lassen sich nicht mehr
+    /// zurueckrechnen (siehe <see cref="Generation.DateShiftGenerator"/>).
+    /// </summary>
+    public int MaxDays { get; set; } = DefaultMaxDays;
 
     /// <summary>Erkannte Datumsformate (<c>dateShift</c>, <c>dateRange</c>, <c>dateGeneralize</c>).</summary>
     public List<string>? Formats { get; set; }

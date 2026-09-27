@@ -1,6 +1,6 @@
 # Feature-Sammlung: Anwenderfreundlichkeit
 
-Fassung 1.11.0 · Stand 27. September 2026
+Fassung 1.12.0 · Stand 27. September 2026
 
 Arbeitsdokument für die nächste größere Version. Ziel ist ein echter Schub
 an Anwenderfreundlichkeit: Obfuskation soll sich **selbst erklären**, für
@@ -204,6 +204,13 @@ im Dialog einstellbar machen; Gewichte für „?“ und Tabelleneinträge, damit
 nicht jeder Wert gleich wahrscheinlich ist; eine vollständige Kreisliste als
 mitgelieferte Tabelle für das KFZ-Beispiel.
 
+### 3.7 Umgesetzt in 1.12.0
+
+- Die höchste Datumsverschiebung (`maxDays`) ist im Generator-Dialog
+  einstellbar; „Datum verschoben“ steht damit als neunte Art unter
+  „Grundlage“. Beim Bearbeiten warnt der Dialog, dass eine Änderung ältere
+  Pseudodateien unumkehrbar macht. Teil von Idee C6.
+
 ## 4. Ideen
 
 Format: **Kennung · Titel.** Beschreibung. *Nutzen:* A = Anfänger,
@@ -273,10 +280,10 @@ P = Profi. *Aufwand:* S/M/L, grob geschätzt. Offene Fragen stehen kursiv.
   Schwärzungsplatzhalter, Leerwerte, CSV-Einstellungen. Vorzugsweise
   geführt, zum Beispiel bei der Frage „Was soll mit neuen Spalten passieren,
   die das Profil nicht kennt?“. *A+P · M*
-- **C6 · Mehr Optionen im Generator-Dialog einstellbar.** `domain` (`email`),
-  `country` (`iban`/`bic`) und `maxDays` (`dateShift`) sind heute nur per
-  JSON zu setzen, obwohl der Dialog seit 1.11.0 schon acht andere Arten
-  einstellbar zeigt. *P · S*
+- **C6 · Mehr Optionen im Generator-Dialog einstellbar.** `domain` (`email`)
+  und `country` (`iban`/`bic`) sind heute nur per JSON zu setzen, obwohl der
+  Dialog seit 1.11.0 andere Arten einstellbar zeigt. `maxDays` (`dateShift`)
+  ist seit 1.12.0 erledigt. *P · S*
 - **C7 · Gewichte statt Gleichverteilung.** Beim Ausdruck-Generator zieht
   `?` mit 50 % und jede Tabellenzeile gleich wahrscheinlich — für ein
   KFZ-Kennzeichen etwa träfe eine Gewichtung nach echter Häufigkeit der

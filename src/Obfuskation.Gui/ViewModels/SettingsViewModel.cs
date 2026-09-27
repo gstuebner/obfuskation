@@ -846,6 +846,12 @@ public sealed class GeneratorEntryViewModel : ObservableObject
                 return $"Zeitraum {settings.From ?? "…"} bis {settings.To ?? "…"}";
             }
 
+            if (string.Equals(baseType, "dateShift", StringComparison.OrdinalIgnoreCase))
+            {
+                var tage = settings.MaxDays > 0 ? settings.MaxDays : GeneratorSettings.DefaultMaxDays;
+                return $"bis ± {tage} Tage";
+            }
+
             if (string.Equals(baseType, "expression", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrEmpty(settings.Expression))
             {

@@ -246,6 +246,99 @@ public sealed class GeneratorEditorViewModelTests
         Assert.Contains(modell.Errors, e => e.Contains("mehrfach vergeben"));
     }
 
+    // --------------------------------------------------------- Verschiebung
+
+    [Fact]
+    public void Die_Hoechstverschiebung_landet_im_Ergebnis()
+    {
+        var modell = Neu();
+        modell.Name = "datumKurz";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "dateShift");
+
+        Assert.True(modell.ShowMaxDays);
+        Assert.Equal(GeneratorSettings.DefaultMaxDays, modell.MaxDays);
+
+        modell.MaxDays = 30;
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Confirmed);
+        Assert.Equal("dateShift", modell.ResultSettings.Type);
+        Assert.Equal(30, modell.ResultSettings.MaxDays);
+    }
+
+    [Fact]
+    public void Ein_Wechsel_von_dateShift_zu_token_setzt_maxDays_zurueck()
+    {
+        var modell = Neu();
+        modell.Name = "datumKurz";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "dateShift");
+        modell.MaxDays = 30;
+
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "token");
+
+        Assert.False(modell.ShowMaxDays);
+        Assert.True(modell.CanApply);
+        modell.ApplyCommand.Execute(null);
+        Assert.Equal(GeneratorSettings.DefaultMaxDays, modell.ResultSettings.MaxDays);
+    }
+
+    [Fact]
+    public void Beim_Bearbeiten_warnt_eine_geaenderte_Hoechstverschiebung()
+    {
+        var profil = new Profile();
+        profil.Generators["datumKurz"] = new GeneratorSettings { Type = "dateShift", MaxDays = 30 };
+
+        var modell = Neu(profile: profil, initialScope: RuleScope.Project, existingName: "datumKurz");
+
+        Assert.Equal(30, modell.MaxDays);
+        Assert.False(modell.HasMaxDaysChangeWarning);
+
+        modell.MaxDays = 60;
+        Assert.True(modell.HasMaxDaysChangeWarning);
+        Assert.Contains("Bisher 30 Tage", modell.MaxDaysChangeWarning);
+
+        modell.MaxDays = 30;
+        Assert.False(modell.HasMaxDaysChangeWarning);
+    }
+
+    [Fact]
+    public void Ein_neuer_Generator_warnt_nicht_vor_einer_geaenderten_Hoechstverschiebung()
+    {
+        var modell = Neu();
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "dateShift");
+
+        modell.MaxDays = 30;
+
+        Assert.False(modell.HasMaxDaysChangeWarning);
+    }
+
+    [Fact]
+    public void Fuer_Datumsarten_ist_das_vorgegebene_Beispiel_ein_Datum()
+    {
+        var modell = Neu();
+        modell.Name = "datumKurz";
+
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "dateShift");
+
+        Assert.Equal("15.03.2024", modell.SampleInput);
+        Assert.False(modell.HasPreviewError);
+        Assert.Matches(new Regex(@"^\d{2}\.\d{2}\.\d{4}$"), modell.PreviewText);
+
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "token");
+        Assert.Equal("Beispiel 4711", modell.SampleInput);
+    }
+
+    [Fact]
+    public void Ein_selbst_eingetipptes_Beispiel_bleibt_beim_Artwechsel_stehen()
+    {
+        var modell = Neu();
+        modell.SampleInput = "Muster 0815";
+
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "dateShift");
+
+        Assert.Equal("Muster 0815", modell.SampleInput);
+    }
+
     [Fact]
     public void Wechsel_von_expression_zu_token_laesst_Ausdruck_und_Tabellen_fallen()
     {

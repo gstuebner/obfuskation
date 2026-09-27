@@ -27,6 +27,7 @@ public sealed record GeneratorKindOption(string Name, string Title, string Descr
         new("wordlist", "Werteliste", GeneratorDescriptions.For("wordlist"), "Rot · Grün · Blau"),
         new("partialMask", "Teilmaskierung", GeneratorDescriptions.For("partialMask"), "****1234"),
         new("redact", "Platzhalter", GeneratorDescriptions.For("redact"), "***"),
+        new("dateShift", "Datum verschoben", GeneratorDescriptions.For("dateShift"), "2024-07-02"),
         new("dateRange", "Datum aus Zeitraum", GeneratorDescriptions.For("dateRange"), "2021-03-14"),
         new("dateGeneralize", "Datum gerundet", GeneratorDescriptions.For("dateGeneralize"), "2024-01-01"),
     ];

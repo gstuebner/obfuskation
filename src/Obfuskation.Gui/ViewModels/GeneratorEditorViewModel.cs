@@ -58,6 +58,20 @@ public sealed class GeneratorEditorViewModel : ObservableObject
     private string? _previewError;
     private IReadOnlyList<string> _missingTableNames = Array.Empty<string>();
 
+    /// <summary>
+    /// Ob <see cref="SampleInput"/> noch die Vorgabe traegt. Nur dann folgt
+    /// das Beispiel der gewaehlten Art (ein Datum fuer die Datumsarten) --
+    /// was jemand selbst eingetippt oder markiert hat, bleibt stehen.
+    /// </summary>
+    private bool _sampleIsDefault;
+
+    /// <summary>
+    /// Die Hoechstverschiebung eines schon bestehenden <c>dateShift</c>-Generators
+    /// beim Oeffnen, sonst <c>null</c> -- Vergleichswert fuer
+    /// <see cref="MaxDaysChangeWarning"/>.
+    /// </summary>
+    private readonly int? _originalMaxDays;
+
     public GeneratorEditorViewModel(
         Profile? profile,
         ExtensionLibrary extensions,
@@ -101,7 +115,11 @@ public sealed class GeneratorEditorViewModel : ObservableObject
             _baseTypes.Add(GeneratorKindOption.ForUnconfigurable(_selectedBaseTypeName));
 
         _name = existingName ?? SuggestUniqueName(ProfileScaffolder.ToGeneratorKey(suggestedName ?? "generator"));
-        _sampleInput = string.IsNullOrWhiteSpace(sampleValue) ? "Beispiel 4711" : sampleValue!;
+        _sampleIsDefault = string.IsNullOrWhiteSpace(sampleValue);
+        _sampleInput = _sampleIsDefault ? DefaultSampleFor(_selectedBaseTypeName) : sampleValue!;
+
+        if (vorhanden is not null && IsBaseType("dateShift"))
+            _originalMaxDays = EffectiveMaxDays(vorhanden.MaxDays);
 
         Tables = new ObservableCollection<ExpressionTableViewModel>();
         if (_draft.Tables is not null)
@@ -251,6 +269,13 @@ public sealed class GeneratorEditorViewModel : ObservableObject
                 return;
 
             _selectedBaseTypeName = value.Name;
+
+            if (_sampleIsDefault && !string.Equals(_sampleInput, DefaultSampleFor(value.Name), StringComparison.Ordinal))
+            {
+                _sampleInput = DefaultSampleFor(value.Name);
+                OnPropertyChanged(nameof(SampleInput));
+            }
+
             OnPropertyChanged();
             OnPropertyChanged(nameof(KindHint));
             OnPropertyChanged(nameof(HasKindHint));
@@ -366,6 +391,44 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         // FieldRuleViewModel wird er wieder auf "nicht gesetzt" zurueckgefuehrt.
         set => SetOption(s => s.MaskChar = string.IsNullOrEmpty(value) || value == "*" ? null : value);
     }
+
+    // ------------------------------------------------------- Verschiebung
+
+    public bool ShowMaxDays => IsBaseType(OptionBaseTypes["maxDays"]);
+
+    /// <summary>
+    /// Die Hoechstverschiebung in Tagen. Ein gespeichertes <c>0</c> wirkt im
+    /// Generator wie die Vorgabe und wird darum auch so angezeigt.
+    /// </summary>
+    public int MaxDays
+    {
+        get => EffectiveMaxDays(_draft.MaxDays);
+        set
+        {
+            SetOption(s => s.MaxDays = value);
+            OnPropertyChanged(nameof(MaxDaysChangeWarning));
+            OnPropertyChanged(nameof(HasMaxDaysChangeWarning));
+        }
+    }
+
+    /// <summary>
+    /// Warnt beim Bearbeiten, sobald die Hoechstverschiebung vom
+    /// gespeicherten Wert abweicht. Die Datumsverschiebung hat keine
+    /// Ersetzungstabelle, sie rechnet nur zurueck -- und die Verschiebung
+    /// selbst wird aus diesem Wert abgeleitet. Nach einer Aenderung liessen
+    /// sich frueher erzeugte Pseudodaten nicht mehr korrekt zurueckfuehren,
+    /// und nichts im Lauf wuerde das bemerken.
+    /// </summary>
+    public string? MaxDaysChangeWarning
+        => ShowMaxDays && _originalMaxDays is { } bisher && MaxDays != bisher
+            ? $"Bisher {bisher} Tage. Eine Änderung ergibt eine andere Verschiebung: Pseudodateien, " +
+              "die mit dem bisherigen Wert entstanden sind, lassen sich danach nicht mehr korrekt " +
+              "zurückführen. Dieser Generator hat keine Ersetzungstabelle, er rechnet nur zurück."
+            : null;
+
+    public bool HasMaxDaysChangeWarning => MaxDaysChangeWarning is not null;
+
+    private static int EffectiveMaxDays(int maxDays) => maxDays > 0 ? maxDays : GeneratorSettings.DefaultMaxDays;
 
     // ------------------------------------------------------------- Ausdruck
 
@@ -550,6 +613,10 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(MaskChar));
         OnPropertyChanged(nameof(ShowExpression));
         OnPropertyChanged(nameof(Expression));
+        OnPropertyChanged(nameof(ShowMaxDays));
+        OnPropertyChanged(nameof(MaxDays));
+        OnPropertyChanged(nameof(MaxDaysChangeWarning));
+        OnPropertyChanged(nameof(HasMaxDaysChangeWarning));
     }
 
     private static List<string> SplitValues(string text)
@@ -626,6 +693,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
             if (!SetProperty(ref _sampleInput, neu))
                 return;
 
+            _sampleIsDefault = false;
             RefreshPreview();
         }
     }
@@ -672,6 +740,18 @@ public sealed class GeneratorEditorViewModel : ObservableObject
 
         OnPropertyChanged(nameof(HasPreviewError));
     }
+
+    /// <summary>
+    /// Das vorgegebene Beispiel je Art: ein Datum fuer die drei Datumsarten,
+    /// die mit "Beispiel 4711" nur eine Fehlermeldung zeigen koennten, sonst
+    /// ein Wert mit Buchstaben und Ziffern.
+    /// </summary>
+    private static string DefaultSampleFor(string baseType)
+        => baseType.ToLowerInvariant() switch
+        {
+            "dateshift" or "daterange" or "dategeneralize" => "15.03.2024",
+            _ => "Beispiel 4711",
+        };
 
     /// <summary>Ein Name fuer das Wegwerf-Profil der Vorschau -- auch brauchbar, solange <see cref="Name"/> (noch) ungueltig ist.</summary>
     private string NameForPreview => _name.Trim().Length > 0 ? _name.Trim() : "vorschau";
@@ -735,10 +815,10 @@ public sealed class GeneratorEditorViewModel : ObservableObject
     /// Baut das Ergebnis aus dem Entwurf: die gewaehlte Art, dazu nur die
     /// Optionen, die zu dieser Art gehoeren (<see cref="ProfileValidator.OptionOwnership"/>)
     /// -- alles andere (etwa ein Praefix aus einer fruehreren Wahl von
-    /// "token") wird verworfen. Felder ausserhalb dieser Zuordnung
-    /// (<c>maxDays</c>, <c>formats</c>, <c>country</c>, <c>domain</c>) bleiben
-    /// aus dem Entwurf erhalten, damit von Hand gepflegtes JSON beim
-    /// Bearbeiten nicht verloren geht.
+    /// "token") wird verworfen; ein fremdes <c>maxDays</c> faellt auf die
+    /// Vorgabe zurueck. Felder ausserhalb dieser Zuordnung (<c>formats</c>,
+    /// <c>country</c>, <c>domain</c>) bleiben aus dem Entwurf erhalten, damit
+    /// von Hand gepflegtes JSON beim Bearbeiten nicht verloren geht.
     /// </summary>
     private GeneratorSettings BuildResult()
     {
@@ -770,6 +850,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
             case "maskChar": settings.MaskChar = null; break;
             case "expression": settings.Expression = null; break;
             case "tables": settings.Tables = null; break;
+            case "maxDays": settings.MaxDays = GeneratorSettings.DefaultMaxDays; break;
         }
     }
 

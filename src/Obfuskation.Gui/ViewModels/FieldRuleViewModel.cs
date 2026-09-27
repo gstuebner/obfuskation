@@ -350,10 +350,12 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// <summary>
     /// Ob der gewaehlte Generator ueberhaupt Optionen kennt -- steuert, ob
     /// die Schaltflaeche zum Optionsdialog neben der Generator-Auswahl
-    /// erscheint. Bewusst ohne "expression": dessen Ausdruck und Tabellen
-    /// haben hier keinen eigenen Block, sie werden ausschliesslich im
-    /// Generator-Dialog unter "Regeln &amp; Generatoren" bearbeitet
-    /// (<see cref="GeneratorEditorViewModel"/>).
+    /// erscheint. Bewusst ohne "expression" und "dateShift": Ausdruck und
+    /// Tabellen bzw. die Hoechstverschiebung haben hier keinen eigenen
+    /// Block, sie werden ausschliesslich im Generator-Dialog unter
+    /// "Regeln &amp; Generatoren" bearbeitet (<see cref="GeneratorEditorViewModel"/>).
+    /// Bei "dateShift" ist das gewollt: dort warnt der Dialog, dass eine
+    /// Aenderung aeltere Pseudodaten unumkehrbar macht.
     /// </summary>
     public bool HasOptions
         => ShowPrefix || ShowPlaceholder || ShowDateRange || ShowGranularity

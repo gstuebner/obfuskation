@@ -269,7 +269,20 @@
          Dialogs jetzt bis zu drei Beispiele auf einmal
          (GeneratorPreview.TryExamples), fuer alle Arten, nicht nur fuer den
          Ausdruck-Generator. -->
-    <Version>1.11.0</Version>
+    <!-- 1.12.0: Die Hoechstverschiebung der Datumsverschiebung ("maxDays",
+         Basistyp dateShift) ist im Generator-Dialog einstellbar; dateShift
+         steht damit als neunte Art unter "Grundlage". In OptionOwnership
+         eingetragen, gilt als gesetzt aber nur, wenn der Wert weder 0 noch
+         die Vorgabe 400 ist — gespeicherte Profile tragen "maxDays": 400 an
+         jedem Generator und duerfen dadurch nicht ploetzlich Fehler zeigen.
+         Neu geprueft: hoechstens 36500 Tage (GeneratorSettings.MaxDaysLimit),
+         sonst fuehrte DateTime.AddDays ueber den Kalender hinaus. Beim
+         Bearbeiten warnt der Dialog, sobald der Wert abweicht: die
+         Verschiebung wird aus ihm abgeleitet, und ohne Ersetzungstabelle
+         liessen sich aeltere Pseudodaten nicht mehr zurueckrechnen. Dazu
+         nimmt die Vorschau fuer die drei Datumsarten ein Datum als
+         vorgegebenes Beispiel statt "Beispiel 4711". -->
+    <Version>1.12.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

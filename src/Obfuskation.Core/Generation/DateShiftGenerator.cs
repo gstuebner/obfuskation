@@ -25,7 +25,7 @@ public sealed class GenerationException : Exception
 public sealed class DateShiftGenerator : IPseudonymGenerator
 {
     private string[] _formats = DateValues.FallbackFormats;
-    private int _maxDays = 400;
+    private int _maxDays = GeneratorSettings.DefaultMaxDays;
     private int _offsetDays;
 
     public string Name => "dateShift";

@@ -76,6 +76,7 @@ public static class ProfileValidator
         ("maskChar", "partialMask"),
         ("expression", "expression"),
         ("tables", "expression"),
+        ("maxDays", "dateShift"),
     ];
 
     public static IReadOnlyList<ValidationIssue> Validate(Profile profile, ExtensionLibrary? extensions = null)
@@ -155,6 +156,13 @@ public static class ProfileValidator
         {
             issues.Add(new ValidationIssue($"{pathPrefix}.{key}.maxDays", ValidationSeverity.Error,
                 "maxDays darf nicht negativ sein."));
+        }
+
+        if (settings.MaxDays > GeneratorSettings.MaxDaysLimit)
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.maxDays", ValidationSeverity.Error,
+                $"maxDays darf höchstens {GeneratorSettings.MaxDaysLimit} sein (rund 100 Jahre); " +
+                "größere Verschiebungen führen über den Kalender hinaus."));
         }
 
         ValidateOptionOwnership(pathPrefix, key, baseName, settings, issues);
@@ -254,6 +262,10 @@ public static class ProfileValidator
         "maskChar" => !string.IsNullOrEmpty(settings.MaskChar),
         "expression" => !string.IsNullOrEmpty(settings.Expression),
         "tables" => settings.Tables is { Count: > 0 },
+        // Anders als die uebrigen Optionen hat maxDays keinen leeren Zustand:
+        // gespeicherte Profile tragen den Vorgabewert 400 bei jedem Generator.
+        // Gesetzt heisst darum "weder Vorgabe noch 0" (0 wirkt wie die Vorgabe).
+        "maxDays" => settings.MaxDays is not (0 or GeneratorSettings.DefaultMaxDays),
         _ => false,
     };
 
