@@ -57,6 +57,7 @@ public sealed class TextViewModel : ObservableObject
     private string _matchSummary = "";
     private IReadOnlyList<TextSegment> _inputSegments = [];
     private IReadOnlyList<TextSegment> _resultSegments = [];
+    private IReadOnlyList<TextHighlight> _inputHighlights = [];
     private bool _isEditing = true;
     private TextDirection _direction;
     private CancellationTokenSource? _debounceCts;
@@ -191,6 +192,11 @@ public sealed class TextViewModel : ObservableObject
             if (!SetProperty(ref _inputText, value))
                 return;
 
+            // Die Hervorhebungen tragen Positionen im Text des letzten Laufs.
+            // Nach jeder Aenderung stimmen sie bis zum naechsten Lauf nicht
+            // mehr (siehe InputHighlights) -- das Eingabefeld soll sie dann
+            // sofort verwerfen statt verschoben weiterzuzeigen.
+            OnPropertyChanged(nameof(InputHighlights));
             ScheduleRefresh();
         }
     }
@@ -222,6 +228,21 @@ public sealed class TextViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Die Funde als Positionen im Eingabetext -- fuer das Eingabefeld, das
+    /// anders als die Prueffassung keine Abschnitte je Farbe tragen kann und
+    /// die Farben darum als eigene Ebene unter den Text legt (siehe
+    /// <c>Views.HighlightTextBox</c>). Dieselbe Einteilung wie
+    /// <see cref="InputSegments"/>, nur als Bereiche statt als Textstuecke.
+    ///
+    /// Leer, solange der aktuelle Text nicht der des letzten Laufs ist: waehrend
+    /// der Entprellung zeigten die Positionen sonst auf verschobenen Text, und
+    /// eine falsch sitzende Farbe ist schlimmer als gar keine -- sie behauptet
+    /// an einer Stelle "ersetzt", an der vielleicht gerade ein Echtwert steht.
+    /// </summary>
+    public IReadOnlyList<TextHighlight> InputHighlights
+        => string.Equals(_inputText, _lastRunInput, StringComparison.Ordinal) ? _inputHighlights : [];
+
+    /// <summary>
     /// Setzt Ergebnistext und beide Abschnittslisten in einem Zug. Jeder Pfad,
     /// der <see cref="ResultText"/> aendert, laeuft hier durch -- sonst
     /// zeigten die Farben einen Stand, den es nicht mehr gibt.
@@ -233,11 +254,18 @@ public sealed class TextViewModel : ObservableObject
     private void SetResult(
         string text,
         IReadOnlyList<TextSegment>? inputSegments = null,
-        IReadOnlyList<TextSegment>? resultSegments = null)
+        IReadOnlyList<TextSegment>? resultSegments = null,
+        IReadOnlyList<TextHighlight>? inputHighlights = null)
     {
         ResultText = text;
         InputSegments = inputSegments ?? Plain(_lastRunInput);
         ResultSegments = resultSegments ?? Plain(text);
+
+        // Immer melden, auch bei unveraenderter Liste: der Getter haengt
+        // zusaetzlich am Vergleich mit dem aktuellen Eingabetext, und der kann
+        // mit diesem Lauf wieder gueltig geworden sein.
+        _inputHighlights = inputHighlights ?? [];
+        OnPropertyChanged(nameof(InputHighlights));
     }
 
     private static IReadOnlyList<TextSegment> Plain(string text)
@@ -245,10 +273,10 @@ public sealed class TextViewModel : ObservableObject
 
     /// <summary>
     /// Ob die linke Seite gerade das beschreibbare Feld zeigt statt der
-    /// farbigen Prueffassung. Ein Eingabefeld kann in Avalonia keine
-    /// Hintergruende je Textabschnitt tragen, ein <c>SelectableTextBlock</c>
-    /// kein Tippen -- beides zugleich gibt es nicht, also gibt es zwei
-    /// Zustaende.
+    /// schreibgeschuetzten Prueffassung. Farbig sind seit 1.10.0 beide: die
+    /// Prueffassung ueber <see cref="InputSegments"/>, das Eingabefeld ueber
+    /// <see cref="InputHighlights"/> (ein Eingabefeld kann keine Hintergruende
+    /// je Textabschnitt tragen und zeichnet sie darum auf einer eigenen Ebene).
     ///
     /// Solange nichts dasteht, gilt das Bearbeiten: vor einer leeren, nicht
     /// beschreibbaren Flaeche zu stehen waere das denkbar schlechteste
@@ -486,6 +514,7 @@ public sealed class TextViewModel : ObservableObject
 
             var eintrag = new TextMatchViewModel(
                 match.Value, replacement, match.Rule.Name, canToggle,
+                DetermineScope(match.Rule),
                 !EingebauteRegeln.Contains(match.Rule.Name),
                 RequestAlwaysReplace, _onRemoveRuleRequested, _onEditRuleRequested);
             eintrag.IncludedChanged += RecomputeResultText;
@@ -494,6 +523,19 @@ public sealed class TextViewModel : ObservableObject
 
         MatchSummary = BuildSummary(_lastFound);
     }
+
+    /// <summary>
+    /// Woher ein Fund stammt (Plan P2): "alle Projekte", wenn die getroffene
+    /// Regel Teil von <see cref="ProfileSession.Extensions"/> ist, sonst
+    /// "dieses Projekt". Verlaesslich ueber die Referenz statt den Namen zu
+    /// pruefen: <see cref="TextRuleEngine.FindMatches"/> reicht die
+    /// Regelreferenz in <see cref="TextMatch.Rule"/> weiter, und
+    /// <see cref="ExtensionLibrary.MergeTextRules"/> fuehrt die Originalobjekte
+    /// zusammen -- eine gleichnamige Projektregel verdraengt dabei die globale,
+    /// der Fund zeigt dann richtig "dieses Projekt".
+    /// </summary>
+    private RuleScope DetermineScope(TextRule rule)
+        => _session.Extensions.TextRules.Any(r => ReferenceEquals(r, rule)) ? RuleScope.Global : RuleScope.Project;
 
     private static string BuildSummary(IReadOnlyList<TextMatch> found)
     {
@@ -535,6 +577,7 @@ public sealed class TextViewModel : ObservableObject
         var builder = new StringBuilder(text.Length);
         var eingabe = new List<TextSegment>();
         var ausgabe = new List<TextSegment>();
+        var markierungen = new List<TextHighlight>(_lastFound.Count);
         var position = 0;
 
         for (var i = 0; i < _lastFound.Count; i++)
@@ -556,6 +599,7 @@ public sealed class TextViewModel : ObservableObject
             // zuordnen laesst.
             eingabe.Add(new TextSegment(match.Value, art));
             ausgabe.Add(new TextSegment(ersatz, art));
+            markierungen.Add(new TextHighlight(match.Start, match.Length, art));
 
             builder.Append(text, position, match.Start - position);
             builder.Append(ersatz);
@@ -570,7 +614,7 @@ public sealed class TextViewModel : ObservableObject
         }
 
         builder.Append(text, position, text.Length - position);
-        SetResult(builder.ToString(), eingabe, ausgabe);
+        SetResult(builder.ToString(), eingabe, ausgabe, markierungen);
     }
 
     /// <summary>
@@ -751,6 +795,17 @@ public enum TextSegmentKind
 public sealed record TextSegment(string Text, TextSegmentKind Kind);
 
 /// <summary>
+/// Ein hervorgehobener Bereich des Eingabetextes: dieselbe Aussage wie ein
+/// <see cref="TextSegment"/> der Prueffassung, aber als Position statt als
+/// Textstueck -- das Eingabefeld zeichnet die Farbe unter seinen eigenen Text,
+/// statt ihn in Abschnitte zu zerlegen (siehe <see cref="TextViewModel.InputHighlights"/>).
+/// </summary>
+/// <param name="Start">Erstes Zeichen, gezaehlt in UTF-16-Einheiten wie <see cref="string"/>-Indizes.</param>
+/// <param name="Length">Anzahl der Zeichen.</param>
+/// <param name="Kind">Ersetzt oder bewusst behalten; <see cref="TextSegmentKind.Normal"/> kommt nicht vor.</param>
+public readonly record struct TextHighlight(int Start, int Length, TextSegmentKind Kind);
+
+/// <summary>
 /// Ein einzelner Fund in der Textansicht: Original, Ersatzwert, die Regel,
 /// die gegriffen hat, und ob er fuer diesen Durchgang mitgilt.
 /// </summary>
@@ -760,6 +815,7 @@ public sealed class TextMatchViewModel : ObservableObject
 
     public TextMatchViewModel(
         string original, string replacement, string ruleName, bool canToggle,
+        RuleScope scope,
         bool isUserRule = false,
         Action<string>? onAlwaysReplace = null,
         Action<string>? onRemoveRule = null,
@@ -769,6 +825,7 @@ public sealed class TextMatchViewModel : ObservableObject
         Replacement = replacement;
         RuleName = ruleName;
         CanToggle = canToggle;
+        Scope = scope;
         IsUserRule = isUserRule;
 
         // Eigene Kommandos statt gebundener Aufrufe auf das aeussere
@@ -788,6 +845,25 @@ public sealed class TextMatchViewModel : ObservableObject
     public string Original { get; }
     public string Replacement { get; }
     public string RuleName { get; }
+
+    /// <summary>Wo die getroffene Regel liegt -- Projekt oder Erweiterungsdatei (Plan P2, siehe <see cref="TextViewModel.DetermineScope"/>).</summary>
+    public RuleScope Scope { get; }
+
+    /// <summary>"dieses Projekt" oder "alle Projekte", fuer die Herkunftsspalte der Fundliste.</summary>
+    public string ScopeLabel => Scope == RuleScope.Project ? "dieses Projekt" : "alle Projekte";
+
+    /// <summary>Name und Herkunft in einer Zelle, etwa "fw · dieses Projekt".</summary>
+    public string OriginLabel => $"{RuleName} · {ScopeLabel}";
+
+    /// <summary>
+    /// Erklaert bei einer Vorgaberegel (<see cref="IsUserRule"/> falsch), warum
+    /// sie trotz "dieses Projekt" nicht selbst angelegt wurde: die vier
+    /// eingebauten Muster (iban, email, bic, phone) werden beim Anlegen eines
+    /// Projekts unveraendert aus <see cref="ProfileScaffolder.DefaultTextRules"/>
+    /// ins Profil uebernommen. <c>null</c> bei einer selbst angelegten Regel --
+    /// dort erklaert sich die Herkunft von selbst.
+    /// </summary>
+    public string? OriginTooltip => IsUserRule ? null : "Vorgaberegel, beim Anlegen des Projekts übernommen";
 
     /// <summary>
     /// Ob dieser Fund aus einer selbst angelegten Regel stammt statt aus einer

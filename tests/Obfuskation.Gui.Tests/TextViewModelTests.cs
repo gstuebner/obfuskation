@@ -44,7 +44,7 @@ public sealed class TextViewModelTests : IDisposable
     /// phone) und einer Ersetzungstabelle im Wegwerfverzeichnis -- niemals der
     /// Vorgabepfad unter <c>~/.local/share</c>, den ein Testlauf nicht anfassen darf.
     /// </summary>
-    private ProfileSession ErzeugeSitzung()
+    private ProfileSession ErzeugeSitzung(ExtensionLibrary? extensions = null, Action<Profile>? anpassen = null)
     {
         var profil = new Profile
         {
@@ -52,10 +52,11 @@ public sealed class TextViewModelTests : IDisposable
             MappingStore = Path.Combine(_verzeichnis, "mapping.json"),
             TextRules = ProfileScaffolder.DefaultTextRules(),
         };
+        anpassen?.Invoke(profil);
 
         var pfad = Path.Combine(_verzeichnis, ProfileStore.DefaultFileName);
         ProfileStore.Save(profil, pfad);
-        return ProfileSession.Load(pfad, ExtensionLibrary.Empty);
+        return ProfileSession.Load(pfad, extensions ?? ExtensionLibrary.Empty);
     }
 
     /// <summary>Ohne Entprellung, damit ein Test nicht auf einen Hintergrundtimer warten muss.</summary>
@@ -234,6 +235,84 @@ public sealed class TextViewModelTests : IDisposable
         modell.RequestAlwaysReplace("   ");
 
         Assert.False(gerufen);
+    }
+
+    // ------------------------------------------------------------------
+    // Herkunft in der Fundliste (Plan P2): Regel des Projekts oder Regel fuer
+    // alle Projekte -- ueber die Regelreferenz bestimmt, nicht ueber den Namen.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void Ein_Fund_aus_dem_Profil_traegt_dieses_Projekt()
+    {
+        var sitzung = ErzeugeSitzung(anpassen: profil => profil.TextRules.Add(new TextRule
+        {
+            Name = "hostname", Priority = 60, Generator = "token", Pattern = @"\bFW\d{6}\b",
+        }));
+
+        var modell = ErzeugeViewModel(sitzung);
+        modell.InputText = "Server FW123456";
+        modell.RefreshPreview();
+
+        var fund = Assert.Single(modell.Matches, f => f.RuleName == "hostname");
+        Assert.Equal(RuleScope.Project, fund.Scope);
+        Assert.Equal("dieses Projekt", fund.ScopeLabel);
+        Assert.Equal("hostname · dieses Projekt", fund.OriginLabel);
+    }
+
+    [Fact]
+    public void Ein_Fund_aus_der_Erweiterung_traegt_alle_Projekte()
+    {
+        var erweiterung = new ExtensionLibrary();
+        erweiterung.TextRules.Add(new TextRule
+        {
+            Name = "hostname", Priority = 60, Generator = "token", Pattern = @"\bFW\d{6}\b",
+        });
+
+        var modell = ErzeugeViewModel(ErzeugeSitzung(erweiterung));
+        modell.InputText = "Server FW123456";
+        modell.RefreshPreview();
+
+        var fund = Assert.Single(modell.Matches, f => f.RuleName == "hostname");
+        Assert.Equal(RuleScope.Global, fund.Scope);
+        Assert.Equal("alle Projekte", fund.ScopeLabel);
+    }
+
+    [Fact]
+    public void Bei_gleichem_Namen_in_beiden_Bereichen_gewinnt_dieses_Projekt()
+    {
+        // ExtensionLibrary.MergeTextRules verdraengt die globale Regel schon
+        // vor der Suche -- der Fund kann darum nur von der Projektregel
+        // stammen, und die Herkunftsspalte muss das ebenso zeigen.
+        var erweiterung = new ExtensionLibrary();
+        erweiterung.TextRules.Add(new TextRule
+        {
+            Name = "hostname", Priority = 60, Generator = "token", Pattern = @"\bALT\d{6}\b",
+        });
+
+        var sitzung = ErzeugeSitzung(erweiterung, profil => profil.TextRules.Add(new TextRule
+        {
+            Name = "hostname", Priority = 60, Generator = "token", Pattern = @"\bFW\d{6}\b",
+        }));
+
+        var modell = ErzeugeViewModel(sitzung);
+        modell.InputText = "Server FW123456";
+        modell.RefreshPreview();
+
+        var fund = Assert.Single(modell.Matches, f => f.RuleName == "hostname");
+        Assert.Equal(RuleScope.Project, fund.Scope);
+    }
+
+    [Fact]
+    public void Eine_Vorgaberegel_hat_einen_erklaerenden_Herkunftstooltip()
+    {
+        var modell = ErzeugeViewModel(ErzeugeSitzung());
+        modell.InputText = "Kontakt: max.mustermann@beispiel.de";
+        modell.RefreshPreview();
+
+        var fund = Assert.Single(modell.Matches);
+        Assert.False(fund.IsUserRule);
+        Assert.NotNull(fund.OriginTooltip);
     }
 
     [Fact]
@@ -461,6 +540,68 @@ public sealed class TextViewModelTests : IDisposable
 
         Assert.All(modell.InputSegments, a => Assert.Equal(TextSegmentKind.Normal, a.Kind));
         Assert.All(modell.ResultSegments, a => Assert.Equal(TextSegmentKind.Normal, a.Kind));
+    }
+
+    [Fact]
+    public void Das_Eingabefeld_bekommt_dieselben_Bereiche_wie_die_Prueffassung()
+    {
+        // Das Eingabefeld zeichnet seine Farben ueber Positionen statt ueber
+        // Abschnitte (Views.HighlightTextBox). Beide muessen dieselbe Stelle
+        // meinen, sonst zeigten die zwei Zustaende derselben Seite Verschiedenes.
+        var modell = ErzeugeViewModel(ErzeugeSitzung());
+        modell.InputText = Vermerk;
+        modell.RefreshPreview();
+
+        var ausAbschnitten = new List<TextHighlight>();
+        var position = 0;
+        foreach (var abschnitt in modell.InputSegments)
+        {
+            if (abschnitt.Kind != TextSegmentKind.Normal)
+                ausAbschnitten.Add(new TextHighlight(position, abschnitt.Text.Length, abschnitt.Kind));
+            position += abschnitt.Text.Length;
+        }
+
+        Assert.NotEmpty(modell.InputHighlights);
+        Assert.Equal(ausAbschnitten, modell.InputHighlights);
+    }
+
+    [Fact]
+    public void Ein_abgewaehlter_Fund_wechselt_auch_im_Eingabefeld_die_Farbe()
+    {
+        var modell = ErzeugeViewModel(ErzeugeSitzung());
+        modell.InputText = "Kontakt: max.mustermann@beispiel.de";
+        modell.RefreshPreview();
+
+        Assert.Equal(TextSegmentKind.Replaced, Assert.Single(modell.InputHighlights).Kind);
+
+        modell.Matches[0].IsIncluded = false;
+
+        var bereich = Assert.Single(modell.InputHighlights);
+        Assert.Equal(TextSegmentKind.Excluded, bereich.Kind);
+        Assert.Equal("max.mustermann@beispiel.de", modell.InputText.Substring(bereich.Start, bereich.Length));
+    }
+
+    [Fact]
+    public void Nach_einer_Textaenderung_verschwinden_die_Bereiche_bis_zum_naechsten_Lauf()
+    {
+        // Mit echter Entprellung: der Lauf kommt erst spaeter, und bis dahin
+        // zeigten die alten Positionen auf verschobenen Text.
+        var modell = new TextViewModel(ErzeugeSitzung(), debounceDelay: TimeSpan.FromHours(1));
+        modell.SetInputFromOutside("Kontakt: max.mustermann@beispiel.de");
+        Assert.Single(modell.InputHighlights);
+
+        var gemeldet = new List<string?>();
+        modell.PropertyChanged += (_, e) => gemeldet.Add(e.PropertyName);
+
+        modell.InputText = "Neu: " + modell.InputText;
+
+        Assert.Empty(modell.InputHighlights);
+        Assert.Contains(nameof(TextViewModel.InputHighlights), gemeldet);
+
+        modell.RefreshPreview();
+
+        var bereich = Assert.Single(modell.InputHighlights);
+        Assert.Equal("max.mustermann@beispiel.de", modell.InputText.Substring(bereich.Start, bereich.Length));
     }
 
     // ------------------------------------------------------------------

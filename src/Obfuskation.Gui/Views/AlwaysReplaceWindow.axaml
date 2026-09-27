@@ -13,10 +13,12 @@
         Background="{DynamicResource BrushBackground}">
 
   <!--
-      Breite 680 (vorher 620): die Knopfzeile unten ("In den Einstellungen
-      bearbeiten…", "Abbrechen", "Übernehmen und weiter", "Übernehmen") braucht
-      rund 660 Punkte, bei 620 war "Übernehmen" rechts abgeschnitten. MinWidth
-      gleich Width, damit sie auch beim Verkleinern nicht wieder herausfaellt.
+      Breite 680 (vorher 620): die Knopfzeile unten ("Regeln & Generatoren…",
+      "Abbrechen", "Übernehmen und weiter", "Übernehmen" — kuerzer als der
+      vorige Knopfname "In den Einstellungen bearbeiten…", die Breite passt
+      also weiterhin) braucht rund 660 Punkte, bei 620 war "Übernehmen" rechts
+      abgeschnitten. MinWidth gleich Width, damit sie auch beim Verkleinern
+      nicht wieder herausfaellt.
 
       Drei Fragen in Anwendersprache (was, wie weit, wo), ohne dass an
       irgendeiner Stelle ein regulaerer Ausdruck zu sehen ist. Die
@@ -87,21 +89,32 @@
           <!-- Ersetzen durch -->
           <StackPanel Spacing="4">
             <TextBlock Text="Ersetzen durch" Classes="muted"/>
-            <ComboBox HorizontalAlignment="Stretch"
-                      ItemsSource="{Binding Generators}"
-                      SelectedItem="{Binding SelectedGenerator}">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:GeneratorOption">
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{Binding Name}" MinWidth="96"/>
-                    <TextBlock Text="{Binding Description}" Classes="muted"/>
-                  </StackPanel>
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+              <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
+                        ItemsSource="{Binding Generators}"
+                        SelectedItem="{Binding SelectedGenerator}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:GeneratorOption">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Name}" MinWidth="96"/>
+                      <TextBlock Text="{Binding Description}" Classes="muted"/>
+                    </StackPanel>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <!-- Plan P3d: von hier aus laesst sich ein neuer Generator
+                   anlegen, wahlweise fuer dieses Projekt oder fuer alle. -->
+              <Button Grid.Column="1" Content="Neuer Generator…" Classes="flat"
+                      Command="{Binding NewGeneratorCommand}"/>
+            </Grid>
             <TextBlock Classes="muted small" TextWrapping="Wrap"
                        IsVisible="{Binding HasPrefixHint}"
                        Text="{Binding PrefixHint, StringFormat='Erhält die Kennzeichnung {0}, damit das Pseudonym erkennbar bleibt.'}"/>
+            <!-- Plan P4: "Immer, in allen Projekten" mit einem bislang nur im
+                 Projekt vorhandenen Generator — er wird beim Übernehmen mitkopiert. -->
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       IsVisible="{Binding HasGeneratorScopeHint}"
+                       Text="{Binding GeneratorScopeHint}"/>
           </StackPanel>
 
           <!-- Bezeichnung: vorbelegt aus dem Beispielwert ("fw", bei reinen
@@ -111,7 +124,7 @@
           <StackPanel Spacing="4">
             <TextBlock Text="Bezeichnung" Classes="muted"/>
             <TextBox Text="{Binding RuleNameInput}" PlaceholderText="{Binding SuggestedRuleName}"
-                     ToolTip.Tip="Unter diesem Namen erscheint die Regel in der Fundliste und in den Einstellungen."/>
+                     ToolTip.Tip="Unter diesem Namen erscheint die Regel in der Fundliste und in „Regeln &amp; Generatoren“."/>
             <TextBlock Text="{Binding RuleNameHint}" Classes="muted small" TextWrapping="Wrap"
                        IsVisible="{Binding HasRuleNameHint}"/>
           </StackPanel>
@@ -147,7 +160,7 @@
                  IsVisible="{Binding HasCreatedRules}"/>
 
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-        <Button Content="In den Einstellungen bearbeiten…" Classes="flat" Command="{Binding EditManuallyCommand}"/>
+        <Button Content="Regeln &amp; Generatoren…" Classes="flat" Command="{Binding EditManuallyCommand}"/>
         <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
         <Button Content="Übernehmen und weiter" Command="{Binding ApplyAndContinueCommand}"
                 ToolTip.Tip="Regel anlegen und gleich die nächste eintragen — der Dialog bleibt offen"/>

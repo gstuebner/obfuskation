@@ -2,13 +2,20 @@
 
 **English** · [Deutsch](README.de.md)
 
+![Status: experimental](https://img.shields.io/badge/status-experimental-orange)
+
+> [!WARNING]
+> **Experimental.** This project is a testbed for working with different AI
+> models. It is usable, but not free of bugs, and the documentation is
+> incomplete. This notice will be removed once the project is finished.
+
 Replaces sensitive data in CSV, JSON, and plain text files with plausible pseudonyms and can fully reverse the substitutions. Designed for scenarios where sample data needs to be fed to an AI or LLM, but real data must never leave the organization.
 
 The primary value lies in the return path: the AI's response — generated code, analyses, sample outputs — can be mapped back to real values using `deobfuscate`.
 
 There are two interfaces to the same core: the command-line tool `obfuskation` for scripts and automation, and the graphical interface `obfuskation-gui` for everyday work. Both share the same underlying library and substitution table — whatever one replaces, the other can restore.
 
-The GUI opens on a start page with three entry points: clean up a single piece of text (paste, get real values swapped for pseudonyms, copy the result — no profile or table required up front), work with CSV/JSON files, or translate an AI's reply back. Recurring in-house terms — a hostname pattern, a customer ID — can be turned into a lasting rule from a highlighted word, in plain language, without writing a regular expression.
+The GUI opens on a start page with three entry points: clean up a single piece of text (paste, get real values swapped for pseudonyms, copy the result — no profile or table required up front), work with CSV/JSON files, or translate an AI's reply back. Recurring in-house terms — a hostname pattern, a customer ID — can be turned into a lasting rule from a highlighted word, in plain language, without writing a regular expression, choosing a generator or creating a new one on the spot. **Rules & Generators**, reachable from the header, the start page (rules and generators shared across all projects), or either view's "Edit rules…" button, brings text rules, custom generators, column-name suggestions, and the extension file's location together in one window.
 
 ## Documentation
 

@@ -210,7 +210,43 @@
          und ein Schreibfehler in "Immer ersetzen" nimmt die eben angelegte
          Regel samt eigenem Generator zurueck, statt den Dialog abstuerzen zu
          lassen. -->
-    <Version>1.9.0</Version>
+    <!-- 1.10.0: Gregors Wuensche aus dem Test von 1.9.0
+         (docs/plan-regeln-generatoren.md). Erstens die Fundliste der Textansicht nennt zu jedem Fund
+         die Herkunft ("fw . dieses Projekt" bzw. "alle Projekte") ueber die
+         Regelreferenz (TextViewModel.DetermineScope), nicht ueber den Namen.
+         Zweitens ein neuer Generator laesst sich jetzt von ueberall anlegen
+         und bearbeiten: GeneratorEditorViewModel/-Window, ein einziges
+         Ansichtsmodell fuer beides, erreichbar aus "Immer ersetzen…", dem
+         Reiter "Eigene Generatoren" (der jetzt nur noch anzeigt, nicht mehr
+         inline bearbeitet — Name und Optionen aendert der Dialog) und dem
+         Regelformular. Neu dafuer in der Bibliothek GeneratorPreview
+         (Beispielwert aus einem Wegwerf-Profil, ohne etwas zu speichern) und
+         das Muster verschachtelter Dialoge (ShowGeneratorEditor auf
+         AlwaysReplaceViewModel und SettingsViewModel, gesetzt vom
+         DialogService mit dem jeweils eigenen Fenster als Besitzer).
+         Drittens eine globale Regel nimmt einen bislang nur im Projekt
+         vorhandenen Generator jetzt beim Uebernehmen automatisch mit
+         (ExtensionLibrary.AdoptProjectGenerators) — vorher lief das nur beim
+         Bereichswechsel selbst, nicht wenn eine schon globale Regel
+         nachtraeglich einen Projekt-Generator waehlte. Viertens einheitliche
+         Einstiege: das Fenster "Einstellungen" heisst jetzt "Regeln &
+         Generatoren", "Regeln bearbeiten…" ersetzt den Knopf
+         "Immer ersetzen…" der Dateiansicht (der kleine Dialog bleibt nur noch
+         beim Markieren von Text erreichbar), und die Startseite bekommt
+         denselben Einstieg, ohne Profil beschraenkt auf "alle Projekte"
+         (MainViewModel.ShowSettingsAsync(globalOnly)). Fuenftens zeigt die
+         Textansicht ihre Farben jetzt auch im Eingabefeld, nicht nur in der
+         Prueffassung: HighlightTextBox legt beim Anwenden der Vorlage eine
+         Zeichenebene unter PART_TextPresenter und zeichnet die Funde aus dem
+         TextLayout des Presenters (TextViewModel.InputHighlights, nur gueltig,
+         solange der Text dem des letzten Laufs entspricht). Sechstens drei
+         Layoutfehler, beim Messen fuer 1.10.0 gefunden: die Kopfzeile
+         ueberdeckte unter rund 880 Punkten den Programmnamen (unter 900 jetzt
+         nur Zahnrad und Themensymbol), die Knoepfe der Karte "Felder"
+         verdraengten deren Ueberschrift (jetzt eigene Zeile), und die
+         Spalten der Fundliste fluchteten nicht (gemeinsame Spaltenbreiten).
+         Dazu die Kennzeichnung als experimentell in beiden READMEs. -->
+    <Version>1.10.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

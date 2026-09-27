@@ -23,6 +23,7 @@ public sealed class StartViewModel : ObservableObject
         RelayCommand replyCommand,
         AsyncRelayCommand filesCommand,
         RelayCommand helpCommand,
+        RelayCommand globalRulesCommand,
         Func<string, Task> openRecentProfile)
     {
         _settings = settings;
@@ -32,6 +33,7 @@ public sealed class StartViewModel : ObservableObject
         ReplyCommand = replyCommand;
         FilesCommand = filesCommand;
         HelpCommand = helpCommand;
+        GlobalRulesCommand = globalRulesCommand;
 
         OpenRecentProfileCommand = new AsyncRelayCommand(
             () => _recentProfilePath is null ? Task.CompletedTask : _openRecentProfile(_recentProfilePath),
@@ -50,6 +52,16 @@ public sealed class StartViewModel : ObservableObject
     public AsyncRelayCommand FilesCommand { get; }
 
     public RelayCommand HelpCommand { get; }
+
+    /// <summary>
+    /// Einheitlicher Einstieg (Plan P1): oeffnet "Regeln & Generatoren" ohne
+    /// Profilbezug -- ohne geladenes Profil sieht das Fenster ohnehin nur die
+    /// Regeln und Generatoren fuer alle Projekte, mit einem geladenen bleibt
+    /// es trotzdem so, denn von der Startseite aus geht es hier nicht um ein
+    /// bestimmtes Projekt.
+    /// </summary>
+    public RelayCommand GlobalRulesCommand { get; }
+
     public AsyncRelayCommand OpenRecentProfileCommand { get; }
 
     private string? _recentProfilePath;

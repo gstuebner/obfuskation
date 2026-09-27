@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Text;
 using Obfuskation.Core;
 using Obfuskation.Core.Configuration;
 using Obfuskation.Core.Generation;
@@ -128,14 +127,11 @@ public sealed class MainViewModel : ObservableObject
         // gemeinsamen Liste, ungefiltert.
         ShowSettingsCommand = new RelayCommand<SettingsTab?>(tab => _ = ShowSettingsAsync(tab ?? SettingsTab.TextRules));
 
-        // "Immer ersetzen…" aus der Dateiansicht: Vorbelegung ist der
-        // Beispielwert des gerade gewaehlten Feldes (falls eines gewaehlt
-        // ist), die Vorschau prueft gegen den Rohinhalt der geoeffneten Datei.
-        // Der Einstieg aus der Textansicht laeuft nicht hierueber, sondern
-        // ueber TextViewModel.RequestAlwaysReplace (siehe ShowText).
-        ShowAlwaysReplaceCommand = new AsyncRelayCommand(
-            () => ShowAlwaysReplaceAsync(_selectedField?.SampleValue ?? "", CurrentFileContextText()),
-            () => _session is not null);
+        // Einheitlicher Einstieg von der Startseite (Plan P1): oeffnet
+        // "Regeln & Generatoren" ohne Profilbezug, auch wenn eines geladen
+        // ist -- ohne Profil zeigt das Fenster ohnehin nur "alle Projekte".
+        ShowGlobalRulesCommand = new RelayCommand(
+            () => _ = ShowSettingsAsync(SettingsTab.TextRules, globalOnly: true));
 
         // Die Ansichtsumschaltung: das Profil (falls vorhanden) bleibt beim
         // Wechsel unberuehrt im Hintergrund geladen, es wechselt nur die
@@ -162,7 +158,7 @@ public sealed class MainViewModel : ObservableObject
         // angelegten Befehle.
         Start = new StartViewModel(
             _settings, ShowTextCommand, ShowReplyCommand, ShowFilesCommand, ShowHelpCommand,
-            OpenRecentProfileAsync);
+            ShowGlobalRulesCommand, OpenRecentProfileAsync);
     }
 
     // ------------------------------------------------------------- Befehle
@@ -191,8 +187,12 @@ public sealed class MainViewModel : ObservableObject
     /// </summary>
     public RelayCommand<SettingsTab?> ShowSettingsCommand { get; }
 
-    /// <summary>Der Dialog "Immer ersetzen…" aus der Dateiansicht heraus (siehe Konstruktor).</summary>
-    public AsyncRelayCommand ShowAlwaysReplaceCommand { get; }
+    /// <summary>
+    /// Einstieg von der Startseite (Plan P1): oeffnet "Regeln & Generatoren"
+    /// ohne Profilbezug -- der Reiter "Eigene Generatoren" zeigt dann keine
+    /// Karte "Dieses Projekt", auch wenn im Hintergrund eines geladen ist.
+    /// </summary>
+    public RelayCommand ShowGlobalRulesCommand { get; }
 
     /// <summary>Kopfzeile: zurueck zur Startseite, das Profil bleibt geladen.</summary>
     public RelayCommand ShowStartCommand { get; }
@@ -737,22 +737,15 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Der Text, an dem der Vorschaustreifen von "Immer ersetzen…" seine
-    /// Trefferzahl zeigt, wenn der Dialog aus der Dateiansicht heraus
-    /// angestossen wird -- dort gibt es keinen Fliesstext wie in der
-    /// Textansicht, nur den Rohinhalt der geoeffneten Datei.
-    /// </summary>
-    private string CurrentFileContextText() => _dataContent is null ? "" : Encoding.UTF8.GetString(_dataContent);
-
-    /// <summary>
-    /// Der Dialog "Immer ersetzen…", von beiden Einstiegen gemeinsam genutzt:
-    /// aus der Textmarkierung der Textansicht (<see cref="TextViewModel.RequestAlwaysReplace"/>,
-    /// verdrahtet in <see cref="ShowText"/>) und aus <see cref="ShowAlwaysReplaceCommand"/>
-    /// der Dateiansicht. Baut das Ansichtsmodell mit direktem Zugriff auf
-    /// Profil und Erweiterung, zeigt den Dialog und rechnet danach die
-    /// Vorschau der Textansicht neu -- die muss die neue Regel sofort
-    /// beruecksichtigen, unabhaengig davon, ob sie gerade sichtbar ist oder
-    /// nur im Hintergrund weiterlebt (siehe <see cref="Text"/>).
+    /// Der Dialog "Immer ersetzen…", angestossen aus der Textmarkierung der
+    /// Textansicht (<see cref="TextViewModel.RequestAlwaysReplace"/>,
+    /// verdrahtet in <see cref="ShowText"/>) -- die Dateiansicht fuehrt seit
+    /// Plan P1 nicht mehr hierher, sondern direkt in "Regeln & Generatoren"
+    /// (siehe <see cref="ShowSettingsAsync"/>). Baut das Ansichtsmodell mit
+    /// direktem Zugriff auf Profil und Erweiterung, zeigt den Dialog und
+    /// rechnet danach die Vorschau der Textansicht neu -- die muss die neue
+    /// Regel sofort beruecksichtigen, unabhaengig davon, ob sie gerade
+    /// sichtbar ist oder nur im Hintergrund weiterlebt (siehe <see cref="Text"/>).
     /// </summary>
     private async Task ShowAlwaysReplaceAsync(
         string initialSample, string contextText,
@@ -830,30 +823,38 @@ public sealed class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Oeffnet die Einstellungen (Plan Teil B): eine gemeinsame Textregel-
-    /// Liste (Projekt und Erweiterungsdatei nebeneinander, mit "Gilt für" je
-    /// Regel), eigene Generatoren, Spaltenmuster und der Reiter "Ablageort".
-    /// Das Ansichtsmodell arbeitet auf Kopien; erst nach erfolgreichem
-    /// "Übernehmen" (<see cref="SettingsViewModel.Applied"/>) muss hier
-    /// irgendetwas nachgezogen werden.
+    /// Oeffnet "Regeln & Generatoren" (Plan Teil B, Namen seit Plan P1): eine
+    /// gemeinsame Textregel-Liste (Projekt und Erweiterungsdatei nebeneinander,
+    /// mit "Gilt für" je Regel), eigene Generatoren, Spaltenmuster und der
+    /// Reiter "Ablageort". Das Ansichtsmodell arbeitet auf Kopien; erst nach
+    /// erfolgreichem "Übernehmen" (<see cref="SettingsViewModel.Applied"/>)
+    /// muss hier irgendetwas nachgezogen werden.
     /// </summary>
     /// <param name="tab">Der Reiter, mit dem sich das Fenster oeffnet.</param>
     /// <param name="ruleName">Eine vorab auszuwaehlende Textregel, oder <c>null</c>.</param>
     /// <param name="scope">
     /// Bereich, auf den der Filter der Regelliste vorbelegt wird, wenn
-    /// <paramref name="ruleName"/> fehlt (etwa nach "In den Einstellungen
-    /// bearbeiten…", siehe <see cref="ShowAlwaysReplaceAsync"/>). Ist
+    /// <paramref name="ruleName"/> fehlt (etwa nach "Regeln & Generatoren…",
+    /// siehe <see cref="ShowAlwaysReplaceAsync"/>). Ist
     /// <paramref name="ruleName"/> gesetzt, entscheidet er stattdessen, welche
     /// der beiden gleichnamigen Regeln ausgewaehlt wird (Projekt gewinnt bei
     /// Gleichstand).
     /// </param>
+    /// <param name="globalOnly">
+    /// Einstieg von der Startseite (Plan P1): das Fenster oeffnet ohne
+    /// Profilbezug, auch wenn im Hintergrund eines geladen ist -- es sieht dann
+    /// nur die Regeln und Generatoren fuer alle Projekte. Das geladene Profil
+    /// bleibt davon unberuehrt, es wird nur nicht mitgegeben.
+    /// </param>
     public async Task ShowSettingsAsync(
-        SettingsTab tab = SettingsTab.TextRules, string? ruleName = null, RuleScope? scope = null)
+        SettingsTab tab = SettingsTab.TextRules, string? ruleName = null, RuleScope? scope = null,
+        bool globalOnly = false)
     {
         var schreibzustand = ExtensionLibrary.GetWriteState();
         var fundort = ExtensionLibrary.ResolvePath();
         var viewModel = new SettingsViewModel(
-            _session, _extensions, schreibzustand, _extensionLoadError, fundort, tab, ruleName, scope);
+            globalOnly ? null : _session, _extensions, schreibzustand, _extensionLoadError, fundort, tab, ruleName,
+            scope);
 
         var uebernommen = await _dialogs().ShowSettingsAsync(viewModel);
         if (!uebernommen)
@@ -873,9 +874,9 @@ public sealed class MainViewModel : ObservableObject
 
         StatusText = (viewModel.ProjectChanged, viewModel.GlobalChanged) switch
         {
-            (true, true) => "Einstellungen übernommen: Projekt und hauseigene Muster.",
-            (true, false) => "Profileinstellungen übernommen.",
-            (false, true) => $"Hauseigene Muster übernommen: {viewModel.GlobalPath}.",
+            (true, true) => "Regeln & Generatoren übernommen: Projekt und alle Projekte.",
+            (true, false) => "Regeln & Generatoren übernommen: dieses Projekt.",
+            (false, true) => $"Regeln & Generatoren übernommen: alle Projekte ({viewModel.GlobalPath}).",
             _ => "Keine Änderungen zum Übernehmen.",
         };
     }
@@ -2114,7 +2115,6 @@ public sealed class MainViewModel : ObservableObject
         ObfuscateAllCommand.RaiseCanExecuteChanged();
         DeobfuscateAllCommand.RaiseCanExecuteChanged();
         ShowPatternSuggestionsCommand.RaiseCanExecuteChanged();
-        ShowAlwaysReplaceCommand.RaiseCanExecuteChanged();
         OpenInTextViewCommand.RaiseCanExecuteChanged();
     }
 }

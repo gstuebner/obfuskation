@@ -191,27 +191,54 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Immer_ersetzen_aus_der_Dateiansicht_legt_die_Regel_im_Profil_an()
+    public async Task Regeln_bearbeiten_aus_der_Dateiansicht_oeffnet_die_Textregeln()
     {
-        // Teil C, zweiter Einstieg: der Knopf "Immer ersetzen…" neben "Felder
-        // automatisch erkennen…" nutzt den Beispielwert des gewaehlten Feldes
-        // als Vorbelegung.
+        // Plan P1: die Dateiansicht hat keinen eigenen Dialog "Immer
+        // ersetzen…" mehr -- der Knopf neben "Felder automatisch erkennen…"
+        // heisst jetzt "Regeln bearbeiten…" und fuehrt wie die Textansicht auf
+        // das grosse Fenster "Regeln & Generatoren", ohne Parameter also auf
+        // den Reiter "Textregeln".
         var profil = SchreibeProfil();
         var csv = SchreibeCsv();
-        var dialoge = new FakeDialogService { AlwaysReplaceConfirmed = true };
+        var dialoge = new FakeDialogService();
 
         var modell = Erzeugen(dialoge);
         await modell.InitializeAsync(profil, csv);
 
-        modell.SelectedField = modell.Fields.Single(f => f.FieldName == "Kundennummer");
+        Assert.True(modell.ShowSettingsCommand.CanExecute(null));
+        modell.ShowSettingsCommand.Execute(null);
+        await Task.Yield();
 
-        await AusfuehrenUndWartenAsync(modell.ShowAlwaysReplaceCommand);
+        Assert.NotNull(dialoge.LastSettingsViewModel);
+        Assert.Equal(SettingsTab.TextRules, dialoge.LastSettingsViewModel!.SelectedTab);
+    }
 
-        Assert.NotNull(dialoge.LastAlwaysReplaceViewModel);
-        Assert.Equal("4711", dialoge.LastAlwaysReplaceViewModel!.Sample);
-        Assert.True(dialoge.LastAlwaysReplaceViewModel.Confirmed);
+    [Fact]
+    public async Task ShowGlobalRulesCommand_oeffnet_ohne_Profilbezug_auch_mit_geladenem_Profil()
+    {
+        // Startseite, Knopf "Regeln & Generatoren…" (Plan P1): zeigt immer nur
+        // die Regeln und Generatoren fuer alle Projekte, unabhaengig davon, ob
+        // im Hintergrund ein Profil geladen ist -- das geladene Profil bleibt
+        // dabei unangetastet.
+        var profil = SchreibeProfil(p => p.TextRules.Add(
+            new TextRule { Name = "profilregel", Pattern = @"\bA\d+\b" }));
+        var dialoge = new FakeDialogService { SettingsApplyConfirmed = true };
+
+        var modell = Erzeugen(dialoge);
+        await modell.InitializeAsync(profil, null);
+
+        Assert.True(modell.HasProfile);
+
+        modell.Start.GlobalRulesCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.NotNull(dialoge.LastSettingsViewModel);
+        Assert.False(dialoge.LastSettingsViewModel!.HasProfile);
+
+        // Nach dem Uebernehmen bleibt das geladene Profil unveraendert -- die
+        // Kopie im Fenster kannte es nie (session: null).
         Assert.Single(modell.Session!.Profile.TextRules);
-        Assert.True(modell.Session.HasUnsavedChanges);
+        Assert.Equal("profilregel", modell.Session.Profile.TextRules[0].Name);
     }
 
     [Fact]

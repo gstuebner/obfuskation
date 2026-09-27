@@ -2,16 +2,18 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.9.0
+version: 1.10.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 24.09.2026
+date: 26.09.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.9.0 · Stand 24. September 2026
+Fassung 1.10.0 · Stand 26. September 2026
+
+Die Bilder zeigen teilweise noch den Stand 1.9.
 
 Diese Anleitung richtet sich an alle, die mit der Oberfläche
 `obfuskation-gui` arbeiten: Beispieldaten für eine KI vorbereiten, indem
@@ -51,6 +53,13 @@ Zurück zur Startseite führt aus jeder Ansicht „← Start“ oben links (oder
 Klick auf „Obfuskation“ daneben), ebenfalls ohne ein geladenes Profil zu
 verwerfen.
 
+Unten zwei weitere Knöpfe: **„Regeln & Generatoren…“** öffnet dasselbe Fenster
+wie der Knopf in der Kopfzeile (Kapitel 5), aber ausdrücklich ohne
+Profilbezug — auch mit einem im Hintergrund geladenen Projekt zeigt es nur die
+Regeln und Generatoren für alle Projekte, denn von der Startseite aus geht es
+nicht um ein bestimmtes Projekt. **„Kurzhilfe…“** öffnet das gleichnamige
+Fenster, siehe unten.
+
 Übersprungen wird die Startseite nur dort, wo jemand ausdrücklich gesagt hat,
 was er will: bei einem Profil oder einer Datei auf der Befehlszeile. Dann
 öffnet sich sofort die Dateiansicht wie gewohnt.
@@ -63,8 +72,11 @@ Zwei Spalten, Text links, Ergebnis rechts:
    öffnen oder in das Fenster ziehen.
 2. Kurz nach der letzten Änderung erscheint rechts der gesäuberte Text,
    darunter die Fundliste — „Gefunden: 3× email · 1× iban“ — mit jedem
-   einzelnen Fund und seinem Pseudonym. Ein Häkchen je Fund schaltet ihn für
-   diesen Durchgang ab; der Klartext bleibt dann an dieser Stelle stehen.
+   einzelnen Fund, seinem Pseudonym und seiner **Herkunft**: „fw · dieses
+   Projekt“ oder „fw · alle Projekte“, je nachdem, ob die getroffene Regel im
+   geladenen Profil oder in der hauseigenen Erweiterungsdatei steht. Ein
+   Häkchen je Fund schaltet ihn für diesen Durchgang ab; der Klartext bleibt
+   dann an dieser Stelle stehen.
 3. **Kopieren** legt das angezeigte Ergebnis in die Zwischenablage. Erst
    dieser Klick trägt neue Werte in die Ersetzungstabelle ein — bis dahin war
    alles Vorschau.
@@ -99,8 +111,11 @@ Geburtsdaten, Steuer-IDs, Kennzeichen, Kunden- und Vertragsnummern sehen sie
 dort nur „Keine Funde im Text.“ — leicht als „nichts zu tun“ zu lesen.
 
 Zum Tippen und Ändern schaltet **„Bearbeiten“** auf ein gewöhnliches Eingabefeld
-um, **„Fertig“** zurück auf die farbige Ansicht. Text über „Einfügen“, „Datei…“
-oder Ziehen landet sofort in der Prüffassung.
+um, **„Fertig“** zurück auf die Prüffassung. Auch das Eingabefeld zeigt die
+Farben: Nach einer kurzen Tipp-Pause erscheinen sie unter dem Text, während des
+Tippens verschwinden sie kurz, damit keine Farbe an einer verschobenen Stelle
+steht. Text über „Einfügen“, „Datei…“ oder Ziehen landet sofort in der
+Prüffassung.
 
 ### Übersehenes markieren — eigene Begriffe ohne regulären Ausdruck
 
@@ -112,8 +127,11 @@ niemand zu sehen.
   Eintrag **„»…« immer ersetzen…“** — er nennt den markierten Wert. Alternativ
   **Strg+M**. Ohne Markierung steht der Eintrag ausgegraut da. Derselbe Dialog
   öffnet sich aus einem Eintrag der Fundliste heraus über „immer…“.
-- **Dateiansicht**: der Knopf **„Immer ersetzen…“** neben „Felder automatisch
-  erkennen…“, vorbelegt mit dem Beispielwert des gerade gewählten Feldes.
+
+Diesen kleinen Dialog gibt es nur beim Markieren von Text — die Dateiansicht
+kennt ihn nicht mehr: dort führt **„Regeln bearbeiten…“** neben „Felder
+automatisch erkennen…“ direkt in das große Fenster „Regeln & Generatoren“
+(siehe unten).
 
 Der Dialog fragt:
 
@@ -123,21 +141,29 @@ Der Dialog fragt:
    „FW“ + 6 Ziffern — in Worten, nicht als `\bFW\d{6}\b`). Ein
    Vorschaustreifen zeigt sofort, wie oft das gewählte Muster im aktuellen
    Text zuträfe, mit den Fundstellen.
-3. **Bezeichnung** — unter diesem Namen erscheint die Regel in der Fundliste
-   und in den Einstellungen. Vorbelegt aus dem Wert (`FW123456` → `fw`, eine
-   reine Ziffernfolge wie eine Kartennummer → `nummer`), aber frei änderbar,
-   etwa zu „Kreditkartennummer“. Ist die Bezeichnung schon vergeben, sagt der
-   Dialog vorher, mit welcher angehängten Nummer die Regel angelegt wird.
-4. **Wo gilt das?** — „nur in diesem Projekt“ trägt die Regel in das offene
+3. **Ersetzen durch** — der Generator, meist „token“ mit einer aus dem Wert
+   abgeleiteten Kennzeichnung (`FW123456` → `FW~`). Der Knopf **„Neuer
+   Generator…“** daneben öffnet denselben Generator-Dialog wie im Reiter
+   „Eigene Generatoren“ (Kapitel 5) — wahlweise für dieses Projekt oder für
+   alle, unabhängig davon, wo die Regel selbst landet.
+4. **Bezeichnung** — unter diesem Namen erscheint die Regel in der Fundliste
+   und in „Regeln & Generatoren“. Vorbelegt aus dem Wert (`FW123456` → `fw`,
+   eine reine Ziffernfolge wie eine Kartennummer → `nummer`), aber frei
+   änderbar, etwa zu „Kreditkartennummer“. Ist die Bezeichnung schon vergeben,
+   sagt der Dialog vorher, mit welcher angehängten Nummer die Regel angelegt
+   wird.
+5. **Wo gilt das?** — „nur in diesem Projekt“ trägt die Regel in das offene
    Profil ein. „Immer, in allen Projekten“ schreibt sie stattdessen in die
    Erweiterungsdatei (Kapitel 11) — der Dialog nennt den Zielpfad vorher im
    Klartext und weist darauf hin, wenn dabei eine Sicherungskopie entsteht,
    weil die Datei von Hand gepflegte Kommentare enthält. Ist die
    Erweiterungsdatei kaputt oder schreibgeschützt, steht diese Wahl gar nicht
-   erst zur Verfügung — der Dialog nennt den Grund.
+   erst zur Verfügung — der Dialog nennt den Grund. Verwendet die Regel einen
+   Generator, den es bislang nur im Projekt gibt, wird er beim Übernehmen für
+   alle Projekte mitkopiert, mit einem Hinweis darunter.
 
-„In den Einstellungen bearbeiten…“ führt bei Bedarf in die vollständige
-Fachansicht mit Erprobungsfeld — das Fenster „Einstellungen“ (Kapitel 5), Reiter
+**„Regeln & Generatoren…“** führt bei Bedarf in die vollständige Fachansicht
+mit Erprobungsfeld — das gleichnamige Fenster (Kapitel 5), Reiter
 „Textregeln“, mit dem Filter „Zeigen“ auf der Reichweite, die unter „Wo gilt
 das?“ gewählt war.
 
@@ -152,8 +178,8 @@ Durchgang bereits entstanden ist.
 **Eine Regel wieder loswerden oder ändern.** Ein zu weit geratenes Muster —
 „alles dieser Form“ auf einem Datum ersetzt fortan jedes Datum — lässt sich in
 der Fundliste über **„Regel entfernen“** wieder löschen; über **„bearbeiten…“**
-öffnen sich stattdessen die Einstellungen mit ausgewählter Regel, um nur das
-Muster anzupassen. Beide Knöpfe erscheinen dort anstelle von „immer…“, sobald
+öffnet sich stattdessen „Regeln & Generatoren“ mit ausgewählter Regel, um nur
+das Muster anzupassen. Beide Knöpfe erscheinen dort anstelle von „immer…“, sobald
 ein Fund aus einer selbst angelegten Regel stammt. Die vier eingebauten Regeln
 bleiben davon unberührt: für sie ist das Häkchen der richtige Weg, denn es
 gilt nur für den einen Durchgang. Bereits vergebene Pseudonyme bleiben beim
@@ -354,9 +380,10 @@ bliebe sonst unerreichbar.
 einem Punkt davor: gefüllt und türkis heißt *entschieden*, ein roter,
 hohler Kreis heißt *offen*. Solange auch nur ein Feld offen ist, bricht
 jeder Lauf ab (Abschnitt 4, Schritt 2). Daneben stehen zwei Schaltflächen:
-**»Immer ersetzen…«** legt aus dem Beispielwert des gewählten Feldes eine
-dauerhafte Ersetzungsregel an, ohne regulären Ausdruck (Kapitel 1 beschreibt
-den Dialog ausführlich); **»Felder automatisch erkennen…«** (vormals „Muster
+**»Regeln bearbeiten…«** führt in das Fenster „Regeln & Generatoren“ (Reiter
+„Textregeln“, siehe unten) — derselbe Weg wie in der Textansicht, ohne den
+Umweg über den kleinen Dialog „Immer ersetzen…“, den es in der Dateiansicht
+nicht mehr gibt; **»Felder automatisch erkennen…«** (vormals „Muster
 erkennen…“) schlägt für offene Felder anhand der tatsächlichen Werte einen
 passenden Generator vor (Kapitel 11).
 
@@ -442,8 +469,9 @@ geschieht oder zuletzt geschah — vom schlichten „Bereit.“ bis zur Meldung
 
 **Die Nebenfenster**, über **Mehr** erreichbar:
 
-- **Einstellungen…** — öffnet dasselbe Fenster wie der Knopf „⚙ Einstellungen“
-  in der Kopfzeile (Strg+,), im Reiter „Textregeln“. Siehe unten.
+- **Regeln & Generatoren…** — öffnet dasselbe Fenster wie der Knopf „⚙ Regeln
+  & Generatoren“ in der Kopfzeile (Strg+,), im Reiter „Textregeln“. Siehe
+  unten.
 - **Ersetzungstabelle…** — Pfad, Anzahl je Namensraum und die Dateirechte,
   seit dieser Fassung auch bearbeitbar. Siehe unten.
 - **Kurzhilfe…** — kurze Karten für den schnellen Einstieg, im Menü durch
@@ -452,18 +480,27 @@ geschieht oder zuletzt geschah — vom schlichten „Bereit.“ bis zur Meldung
   die verwendeten Pfade.
 
 Die früheren Einträge „Textregeln…“ und „Hauseigene Muster…“ (nur lesend)
-sind entfallen: beides zeigt jetzt das eine Fenster „Einstellungen“.
+sind schon länger entfallen; seit dieser Fassung heißt auch das Fenster selbst
+nicht mehr „Einstellungen“, sondern **„Regeln & Generatoren“** — ein Name, der
+sagt, was drinsteht, statt eine Verlegenheitsbezeichnung zu sein.
 
-![Das Mehr-Menü mit „Einstellungen…“ anstelle der früheren Einträge „Textregeln…“ und „Hauseigene Muster…“.](bilder/gui-mehr-menue.png)
-*Das Mehr-Menü, neu aufzunehmen: zeigt noch den Stand vor dieser Fassung
-(„Textregeln…“, „Hauseigene Muster…“) statt des neuen Eintrags
-„Einstellungen…“.*
+![Das Mehr-Menü mit „Regeln & Generatoren…“ anstelle der früheren Einträge „Textregeln…“, „Hauseigene Muster…“ und „Einstellungen…“.](bilder/gui-mehr-menue.png)
+*Das Mehr-Menü, neu aufzunehmen: zeigt noch den Stand vor dieser Fassung.*
 
-### Einstellungen: Textregeln, eigene Generatoren und Spaltenmuster an einem Ort
+### Regeln & Generatoren: Textregeln, eigene Generatoren und Spaltenmuster an einem Ort
 
-Erreichbar über den Knopf **„⚙ Einstellungen“** in der Kopfzeile (immer
-sichtbar), das Tastenkürzel **Strg+,** oder „Mehr → Einstellungen…“. Vier
-Reiter, nach **Thema** statt nach Ablageort — anders als in der Vorfassung
+Erreichbar über den Knopf **„⚙ Regeln & Generatoren“** in der Kopfzeile
+(immer sichtbar; bei schmalem Fenster, unter 900 Punkten Breite, zeigt er
+nur noch das Zahnrad ⚙, und der Themen-Knopf daneben nur sein Symbol, damit
+die Zeile nicht überläuft), das
+Tastenkürzel **Strg+,**, „Mehr → Regeln & Generatoren…“ oder — ohne
+geöffnetes Profil — die Startseite, deren Knopf **„Regeln & Generatoren…“**
+denselben Reiter zeigt, dann aber nur mit den Regeln und Generatoren für alle
+Projekte: eine Hinweiszeile über den Reitern sagt das, und der Fenstertitel
+endet auf „– alle Projekte“ statt auf den Profilnamen. In der Dateiansicht und
+der Textansicht führt **„Regeln bearbeiten…“** ebenfalls hierher, in den
+Reiter „Textregeln“. Vier Reiter, nach **Thema** statt nach Ablageort — anders
+als in der Vorfassung
 gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
 
 1. **„Textregeln“** — eine gemeinsame Liste aus den Regeln des geladenen
@@ -498,9 +535,12 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
    als Fehlertext, „trifft auch leeren Text“ als Warnung.
 
    **„Gilt für“** entscheidet zwischen „Dieses Projekt“ und „Alle Projekte“
-   und lässt sich jederzeit umschalten (Nutzt die Regel einen eigenen
+   und lässt sich jederzeit umschalten (nutzt die Regel einen eigenen
    Generator, der im Ziel noch nicht existiert, wird er mitkopiert statt
-   verschoben, damit die Quelle funktionsfähig bleibt). Ist die
+   verschoben, damit die Quelle funktionsfähig bleibt). Das Gleiche gilt, wenn
+   eine schon globale Regel nachträglich einen Generator wählt, den es
+   bislang nur im Projekt gibt — ein Hinweis unter der Generator-Auswahl sagt
+   das vorher, mitkopiert wird er beim „Übernehmen“ des Fensters. Ist die
    Erweiterungsdatei gesperrt, ist die Wahl „Alle Projekte“ gesperrt, mit
    dem Grund im Tooltip. Eine gesperrte hauseigene Regel trägt zusätzlich
    den Knopf **„Für dieses Projekt anpassen“**: er legt eine bearbeitbare
@@ -512,9 +552,16 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
    zeigt sofort, was im Probetext greift — dieselbe Vereinigung aus Profil-
    und Erweiterungsregeln wie ein echter Lauf.
 2. **„Eigene Generatoren“** — wie zuvor die Abschnitte „Dieses Projekt“ und
-   „Alle Projekte“ (🔒 bei gesperrter Erweiterungsdatei) mit Name, Typ und
-   Präfix; „Entfernen“ ist gesperrt, solange noch eine Regel oder ein Feld
-   den Generator nutzt, mit einem Tooltip, der sie nennt.
+   „Alle Projekte“ (🔒 bei gesperrter Erweiterungsdatei), jetzt aber nur noch
+   zum Lesen: Name, Art (in Worten, etwa „allgemeine Kennung (TOK_…), mit
+   Kennzeichnung davor“) und eine Kurzfassung der wichtigsten Option, etwa
+   „Kennzeichnung FW~“ oder „3 Werte“. Oben der Knopf **„+ Neuer
+   Generator…“**, an jeder Zeile **„Bearbeiten…“** und **„Entfernen“** —
+   Name, Art und alle Optionen ändert man jetzt ausschließlich im
+   Generator-Dialog (siehe unten), nicht mehr in der Zeile selbst.
+   „Entfernen“ ist weiterhin gesperrt, solange noch eine Regel oder ein Feld
+   den Generator nutzt, mit einem Tooltip, der sie nennt; „Bearbeiten…“
+   bleibt dabei möglich, sperrt in diesem Fall aber Name und Art im Dialog.
 3. **„Spalten-Vorschläge“** — die **Spaltenmuster** (`fieldRules`, Kapitel
    11) der Erweiterungsdatei: Muster für den Spaltennamen (mit demselben
    „?“-Knopf, hier mit Beispielen für Spaltennamen wie `.*iban.*`),
@@ -527,6 +574,19 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
    ihr Ordner ist es, oder sie ist kaputt), dazu die Liste aller geprüften
    Fundorte. Die Knöpfe **„Ordner öffnen“** und **„Im Editor öffnen“** führen
    direkt zur Datei.
+
+**Der Generator-Dialog** (neu, „+ Neuer Generator…“ bzw. „Bearbeiten…“) fragt
+Bezeichnung, Art der Ersetzung (dieselbe Auswahl wie unter „Ersetzen durch“,
+mit Beschreibung) und die zur Art passenden Optionen ab — dieselben Felder wie
+im bisherigen Optionsdialog der Dateiansicht, nur ohne Feldbezug. Darunter
+„Gilt für“ (beim Anlegen wählbar, beim Bearbeiten nur als Text) und eine
+**Vorschau**: ein Beispielwert samt Ergebnis, mit gleichbleibendem Zufall
+während des Tippens, dazu der Hinweis „Nur ein Beispiel – die echten Werte
+entstehen beim Lauf.“ Wird der Generator schon irgendwo verwendet, sperrt der
+Dialog Bezeichnung und Art, mit einem Hinweis, wer ihn verwendet — nur die
+Optionen bleiben änderbar. Derselbe Dialog öffnet sich auch aus dem Formular
+einer Textregel heraus („Neuer Generator…“ neben „Ersetzen durch“) und aus dem
+Dialog „Immer ersetzen…“.
 
 Ist die Erweiterungsdatei gesperrt, erscheint zusätzlich eine **Sperrleiste**
 oben im Fenster, auf jeder Seite: „🔒 Regeln für alle Projekte sind nur
@@ -544,10 +604,10 @@ Profil in die laufende Sitzung (Sternchen im Titel wie bei jeder anderen
 Änderung). Schließen des Fensters mit ungespeicherten Änderungen (über die
 Titelleiste) fragt nach: „Übernehmen / Verwerfen / Weiter bearbeiten“.
 
-![Das Fenster „Einstellungen“: eine gemeinsame Regelliste mit „Gilt für“ je Regel, eigene Generatoren, Spalten-Vorschläge und der Ablageort als eigene Reiter.](bilder/gui-textregeln.png)
-*Das Fenster „Einstellungen“, neu aufzunehmen — der Dateiname ist aus der
-Vorfassung übernommen (damals das Fenster „Textregeln“), das Bild selbst
-zeigt noch den älteren, zweireitrigen Stand.*
+![Das Fenster „Regeln & Generatoren“: eine gemeinsame Regelliste mit „Gilt für“ je Regel, eigene Generatoren, Spalten-Vorschläge und der Ablageort als eigene Reiter.](bilder/gui-textregeln.png)
+*Das Fenster „Regeln & Generatoren“, neu aufzunehmen — der Dateiname ist aus
+einer Vorfassung übernommen (damals das Fenster „Textregeln“, dann
+„Einstellungen“), das Bild selbst zeigt noch einen älteren Stand.*
 
 ### Ersetzungstabelle: Werte gezielt einsehen und löschen
 
@@ -1055,11 +1115,11 @@ zeigte dazu „dort liegt ein Profil, übergangen“). Ist die Datei dagegen
 wirklich kaputt (ungültiges JSON), meldet das Programm jetzt einen klaren
 Fehler mit Pfad, statt die Datei ebenso still zu übergehen — in der Kommandozeile
 mit dem Konfigurationsfehler-Exitcode, in der Oberfläche als Sperre mit der
-Fehlermeldung in der Kopfzeile der Einstellungen.
+Fehlermeldung in der Kopfzeile von „Regeln & Generatoren“.
 
 Bearbeiten lässt sie sich seit Fassung 1.8.0 auch ohne Texteditor, im Reiter
-„Textregeln“, „Eigene Generatoren“ bzw. „Spalten-Vorschläge“ der
-**Einstellungen** (Kapitel 5), erkennbar an „Alle Projekte“ bzw. dem 🔒.
+„Textregeln“, „Eigene Generatoren“ bzw. „Spalten-Vorschläge“ von **„Regeln &
+Generatoren“** (Kapitel 5), erkennbar an „Alle Projekte“ bzw. dem 🔒.
 Wer eine globale Regel ändern darf, ergibt sich allein aus Ablageort und
 Schreibrecht: Geschrieben wird immer nur die geltende Datei selbst — liegt
 sie neben der Programmdatei und ist dort schreibgeschützt (etwa bei einer

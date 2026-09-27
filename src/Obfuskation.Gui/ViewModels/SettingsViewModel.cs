@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 using Obfuskation.Core.Configuration;
+using Obfuskation.Core.Generation;
 using Obfuskation.Gui.Services;
 
 namespace Obfuskation.Gui.ViewModels;
@@ -120,6 +121,7 @@ public sealed class SettingsViewModel : ObservableObject
             () => OpenFolderRequested?.Invoke(Path.GetDirectoryName(_writeState.Path) ?? _writeState.Path));
         OpenEditorCommand = new RelayCommand(() => OpenEditorRequested?.Invoke(_writeState.Path));
         ShowLocationDetailsCommand = new RelayCommand(() => SelectedTab = SettingsTab.Location);
+        NewGeneratorCommand = new AsyncRelayCommand(NewGeneratorAsync, () => HasProfile || CanEditGlobal);
 
         BuildProjectGenerators();
         BuildGlobalGenerators();
@@ -127,7 +129,8 @@ public sealed class SettingsViewModel : ObservableObject
 
         TextRules = new TextRulesViewModel(
             _profileCopy, _extensionsCopy, CanEditGlobal, GlobalLockReason, OnTextRuleChanged,
-            onGeneratorCopied: OnGeneratorCopiedByScopeChange);
+            onGeneratorCopied: OnGeneratorCopiedByScopeChange,
+            createGenerator: CreateGeneratorForRuleAsync);
 
         if (selectRuleName is not null)
             TextRules.SelectByName(selectRuleName, selectRuleScope);
@@ -162,6 +165,15 @@ public sealed class SettingsViewModel : ObservableObject
     public bool HasProfile => _profileCopy is not null;
 
     public string ProjectTitle => _profileCopy is null ? "kein Profil geladen" : _session!.DisplayName;
+
+    /// <summary>
+    /// Fenstertitel (Plan Teil P1): "Regeln & Generatoren – {Projekt}", ohne
+    /// Profil "Regeln & Generatoren – alle Projekte" -- der Reiter "Textregeln"
+    /// bleibt dabei unerwaehnt, das Fenster heisst so unabhaengig vom
+    /// gewaehlten Reiter.
+    /// </summary>
+    public string WindowTitle
+        => "Regeln & Generatoren – " + (_profileCopy is null ? "alle Projekte" : _session!.DisplayName);
 
     // ----------------------------------------------------------- Sperrleiste
 
@@ -258,6 +270,17 @@ public sealed class SettingsViewModel : ObservableObject
     public bool HasProjectGenerators => ProjectGenerators.Count > 0;
     public bool HasGlobalGenerators => GlobalGenerators.Count > 0;
 
+    /// <summary>"+ Neuer Generator…" (Plan P3d): aktiv, sobald irgendein Ziel infrage kommt.</summary>
+    public AsyncRelayCommand NewGeneratorCommand { get; }
+
+    /// <summary>
+    /// Oeffnet den Generator-Dialog (Plan P3) verschachtelt in diesem Fenster --
+    /// gesetzt von <see cref="Services.DialogService.ShowSettingsAsync"/>, mit
+    /// diesem Fenster als Besitzer. Ein Test setzt sie direkt, ohne echtes
+    /// Fenster.
+    /// </summary>
+    public Func<GeneratorEditorViewModel, Task<bool>>? ShowGeneratorEditor { get; set; }
+
     private void BuildProjectGenerators()
     {
         ProjectGenerators.Clear();
@@ -268,7 +291,7 @@ public sealed class SettingsViewModel : ObservableObject
                 GeneratorEntryViewModel? entry = null;
                 entry = new GeneratorEntryViewModel(
                     _profileCopy.Generators, name,
-                    onFieldChanged: OnProjectGeneratorsChanged,
+                    onEdit: () => EditGeneratorAsync(entry!, RuleScope.Project),
                     onRemoved: () =>
                     {
                         ProjectGenerators.Remove(entry!);
@@ -293,7 +316,7 @@ public sealed class SettingsViewModel : ObservableObject
             GeneratorEntryViewModel? entry = null;
             entry = new GeneratorEntryViewModel(
                 _extensionsCopy.Generators, name,
-                onFieldChanged: OnGlobalGeneratorsChanged,
+                onEdit: () => EditGeneratorAsync(entry!, RuleScope.Global),
                 onRemoved: () =>
                 {
                     GlobalGenerators.Remove(entry!);
@@ -309,6 +332,109 @@ public sealed class SettingsViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasGlobalGenerators));
+    }
+
+    /// <summary>
+    /// "+ Neuer Generator…" (Plan P3d): die Vorgabe fuer den Bereich ist
+    /// "Projekt", wenn ein Profil geladen ist -- wer aus einem geladenen
+    /// Projekt heraus einen Generator anlegt, will ihn meist zunaechst dort
+    /// erproben.
+    /// </summary>
+    private async Task NewGeneratorAsync()
+    {
+        if (ShowGeneratorEditor is null)
+            return;
+
+        var initialScope = HasProfile ? RuleScope.Project : RuleScope.Global;
+        var editor = new GeneratorEditorViewModel(
+            _profileCopy, _extensionsCopy, CanEditGlobal, GlobalLockReason, initialScope);
+
+        if (!await ShowGeneratorEditor(editor) || !editor.Confirmed)
+            return;
+
+        var ziel = editor.ResultScope == RuleScope.Project ? _profileCopy!.Generators : _extensionsCopy.Generators;
+        ziel[editor.ResultName] = editor.ResultSettings;
+
+        BuildProjectGenerators();
+        BuildGlobalGenerators();
+
+        if (editor.ResultScope == RuleScope.Project)
+            OnProjectGeneratorsChanged();
+        else
+            OnGlobalGeneratorsChanged();
+    }
+
+    /// <summary>
+    /// "Bearbeiten…" an einer Zeile der Liste "Eigene Generatoren" (Plan P3d):
+    /// oeffnet den Dialog mit dem bestehenden Eintrag, seinem Bereich und
+    /// seinen Verwendern (die den Namen und die Art dort sperren). Wurde der
+    /// Name geaendert -- nur ohne Verwender ueberhaupt moeglich --, wird der
+    /// alte Schluessel entfernt und der neue gesetzt.
+    /// </summary>
+    private async Task EditGeneratorAsync(GeneratorEntryViewModel entry, RuleScope scope)
+    {
+        if (ShowGeneratorEditor is null)
+            return;
+
+        var owner = scope == RuleScope.Project ? _profileCopy!.Generators : _extensionsCopy.Generators;
+
+        var editor = new GeneratorEditorViewModel(
+            _profileCopy, _extensionsCopy, CanEditGlobal, GlobalLockReason, scope,
+            existingName: entry.Name, users: entry.Users);
+
+        if (!await ShowGeneratorEditor(editor) || !editor.Confirmed)
+            return;
+
+        if (!string.Equals(editor.ResultName, entry.Name, StringComparison.OrdinalIgnoreCase))
+            owner.Remove(entry.Name);
+
+        owner[editor.ResultName] = editor.ResultSettings;
+
+        BuildProjectGenerators();
+        BuildGlobalGenerators();
+
+        if (scope == RuleScope.Project)
+            OnProjectGeneratorsChanged();
+        else
+            OnGlobalGeneratorsChanged();
+    }
+
+    /// <summary>
+    /// Rueckruf fuer <see cref="TextRulesViewModel"/> (Plan P3d): "Neuer
+    /// Generator…" neben "Ersetzen durch" im Regelformular. Eine globale Regel
+    /// bekommt den Bereich fest auf "alle Projekte" -- ein Generator, den nur
+    /// diese eine Regel braucht, soll nicht erst durch
+    /// <see cref="ExtensionLibrary.AdoptProjectGenerators"/> beim Übernehmen
+    /// nachgereicht werden muessen. Eine Projektregel darf frei waehlen, wie
+    /// der AlwaysReplace-Dialog auch. Liefert den neuen Namen, oder
+    /// <c>null</c> bei Abbruch.
+    /// </summary>
+    private async Task<string?> CreateGeneratorForRuleAsync(RuleScope scope, string? suggestedName)
+    {
+        if (ShowGeneratorEditor is null)
+            return null;
+
+        var editor = new GeneratorEditorViewModel(
+            _profileCopy, _extensionsCopy, CanEditGlobal, GlobalLockReason,
+            initialScope: scope,
+            lockScopeTo: scope == RuleScope.Global ? RuleScope.Global : null,
+            suggestedName: suggestedName);
+
+        if (!await ShowGeneratorEditor(editor) || !editor.Confirmed)
+            return null;
+
+        var ziel = editor.ResultScope == RuleScope.Project ? _profileCopy!.Generators : _extensionsCopy.Generators;
+        ziel[editor.ResultName] = editor.ResultSettings;
+
+        BuildProjectGenerators();
+        BuildGlobalGenerators();
+
+        if (editor.ResultScope == RuleScope.Project)
+            OnProjectGeneratorsChanged();
+        else
+            OnGlobalGeneratorsChanged();
+
+        return editor.ResultName;
     }
 
     /// <summary>Findet alle Regeln, Felder und Spaltenmuster, die einen Generator verwenden -- fuer die Sperre und den Tooltip an "Entfernen".</summary>
@@ -490,6 +616,13 @@ public sealed class SettingsViewModel : ObservableObject
         if (RewriteFieldRuleReferences())
             _projectDirty = true;
 
+        // Ebenfalls vor der Pruefung (Plan P4): eine globale Regel, die einen
+        // bislang nur im Projekt vorhandenen Generator verwendet, bekommt ihn
+        // jetzt mitkopiert -- sonst liefe sie in jedem anderen Projekt ins
+        // Leere. Ohne Profil (globalOnly) ist das ein No-Op.
+        if (_profileCopy is not null && _extensionsCopy.AdoptProjectGenerators(_profileCopy).Count > 0)
+            _globalDirty = true;
+
         var issues = ProfileValidator.Validate(_profileCopy ?? new Profile(), _extensionsCopy);
         var fehler = issues
             .Where(i => i.Severity == ValidationSeverity.Error && !_baselineErrors.Contains(ErrorKey(i)))
@@ -641,22 +774,29 @@ public sealed record ExtensionCandidateInfo(string Path, string OriginLabel, str
 public sealed class GeneratorEntryViewModel : ObservableObject
 {
     private readonly Dictionary<string, GeneratorSettings> _owner;
-    private readonly Action _onFieldChanged;
     private readonly Func<string, IReadOnlyList<string>> _findUsers;
     private readonly bool _canEdit;
-    private string _name;
+    private readonly string _name;
 
+    /// <summary>
+    /// Die Zeile ist seit Plan P3d nur noch Anzeige: Name, Art und Optionen
+    /// aendert man im Generator-Dialog (<see cref="EditCommand"/>), nicht mehr
+    /// hier inline. <paramref name="onEdit"/> oeffnet diesen Dialog --
+    /// <see cref="SettingsViewModel.EditGeneratorAsync"/> baut danach die
+    /// Listen komplett neu, ein bestehendes <see cref="GeneratorEntryViewModel"/>
+    /// muss sich also nicht mehr selbst umbenennen koennen.
+    /// </summary>
     public GeneratorEntryViewModel(
         Dictionary<string, GeneratorSettings> owner, string name,
-        Action onFieldChanged, Action onRemoved,
+        Func<Task> onEdit, Action onRemoved,
         Func<string, IReadOnlyList<string>> findUsers, bool canEdit = true)
     {
         _owner = owner;
         _name = name;
-        _onFieldChanged = onFieldChanged;
         _findUsers = findUsers;
         _canEdit = canEdit;
 
+        EditCommand = new AsyncRelayCommand(onEdit, () => CanEdit);
         RemoveCommand = new RelayCommand(
             () =>
             {
@@ -671,46 +811,46 @@ public sealed class GeneratorEntryViewModel : ObservableObject
     /// <summary>Ob dieser Eintrag ueberhaupt bearbeitet werden darf (siehe <see cref="SettingsViewModel.CanEditGlobal"/>).</summary>
     public bool CanEdit => _canEdit;
 
-    public string Name
-    {
-        get => _name;
-        set
-        {
-            var neu = (value ?? "").Trim();
-            if (!CanEdit || neu.Length == 0 || string.Equals(neu, _name, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            // Waehrend der Generator irgendwo verwendet wird, bliebe eine
-            // Umbenennung hier ohne Wirkung auf die Regeln, die ihn beim alten
-            // Namen ansprechen -- dieselbe Sperre wie beim Entfernen.
-            if (Users.Count > 0 || _owner.ContainsKey(neu))
-                return;
-
-            var settings = _owner[_name];
-            _owner.Remove(_name);
-            _owner[neu] = settings;
-            _name = neu;
-
-            OnPropertyChanged();
-            _onFieldChanged();
-        }
-    }
+    public string Name => _name;
 
     public string TypeLabel => string.IsNullOrWhiteSpace(Settings.Type) ? "token" : Settings.Type!;
 
-    public string? Prefix
-    {
-        get => Settings.Prefix;
-        set
-        {
-            if (!CanEdit || Settings.Prefix == value)
-                return;
+    /// <summary>Deutsche Erklaerung der Art, etwa "allgemeine Kennung (TOK_…), mit Kennzeichnung davor".</summary>
+    public string DescriptionLabel => GeneratorDescriptions.For(TypeLabel);
 
-            Settings.Prefix = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            OnPropertyChanged();
-            _onFieldChanged();
+    /// <summary>
+    /// Kurzfassung der wichtigsten Option, etwa "Kennzeichnung FW~" oder
+    /// "3 Werte" -- sonst leer. Nur eine Auswahl, keine vollstaendige
+    /// Wiedergabe aller Optionen: die Zeile soll knapp bleiben, Einzelheiten
+    /// zeigt der Generator-Dialog.
+    /// </summary>
+    public string OptionsSummary
+    {
+        get
+        {
+            var settings = Settings;
+            var baseType = TypeLabel;
+
+            if (string.Equals(baseType, "token", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(settings.Prefix))
+                return $"Kennzeichnung {settings.Prefix}";
+
+            if (string.Equals(baseType, "pattern", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(settings.Pattern))
+                return $"Maske {settings.Pattern}";
+
+            if (string.Equals(baseType, "wordlist", StringComparison.OrdinalIgnoreCase) && settings.Values is { Count: > 0 } werte)
+                return werte.Count == 1 ? "1 Wert" : $"{werte.Count} Werte";
+
+            if (string.Equals(baseType, "dateRange", StringComparison.OrdinalIgnoreCase)
+                && (!string.IsNullOrWhiteSpace(settings.From) || !string.IsNullOrWhiteSpace(settings.To)))
+            {
+                return $"Zeitraum {settings.From ?? "…"} bis {settings.To ?? "…"}";
+            }
+
+            return "";
         }
     }
+
+    public bool HasOptionsSummary => OptionsSummary.Length > 0;
 
     /// <summary>Wer diesen Generator gerade nutzt -- gesperrt, solange die Liste nicht leer ist.</summary>
     public IReadOnlyList<string> Users => _findUsers(_name);
@@ -720,6 +860,9 @@ public sealed class GeneratorEntryViewModel : ObservableObject
     public string RemoveTooltip => IsInUse
         ? "Wird verwendet von: " + string.Join(", ", Users)
         : "";
+
+    /// <summary>Oeffnet den Generator-Dialog (Plan P3d) fuer diesen Eintrag.</summary>
+    public AsyncRelayCommand EditCommand { get; }
 
     public RelayCommand RemoveCommand { get; }
 

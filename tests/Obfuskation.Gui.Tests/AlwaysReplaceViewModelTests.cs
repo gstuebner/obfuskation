@@ -138,6 +138,64 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Uebernehmen_mit_immer_ueberall_kopiert_einen_vorhandenen_Projekt_Generator_mit()
+    {
+        // Plan P4: anders als der automatisch benannte "fw~" (siehe oben)
+        // existiert dieser Generator schon vorher im Profil und wird ueber die
+        // Auswahlliste gewaehlt, nicht neu angelegt -- AdoptProjectGenerators
+        // muss ihn trotzdem in die Erweiterung mitnehmen, sonst liefe die
+        // Regel in jedem anderen Projekt ins Leere.
+        var profil = NeuesProfil();
+        profil.Generators["fw"] = new GeneratorSettings { Type = "token", Prefix = "FW~" };
+        var erweiterung = ExtensionLibrary.Empty;
+
+        var modell = Erzeugen(profil, erweiterung, "FW123456");
+        modell.UseExtension = true;
+        modell.SelectedGenerator = modell.Generators.Single(g => g.Name == "fw");
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Confirmed);
+        Assert.True(erweiterung.Generators.ContainsKey("fw"));
+        Assert.Equal("FW~", erweiterung.Generators["fw"].Prefix);
+
+        // Bleibt auch im Profil bestehen -- "mitkopiert, nicht verschoben".
+        Assert.True(profil.Generators.ContainsKey("fw"));
+    }
+
+    [Fact]
+    public void Ein_Speicherfehler_nimmt_auch_einen_mitkopierten_Projekt_Generator_zurueck()
+    {
+        var zwischendatei = Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName + ".tmp");
+        Directory.CreateDirectory(zwischendatei);
+
+        try
+        {
+            var profil = NeuesProfil();
+            profil.Generators["fw"] = new GeneratorSettings { Type = "token", Prefix = "FW~" };
+            var erweiterung = ExtensionLibrary.Empty;
+
+            var modell = Erzeugen(profil, erweiterung, "FW123456");
+            modell.UseExtension = true;
+            modell.SelectedGenerator = modell.Generators.Single(g => g.Name == "fw");
+
+            modell.ApplyCommand.Execute(null);
+
+            Assert.False(modell.Confirmed);
+            Assert.True(modell.HasErrorText);
+            Assert.Empty(erweiterung.TextRules);
+            Assert.False(erweiterung.Generators.ContainsKey("fw"));
+
+            // Das Profil selbst ist von der Rueckname unberuehrt.
+            Assert.True(profil.Generators.ContainsKey("fw"));
+        }
+        finally
+        {
+            Directory.Delete(zwischendatei, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Ein_Speicherfehler_nimmt_Regel_und_Generator_zurueck_und_setzt_ErrorText()
     {
         // A3 des Plans: die Zwischendatei (".tmp") wird durch ein gleichnamiges
@@ -440,5 +498,78 @@ public sealed class AlwaysReplaceViewModelTests : IDisposable
         modell.Sample = "FW123456";
 
         Assert.Equal("fw", modell.RuleNameInput);
+    }
+
+    // -------------------------------------------- "Neuer Generator…" (Plan P3d)
+
+    /// <summary>Fuellt den Generator-Dialog und bestaetigt ihn sofort -- ohne dabei ein echtes Fenster zu oeffnen.</summary>
+    private static Func<GeneratorEditorViewModel, Task<bool>> FuelleUndUebernehme(string name, string prefix)
+        => editor =>
+        {
+            editor.Name = name;
+            editor.Prefix = prefix;
+            editor.ApplyCommand.Execute(null);
+            return Task.FromResult(editor.Confirmed);
+        };
+
+    [Fact]
+    public async Task Ein_neuer_Generator_steht_danach_im_Ziel_und_ist_ausgewaehlt()
+    {
+        var profil = NeuesProfil();
+        var modell = Erzeugen(profil, ExtensionLibrary.Empty, "FW123456");
+        modell.ShowGeneratorEditor = FuelleUndUebernehme("meinToken", "MT~");
+
+        modell.NewGeneratorCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.True(profil.Generators.ContainsKey("meinToken"));
+        Assert.Equal("MT~", profil.Generators["meinToken"].Prefix);
+        Assert.NotNull(modell.SelectedGenerator);
+        Assert.Equal("meinToken", modell.SelectedGenerator!.Name);
+    }
+
+    [Fact]
+    public async Task Im_globalen_Fall_wird_der_neue_Generator_in_die_Datei_geschrieben()
+    {
+        var profil = NeuesProfil();
+        var erweiterung = ExtensionLibrary.Empty;
+        var modell = Erzeugen(profil, erweiterung, "FW123456");
+        modell.UseExtension = true;
+        var ziel = modell.ExtensionPath;
+        modell.ShowGeneratorEditor = FuelleUndUebernehme("meinToken", "MT~");
+
+        modell.NewGeneratorCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.True(erweiterung.Generators.ContainsKey("meinToken"));
+
+        var wiederGelesen = ExtensionLibrary.Load(ziel);
+        Assert.True(wiederGelesen.Generators.ContainsKey("meinToken"));
+    }
+
+    [Fact]
+    public async Task Scheitert_das_Schreiben_wird_der_neue_Generator_zurueckgenommen()
+    {
+        var zwischendatei = Path.Combine(PathHelper.ConfigDirectory, ExtensionLibrary.FileName + ".tmp");
+        Directory.CreateDirectory(zwischendatei);
+
+        try
+        {
+            var profil = NeuesProfil();
+            var erweiterung = ExtensionLibrary.Empty;
+            var modell = Erzeugen(profil, erweiterung, "FW123456");
+            modell.UseExtension = true;
+            modell.ShowGeneratorEditor = FuelleUndUebernehme("meinToken", "MT~");
+
+            modell.NewGeneratorCommand.Execute(null);
+            await Task.Yield();
+
+            Assert.False(erweiterung.Generators.ContainsKey("meinToken"));
+            Assert.True(modell.HasErrorText);
+        }
+        finally
+        {
+            Directory.Delete(zwischendatei, recursive: true);
+        }
     }
 }

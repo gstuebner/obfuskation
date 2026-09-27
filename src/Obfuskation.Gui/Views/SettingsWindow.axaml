@@ -7,7 +7,7 @@
         mc:Ignorable="d" d:DesignWidth="980" d:DesignHeight="680"
         x:Class="Obfuskation.Gui.Views.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
-        Title="Einstellungen"
+        Title="{Binding WindowTitle}"
         Width="980" Height="680" MinWidth="820" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Icon="avares://obfuskation-gui/Assets/obfuskation.png"
@@ -23,7 +23,7 @@
       auf Kopien: "Übernehmen" prueft und schreibt zurueck, "Abbrechen"
       verwirft sie.
   -->
-  <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
 
     <!-- Sperrleiste, nur sichtbar, wenn der globale Bereich gesperrt ist. -->
     <Border Grid.Row="0" Classes="card" Margin="0,0,0,10" BorderBrush="{DynamicResource BrushWarning}"
@@ -35,7 +35,14 @@
       </Grid>
     </Border>
 
-    <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}">
+    <!-- Ohne Profil (Startseite, "Regeln & Generatoren…") zeigen alle Reiter
+         nur noch die Regeln und Generatoren fuer alle Projekte — dieser
+         Hinweis sagt das, bevor jemand sich fragt, wo "dieses Projekt" hin ist. -->
+    <TextBlock Grid.Row="1" Classes="muted small" Margin="0,0,0,8" TextWrapping="Wrap"
+               IsVisible="{Binding !HasProfile}"
+               Text="Kein Projekt geöffnet: Hier stehen nur Regeln und Generatoren für alle Projekte."/>
+
+    <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTabIndex}">
 
       <!-- ================================================== Textregeln ==== -->
       <TabItem Header="Textregeln">
@@ -46,29 +53,42 @@
       <TabItem Header="Eigene Generatoren">
         <ScrollViewer Margin="0,10,0,0">
           <StackPanel Spacing="12">
-            <TextBlock Classes="muted small" TextWrapping="Wrap"
-                       Text="Varianten der eingebauten Ersetzungen, etwa ein Token mit Kennzeichnung FW~ – entstehen meist über „Immer ersetzen“."/>
+            <!-- Plan P3d: Name und Optionen aendert man jetzt ausschliesslich
+                 im Generator-Dialog, die Zeilen selbst sind nur noch Anzeige. -->
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0" Classes="muted small" TextWrapping="Wrap" VerticalAlignment="Center"
+                         Text="Varianten der eingebauten Ersetzungen, etwa ein Token mit Kennzeichnung FW~ – entstehen meist über „Immer ersetzen“ oder hier."/>
+              <Button Grid.Column="1" Content="+ Neuer Generator…" Command="{Binding NewGeneratorCommand}"/>
+            </Grid>
 
-            <Border Classes="card">
+            <Border Classes="card" IsVisible="{Binding HasProfile}">
               <Grid RowDefinitions="Auto,Auto">
                 <TextBlock Grid.Row="0" Text="Dieses Projekt" Classes="card-title"/>
                 <ItemsControl Grid.Row="1" ItemsSource="{Binding ProjectGenerators}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:GeneratorEntryViewModel">
-                      <Grid ColumnDefinitions="160,90,*,Auto" ColumnSpacing="8" Margin="0,3">
-                        <TextBox Grid.Column="0" Text="{Binding Name}" IsEnabled="{Binding CanEdit}"/>
-                        <TextBlock Grid.Column="1" Text="{Binding TypeLabel}" Classes="muted small" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="2" Text="{Binding Prefix}" IsEnabled="{Binding CanEdit}"
-                                 PlaceholderText="Präfix"/>
-                        <Button Grid.Column="3" Content="Entfernen" Classes="flat"
+                      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,4">
+                        <StackPanel Grid.Column="0">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding DescriptionLabel}" Classes="muted small"/>
+                            <TextBlock Text="·" Classes="muted small" IsVisible="{Binding HasOptionsSummary}"/>
+                            <TextBlock Text="{Binding OptionsSummary}" Classes="muted small"
+                                       IsVisible="{Binding HasOptionsSummary}" TextTrimming="CharacterEllipsis"/>
+                          </StackPanel>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Bearbeiten…" Classes="flat"
+                                Command="{Binding EditCommand}"/>
+                        <Button Grid.Column="2" Content="Entfernen" Classes="flat"
                                 Command="{Binding RemoveCommand}"
                                 ToolTip.Tip="{Binding RemoveTooltip}"/>
                       </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Grid.Row="1" Text="Keine eigenen Generatoren." Classes="muted small"
-                           IsVisible="{Binding !HasProjectGenerators}"/>
+                <TextBlock Grid.Row="1" Classes="muted small" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasProjectGenerators}"
+                           Text="Noch keine eigenen Generatoren. „+ Neuer Generator…“ legt einen an – etwa ein Token mit Kennzeichnung FW~, damit Pseudonyme erkennbar bleiben."/>
               </Grid>
             </Border>
 
@@ -81,20 +101,28 @@
                 <ItemsControl Grid.Row="1" ItemsSource="{Binding GlobalGenerators}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:GeneratorEntryViewModel">
-                      <Grid ColumnDefinitions="160,90,*,Auto" ColumnSpacing="8" Margin="0,3">
-                        <TextBox Grid.Column="0" Text="{Binding Name}" IsEnabled="{Binding CanEdit}"/>
-                        <TextBlock Grid.Column="1" Text="{Binding TypeLabel}" Classes="muted small" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="2" Text="{Binding Prefix}" IsEnabled="{Binding CanEdit}"
-                                 PlaceholderText="Präfix"/>
-                        <Button Grid.Column="3" Content="Entfernen" Classes="flat"
+                      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" Margin="0,4">
+                        <StackPanel Grid.Column="0">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding DescriptionLabel}" Classes="muted small"/>
+                            <TextBlock Text="·" Classes="muted small" IsVisible="{Binding HasOptionsSummary}"/>
+                            <TextBlock Text="{Binding OptionsSummary}" Classes="muted small"
+                                       IsVisible="{Binding HasOptionsSummary}" TextTrimming="CharacterEllipsis"/>
+                          </StackPanel>
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Bearbeiten…" Classes="flat"
+                                Command="{Binding EditCommand}"/>
+                        <Button Grid.Column="2" Content="Entfernen" Classes="flat"
                                 Command="{Binding RemoveCommand}"
                                 ToolTip.Tip="{Binding RemoveTooltip}"/>
                       </Grid>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Grid.Row="1" Text="Keine eigenen Generatoren." Classes="muted small"
-                           IsVisible="{Binding !HasGlobalGenerators}"/>
+                <TextBlock Grid.Row="1" Classes="muted small" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasGlobalGenerators}"
+                           Text="Noch keine eigenen Generatoren. „+ Neuer Generator…“ legt einen an – etwa ein Token mit Kennzeichnung FW~, damit Pseudonyme erkennbar bleiben."/>
               </Grid>
             </Border>
           </StackPanel>
@@ -201,7 +229,7 @@
     </TabControl>
 
     <!-- ====================================================== Fusszeile ==== -->
-    <Grid Grid.Row="2" RowDefinitions="Auto,Auto,Auto" Margin="0,12,0,0">
+    <Grid Grid.Row="3" RowDefinitions="Auto,Auto,Auto" Margin="0,12,0,0">
       <TextBlock Grid.Row="0" Classes="warning small" Margin="0,0,0,8" TextWrapping="Wrap"
                  IsVisible="{Binding ShowGlobalCommentsWarning}"
                  Text="Diese Datei enthält von Hand gepflegte Kommentare — vor dem Speichern entsteht eine Sicherungskopie (.bak)."/>

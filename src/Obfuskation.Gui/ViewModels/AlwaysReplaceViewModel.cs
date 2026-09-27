@@ -97,6 +97,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
         ApplyAndContinueCommand = new RelayCommand(ApplyAndContinue, () => HasSample);
         CancelCommand = new RelayCommand(() => CloseRequested?.Invoke());
         EditManuallyCommand = new RelayCommand(EditManually);
+        NewGeneratorCommand = new AsyncRelayCommand(NewGeneratorAsync);
 
         RefreshPreview();
     }
@@ -214,6 +215,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
 
             OnPropertyChanged(nameof(HasPrefixHint));
             OnPropertyChanged(nameof(PrefixHint));
+            RaiseGeneratorScopeHintChanged();
         }
     }
 
@@ -228,6 +230,47 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
         => HasSample && IsPlainTokenSelected() ? PatternFromSample.SuggestPrefix(Trimmed) : null;
 
     public bool HasPrefixHint => PrefixHint is not null;
+
+    /// <summary>
+    /// Hinweis unter der Generator-Auswahl (Plan P4): "Immer, in allen
+    /// Projekten" gewaehlt, aber der gewaehlte Generator existiert bislang nur
+    /// im Profil -- <see cref="ExtensionLibrary.AdoptProjectGenerators"/>
+    /// kopiert ihn erst beim Übernehmen mit (siehe <see cref="CreateRule"/>).
+    /// <c>null</c> in jedem anderen Fall.
+    /// </summary>
+    public string? GeneratorScopeHint
+    {
+        get
+        {
+            if (!UseExtension)
+                return null;
+
+            var generatorName = _selectedGenerator?.Name;
+            if (string.IsNullOrWhiteSpace(generatorName))
+                return null;
+
+            if (GeneratorRegistry.KnownNames.Contains(generatorName, StringComparer.OrdinalIgnoreCase))
+                return null;
+
+            // Schon ein globaler Eintrag -- nichts mehr zu kopieren, derselbe
+            // Massstab wie ExtensionLibrary.AdoptProjectGenerators selbst.
+            if (_extensions.Generators.ContainsKey(generatorName))
+                return null;
+
+            if (!_profile.Generators.ContainsKey(generatorName))
+                return null;
+
+            return "Dieser Generator gilt bisher nur in diesem Projekt – beim Übernehmen wird er für alle Projekte mitkopiert.";
+        }
+    }
+
+    public bool HasGeneratorScopeHint => GeneratorScopeHint is not null;
+
+    private void RaiseGeneratorScopeHintChanged()
+    {
+        OnPropertyChanged(nameof(GeneratorScopeHint));
+        OnPropertyChanged(nameof(HasGeneratorScopeHint));
+    }
 
     private bool IsPlainTokenSelected()
         => _selectedGenerator is not null
@@ -316,6 +359,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
             OnPropertyChanged(nameof(UseProfile));
             OnPropertyChanged(nameof(ExtensionPath));
             OnPropertyChanged(nameof(ExtensionHasComments));
+            RaiseGeneratorScopeHintChanged();
         }
     }
 
@@ -379,6 +423,18 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     public RelayCommand CancelCommand { get; }
     public RelayCommand EditManuallyCommand { get; }
 
+    /// <summary>"Neuer Generator…" neben der Generator-ComboBox (Plan P3d).</summary>
+    public AsyncRelayCommand NewGeneratorCommand { get; }
+
+    /// <summary>
+    /// Oeffnet den Generator-Dialog (Plan P3) verschachtelt in diesem Fenster --
+    /// gesetzt von <see cref="Services.DialogService.ShowAlwaysReplaceAsync"/>,
+    /// mit diesem Fenster als Besitzer. Ein Test setzt sie direkt, etwa auf
+    /// einen Handler, der Felder fuellt und <c>ApplyCommand</c> ausfuehrt, ganz
+    /// ohne dass dabei ein echtes Fenster entstuende.
+    /// </summary>
+    public Func<GeneratorEditorViewModel, Task<bool>>? ShowGeneratorEditor { get; set; }
+
     /// <summary>
     /// Ob mindestens eine Regel entstanden ist. Bleibt auch dann <c>true</c>,
     /// wenn nach "Uebernehmen und weiter" mit "Abbrechen" geschlossen wird --
@@ -422,8 +478,8 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     public event Action? CloseRequested;
 
     /// <summary>
-    /// "In den Einstellungen bearbeiten…" wurde gewaehlt: der Aufrufer
-    /// (<see cref="MainViewModel"/>) oeffnet danach das Einstellungsfenster,
+    /// "Regeln & Generatoren…" wurde gewaehlt: der Aufrufer
+    /// (<see cref="MainViewModel"/>) oeffnet danach das gleichnamige Fenster,
     /// mit dem Bereich vorbelegt, in den diese Regel laut
     /// <see cref="UseExtension"/> gerade ginge -- der Reiter selbst kennt seit
     /// Plan Teil B keine Ablageorte mehr, nur noch Themen.
@@ -514,6 +570,11 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
 
         if (UseExtension)
         {
+            // Plan P4: verwendet die neue globale Regel einen Generator, den
+            // es bislang nur im Profil gibt, wird er hier mitkopiert -- sonst
+            // liefe die Regel in jedem anderen Projekt ins Leere.
+            var adoptierteGeneratoren = _extensions.AdoptProjectGenerators(_profile);
+
             try
             {
                 _extensions.Save(ExtensionPath);
@@ -528,6 +589,8 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
                 zielRegeln.Remove(rule);
                 if (neuAngelegterGenerator is not null)
                     zielGeneratoren.Remove(neuAngelegterGenerator);
+                foreach (var name in adoptierteGeneratoren)
+                    zielGeneratoren.Remove(name);
 
                 ErrorText = $"Die Regel konnte nicht gespeichert werden: {ex.Message}";
                 return false;
@@ -583,6 +646,82 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     {
         EditRulesRequested?.Invoke();
         CloseRequested?.Invoke();
+    }
+
+    /// <summary>
+    /// "Neuer Generator…" (Plan P3d): oeffnet den Generator-Dialog, uebernimmt
+    /// das Ergebnis in Profil oder Erweiterung (je nach dort gewaehltem
+    /// Bereich -- unabhaengig von <see cref="UseExtension"/>, ein Generator ist
+    /// wiederverwendbar und muss nicht im selben Bereich wie diese eine Regel
+    /// liegen) und waehlt ihn anschliessend aus.
+    /// </summary>
+    private async Task NewGeneratorAsync()
+    {
+        if (ShowGeneratorEditor is null)
+            return;
+
+        var editor = new GeneratorEditorViewModel(
+            _profile, _extensions,
+            canEditGlobal: CanUseExtension, globalLockReason: ExtensionBlockedReason,
+            initialScope: UseExtension ? RuleScope.Global : RuleScope.Project,
+            suggestedName: RuleNameBase, sampleValue: Trimmed);
+
+        if (!await ShowGeneratorEditor(editor) || !editor.Confirmed)
+            return;
+
+        var zielGeneratoren = editor.ResultScope == RuleScope.Project ? _profile.Generators : _extensions.Generators;
+        zielGeneratoren[editor.ResultName] = editor.ResultSettings;
+
+        if (editor.ResultScope == RuleScope.Global)
+        {
+            try
+            {
+                _extensions.Save(ExtensionPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Dasselbe Vorgehen wie in CreateRule: zuruecknehmen statt mit
+                // einem Stand weiterzuarbeiten, den es auf der Platte nicht gibt.
+                zielGeneratoren.Remove(editor.ResultName);
+                ErrorText = $"Der Generator konnte nicht gespeichert werden: {ex.Message}";
+                return;
+            }
+        }
+
+        ErrorText = null;
+        _onApplied(editor.ResultScope == RuleScope.Project);
+
+        RefreshGeneratorOptions();
+        SelectedGenerator = Generators.FirstOrDefault(
+            g => string.Equals(g.Name, editor.ResultName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Gleicht <see cref="Generators"/> gegen <see cref="GeneratorOption.For"/>
+    /// ab, ohne die Liste zu leeren -- ein <c>Clear()</c> loeste einen Reset
+    /// aus, waehrend dessen eine ComboBox mit gesetztem <c>SelectedItem</c>
+    /// keinen Treffer mehr faende und die Auswahl auf <c>null</c> zuruecksetzte
+    /// (dasselbe Vorgehen wie <c>MainViewModel.RefreshGenerators</c>).
+    /// </summary>
+    private void RefreshGeneratorOptions()
+    {
+        var ziel = GeneratorOption.For(_profile, _extensions);
+
+        for (var i = 0; i < ziel.Count; i++)
+        {
+            if (i < Generators.Count)
+            {
+                if (!Generators[i].Equals(ziel[i]))
+                    Generators[i] = ziel[i];
+            }
+            else
+            {
+                Generators.Add(ziel[i]);
+            }
+        }
+
+        while (Generators.Count > ziel.Count)
+            Generators.RemoveAt(Generators.Count - 1);
     }
 
     /// <summary>

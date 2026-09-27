@@ -2,6 +2,14 @@
 
 [English](README.md) · **Deutsch**
 
+![Status: experimentell](https://img.shields.io/badge/status-experimentell-orange)
+
+> [!WARNING]
+> **Experimentell.** Dieses Projekt ist ein Testfeld für die Arbeit mit
+> verschiedenen KI-Modellen. Es ist benutzbar, aber nicht frei von Fehlern,
+> und die Dokumentation ist unvollständig. Dieser Hinweis entfällt, sobald das
+> Projekt fertig ist.
+
 Tauscht Echtdaten in CSV-, JSON- und Textdateien gegen plausible Pseudodaten aus
 und kann den Austausch wieder rückgängig machen. Gedacht für den Fall, dass
 Beispieldaten an eine KI gegeben werden sollen, die Echtdaten aber das Haus nicht
@@ -22,7 +30,12 @@ vorheriges Profil oder Tabelle), mit CSV-/JSON-Dateien arbeiten, oder die
 Antwort einer KI zurückübersetzen. Wiederkehrende hauseigene Begriffe — ein
 Hostname-Muster, eine Kundennummer — lassen sich aus einer markierten Stelle
 heraus in eine dauerhafte Regel verwandeln, in Alltagssprache, ohne einen
-regulären Ausdruck zu schreiben.
+regulären Ausdruck zu schreiben, mit einem passenden Generator oder gleich
+einem neu angelegten. **„Regeln & Generatoren“**, erreichbar über die
+Kopfzeile, die Startseite (dort nur die Regeln und Generatoren für alle
+Projekte) oder „Regeln bearbeiten…“ in beiden Ansichten, bringt Textregeln,
+eigene Generatoren, Spalten-Vorschläge und den Ablageort der Erweiterungsdatei
+in einem Fenster zusammen.
 
 ## Dokumentation
 
@@ -157,8 +170,9 @@ Wert Ziffern — „alles dieser Form“, aus `FW123456` wird die Beschreibung
 aktuellen Text) und *wo* (im Profil dieses Projekts, oder in der
 Erweiterungsdatei für alle Projekte — der Dialog nennt den Zielpfad und warnt
 vorher, wenn dabei eine Sicherungskopie über von Hand gepflegte Kommentare
-entsteht). In der Dateiansicht liegt derselbe Dialog als „Immer ersetzen…“
-neben „Felder automatisch erkennen…“.
+entsteht). In der Dateiansicht gibt es diesen kleinen Dialog nicht mehr:
+dort führt „Regeln bearbeiten…“ neben „Felder automatisch erkennen…“ direkt
+in das Fenster „Regeln & Generatoren“ (siehe unten).
 
 Eine Regel erfasst dabei oft mehrere Stellen auf einmal; für mehrere
 verschiedene Begriffe hintereinander gibt es „Übernehmen und weiter“, das den
@@ -189,17 +203,20 @@ Einzelauswahl vorbehalten.
 
 - **Ersetzungstabelle** — Pfad, Anzahl je Namensraum und die Dateirechte.
   Zeigt **keine Werte**, gleich wie `mapping list`.
-- **Hauseigene Muster…** — Fundort der Erweiterungsdatei und, sofern dort
-  eine liegt, die geerbten Generatoren, Textregeln und Spaltenmuster; zuvor
-  nur über `obfuskation extensions path` auf der Kommandozeile zu erfahren.
+- **Regeln & Generatoren…** — Textregeln, eigene Generatoren, Spalten-
+  Vorschläge und der Ablageort der Erweiterungsdatei, zuvor Fundort nur über
+  `obfuskation extensions path` auf der Kommandozeile zu erfahren.
 - **Kurzhilfe** — kurze Karten für alle, die die Oberfläche zum ersten Mal
   öffnen: wofür das Werkzeug da ist, was ein Profil ist und wozu es gut ist,
   der Weg durch das Programm, und der Textmodus für den einzelnen Text.
 - **Über** — die fünf Hinweise von oben und die verwendeten Pfade.
 
-Der frühere Eintrag **Textregeln** ist aus diesem Menü entfallen; derselbe
-Editor samt Erprobungsfeld ist weiterhin über „Immer ersetzen… → Muster von
-Hand bearbeiten…“ erreichbar (siehe oben).
+Die früheren Einträge **Textregeln** und **Hauseigene Muster…** sind aus
+diesem Menü entfallen; beides zeigt jetzt das eine Fenster **„Regeln &
+Generatoren“** (Reiter „Textregeln“ bzw. „Ablageort“), erreichbar über den
+Knopf „⚙ Regeln & Generatoren“ in der Kopfzeile (Strg+,), über „Regeln
+bearbeiten…“ in beiden Ansichten oder — ohne geöffnetes Profil — über die
+Startseite.
 
 **Hell und dunkel:** der Umschalter rechts oben geht durch drei Zustände —
 Systemvorgabe (folgt der Einstellung des Betriebssystems), dunkel, hell. Die

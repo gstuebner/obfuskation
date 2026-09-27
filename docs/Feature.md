@@ -1,6 +1,6 @@
 # Feature-Sammlung: Anwenderfreundlichkeit
 
-Fassung 1.9.0 · Stand 24. September 2026
+Fassung 1.10.0 · Stand 26. September 2026
 
 Arbeitsdokument für die nächste größere Version. Ziel ist ein echter Schub
 an Anwenderfreundlichkeit: Obfuskation soll sich **selbst erklären**, für
@@ -36,40 +36,46 @@ Anfänger wie für Profis. Wir gehen in drei Schritten vor:
 5. **Stufenweise Tiefe, sichtbar gekennzeichnet.** Einfache Wege vorn, Profi-
    Wege erreichbar und als solche benannt, nichts überraschend Verstecktes.
 
-## 3. Ist-Zustand (1.9.0)
+## 3. Ist-Zustand (1.10.0)
 
 ### 3.1 Wege durch das Programm
 
 - **Startseite:** drei Kacheln („Text säubern“, „Dateien pseudonymisieren“,
-  „Antwort zurückholen“), dazu das zuletzt benutzte Projekt und „Kurzhilfe…“.
+  „Antwort zurückholen“), dazu das zuletzt benutzte Projekt sowie
+  „Regeln & Generatoren…“ (nur alle Projekte) und „Kurzhilfe…“.
 - **Kopfzeile:** ← Start, Profilname mit ⓘ, „Neu aus Datei…“, „Profile…“,
-  „⚙ Einstellungen“ (Strg+,), „Speichern“, „Mehr ▾“ (Ersetzungstabelle…,
-  Einstellungen…, Kurzhilfe…, Über Obfuskation…), Farbthema.
+  „⚙ Regeln & Generatoren“ (Strg+,, bei schmalem Fenster nur das Symbol des
+  Themen-Knopfs daneben), „Speichern“, „Mehr ▾“ (Ersetzungstabelle…,
+  Regeln & Generatoren…, Kurzhilfe…, Über Obfuskation…), Farbthema.
 - **Textansicht:**
   - Richtung: „Text säubern“ oder „Antwort zurückübersetzen“.
   - Links der Text als farbige Prüffassung („Bearbeiten“/„Fertig“), rechts
     das Ergebnis.
-  - Fundliste mit Häkchen je Fund, „immer…“, „Regel entfernen“,
-    „bearbeiten…“ und „Regeln bearbeiten…“.
-  - Markieren und „immer ersetzen…“ (Strg+M).
+  - Fundliste mit Häkchen je Fund, Herkunft je Fund (dieses Projekt / alle
+    Projekte), „immer…“, „Regel entfernen“, „bearbeiten…“ und
+    „Regeln bearbeiten…“.
+  - Markieren und „immer ersetzen…“ (Strg+M), darin „Neuer Generator…“.
 - **Dateiansicht:**
   - Datei mit „Zuletzt ▾“ und „Öffnen…“.
   - Links die Feldliste (gefüllter oder offener Punkt).
   - Rechts die Regelkarte: Feldinhalt und Vorschau, Aktion, Generator,
     „Optionen…“, Kennzeichnung.
-  - „Immer ersetzen…“ und „Felder automatisch erkennen…“.
+  - „Regeln bearbeiten…“ (vormals „Immer ersetzen…“, führt jetzt direkt in
+    „Regeln & Generatoren“) und „Felder automatisch erkennen…“.
   - Unten: „Pseudodatei erzeugen…“, „Klartextdatei erzeugen…“, „Prüfen“ und
     „Alle ▾“.
-- **Einstellungen:** vier Reiter.
+- **Regeln & Generatoren** (vormals „Einstellungen“): vier Reiter.
   - Textregeln: Liste plus Formular mit Bezeichnung, „Was wird gesucht?“,
-    „Ersetzen durch“, „Gilt für“, „Erweitert“ (Priorität, Groß/klein) und
-    Erprobung.
-  - Eigene Generatoren.
+    „Ersetzen durch“ (dazu „Neuer Generator…“), „Gilt für“, „Erweitert“
+    (Priorität, Groß/klein) und Erprobung.
+  - Eigene Generatoren: „+ Neuer Generator…“ oben, je Zeile „Bearbeiten…“
+    und „Entfernen“ — Name und Optionen ändert man jetzt im Generator-Dialog.
   - Spalten-Vorschläge.
   - Ablageort.
-- **Dialoge:** Immer ersetzen, Profile (Suchen, Öffnen, Umbenennen, Aus
-  Liste entfernen, Löschen), Neues Profil, Profil umbenennen,
-  Ersetzungstabelle (Werte verdeckt, Suchen, Löschen), Generator-Optionen,
+- **Dialoge:** Immer ersetzen (darin „Neuer Generator…“), Generator anlegen/
+  bearbeiten, Profile (Suchen, Öffnen, Umbenennen, Aus Liste entfernen,
+  Löschen), Neues Profil, Profil umbenennen, Ersetzungstabelle (Werte
+  verdeckt, Suchen, Löschen), Generator-Optionen (Dateiansicht, Feldbezug),
   Muster erkennen, Rückfragen, Über, Kurzhilfe.
 
 ### 3.2 Stellschrauben
@@ -138,6 +144,34 @@ Aus Gregors Test und dem Review vom 23. und 24. September 2026:
 10. **Teil der Fachsprache sind Programmkennungen** (`token`, `numericId`,
     `scanText`, `dateShift`), auch in Listen, die Anfänger sehen
     („→ token“).
+
+### 3.5 Umgesetzt in 1.10.0
+
+Fünf Wünsche aus Gregors Test von 1.9.0 (siehe
+`docs/plan-regeln-generatoren.md`), hier der Stand:
+
+1. Fundliste der Textansicht zeigt zu jedem Fund die Herkunft (dieses
+   Projekt / alle Projekte).
+2. Farben auch links im Eingabefeld während des Bearbeitens, nicht nur in
+   der Prüffassung.
+3. Neuer Generator von überall: „Immer ersetzen…“, der Reiter „Eigene
+   Generatoren“ und das Regelformular legen jetzt gleichermaßen einen
+   eigenen Generator an oder bearbeiten ihn, wahlweise für dieses Projekt
+   oder für alle.
+4. Einheitliche Einstiege: „Regeln bearbeiten…“ in Datei- und Textansicht
+   sowie „⚙ Regeln & Generatoren“ in Kopfzeile und Startseite führen zum
+   selben, so umbenannten Fenster.
+5. Kennzeichnung als „Experimentell“ in beiden READMEs und auf GitHub;
+   Veröffentlichung als Release 1.10.0.
+
+Idee **C4 · Leerzustände erklären** ist damit für Generatoren erledigt: der
+leere Zustand der Liste „Eigene Generatoren“ nennt jetzt „+ Neuer
+Generator…“ und ein Beispiel. Regel- und Spaltenlisten stehen noch aus.
+
+**Neue Idee**, aus der Umsetzung von Wunsch 2: Prüffassung und
+Bearbeiten/Fertig-Umschalter ganz entfallen lassen, wenn sich die Farben im
+Eingabefeld selbst bewähren — ein einziger, immer bearbeitbarer Zustand statt
+zweier.
 
 ## 4. Ideen
 

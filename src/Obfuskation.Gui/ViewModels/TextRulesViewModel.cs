@@ -46,6 +46,7 @@ public sealed class TextRulesViewModel : ObservableObject
     private readonly string? _globalLockReason;
     private readonly Action<RuleScope> _onChanged;
     private readonly Action? _onGeneratorCopied;
+    private readonly Func<RuleScope, string?, Task<string?>>? _createGenerator;
     private readonly TextRuleEngine _engine = new();
     private readonly List<TextRuleViewModel> _allRules = new();
 
@@ -71,9 +72,17 @@ public sealed class TextRulesViewModel : ObservableObject
     /// dortige Seite den frisch kopierten Generator erst nach einem
     /// Neustart des Fensters.
     /// </param>
+    /// <param name="createGenerator">
+    /// Rueckruf fuer "Neuer Generator…" neben "Ersetzen durch" (Plan P3d):
+    /// bekommt den Bereich der ausgewaehlten Regel und ihren Namen als
+    /// Namensvorschlag, oeffnet den Generator-Dialog und liefert den neuen
+    /// Namen -- oder <c>null</c> bei Abbruch. <c>null</c>, wenn der Aufrufer
+    /// (etwa ein Test) das Anlegen nicht anbietet.
+    /// </param>
     public TextRulesViewModel(
         Profile? profile, ExtensionLibrary extensions, bool canEditGlobal, string? globalLockReason,
-        Action<RuleScope> onChanged, Action? onGeneratorCopied = null)
+        Action<RuleScope> onChanged, Action? onGeneratorCopied = null,
+        Func<RuleScope, string?, Task<string?>>? createGenerator = null)
     {
         _profile = profile;
         _profileForGenerators = profile ?? new Profile();
@@ -82,6 +91,7 @@ public sealed class TextRulesViewModel : ObservableObject
         _globalLockReason = globalLockReason;
         _onChanged = onChanged;
         _onGeneratorCopied = onGeneratorCopied;
+        _createGenerator = createGenerator;
 
         Generators = new ObservableCollection<GeneratorOption>(GeneratorOption.For(_profileForGenerators, extensions));
 
@@ -95,6 +105,7 @@ public sealed class TextRulesViewModel : ObservableObject
 
         AddCommand = new RelayCommand(AddRule, () => CanAddRule);
         RemoveCommand = new RelayCommand(RemoveSelected, () => _selected is { IsEditable: true });
+        NewGeneratorCommand = new AsyncRelayCommand(NewGeneratorAsync, () => HasSelected);
 
         BuildRules();
     }
@@ -129,6 +140,9 @@ public sealed class TextRulesViewModel : ObservableObject
     public RelayCommand AddCommand { get; }
     public RelayCommand RemoveCommand { get; }
 
+    /// <summary>"Neuer Generator…" neben "Ersetzen durch" (Plan P3d).</summary>
+    public AsyncRelayCommand NewGeneratorCommand { get; }
+
     public TextRuleViewModel? Selected
     {
         get => _selected;
@@ -138,6 +152,7 @@ public sealed class TextRulesViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(HasSelected));
                 RemoveCommand.RaiseCanExecuteChanged();
+                NewGeneratorCommand.RaiseCanExecuteChanged();
             }
         }
     }
@@ -345,6 +360,27 @@ public sealed class TextRulesViewModel : ObservableObject
         BuildRules();
 
         _onChanged(scope);
+    }
+
+    /// <summary>
+    /// "Neuer Generator…" neben "Ersetzen durch" (Plan P3d): oeffnet den
+    /// Generator-Dialog ueber <see cref="_createGenerator"/> und waehlt bei
+    /// Erfolg den neuen Generator fuer die ausgewaehlte Regel aus. Der
+    /// Rueckruf selbst schreibt den Generator schon in die richtige Kopie und
+    /// baut die Generatorenlisten neu (<see cref="RefreshGeneratorsList"/>
+    /// laeuft dabei ueber <c>SettingsViewModel.OnProject/GlobalGeneratorsChanged</c>) --
+    /// hier bleibt nur noch die Auswahl an der Regel selbst.
+    /// </summary>
+    private async Task NewGeneratorAsync()
+    {
+        if (_createGenerator is null || _selected is not { } regel)
+            return;
+
+        var name = await _createGenerator(regel.Scope, regel.Name);
+        if (name is null)
+            return;
+
+        regel.Generator = Generators.FirstOrDefault(g => string.Equals(g.Name, name, StringComparison.OrdinalIgnoreCase));
     }
 
     // ---------------------------------------------------------- Bereich
@@ -685,12 +721,62 @@ public sealed class TextRuleViewModel : ObservableObject
             Rule.Generator = value.Name;
             OnPropertyChanged();
             OnPropertyChanged(nameof(PatternDescription));
+            RaiseGeneratorScopeHintChanged();
             _onChanged();
         }
     }
 
     /// <summary>Meldet, dass sich die Generatorenliste geaendert haben koennte (siehe <see cref="TextRulesViewModel.RefreshGeneratorsList"/>).</summary>
-    public void NotifyGeneratorChanged() => OnPropertyChanged(nameof(Generator));
+    public void NotifyGeneratorChanged()
+    {
+        OnPropertyChanged(nameof(Generator));
+        RaiseGeneratorScopeHintChanged();
+    }
+
+    private void RaiseGeneratorScopeHintChanged()
+    {
+        OnPropertyChanged(nameof(GeneratorScopeHint));
+        OnPropertyChanged(nameof(HasGeneratorScopeHint));
+    }
+
+    /// <summary>
+    /// Hinweis unter der Generator-Auswahl (Plan P4): eine Regel fuer alle
+    /// Projekte, deren Generator es bislang nur im Profil gibt, bekommt ihn
+    /// erst beim Übernehmen mitkopiert (siehe
+    /// <see cref="ExtensionLibrary.AdoptProjectGenerators"/>) -- bis dahin
+    /// liefe sie in jedem anderen Projekt ins Leere. <c>null</c> in jedem
+    /// anderen Fall (Projektregel, eingebauter oder schon globaler Generator).
+    /// </summary>
+    public string? GeneratorScopeHint
+    {
+        get
+        {
+            if (Scope != RuleScope.Global)
+                return null;
+
+            var generatorName = Rule.Generator;
+            if (string.IsNullOrWhiteSpace(generatorName))
+                return null;
+
+            if (Core.Generation.GeneratorRegistry.KnownNames.Contains(generatorName, StringComparer.OrdinalIgnoreCase))
+                return null;
+
+            if (string.Equals(generatorName, "scanText", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            // Schon ein globaler Eintrag (egal ob passend) -- nichts mehr zu
+            // kopieren, derselbe Massstab wie AdoptProjectGenerators selbst.
+            if (_extensions.Generators.ContainsKey(generatorName))
+                return null;
+
+            if (!_profileForGenerators.Generators.ContainsKey(generatorName))
+                return null;
+
+            return "Dieser Generator gilt bisher nur in diesem Projekt – beim Übernehmen wird er für alle Projekte mitkopiert.";
+        }
+    }
+
+    public bool HasGeneratorScopeHint => GeneratorScopeHint is not null;
 
     // -------------------------------------------------------- Erfassungsmodus
 

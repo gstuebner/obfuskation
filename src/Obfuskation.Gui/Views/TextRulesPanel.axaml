@@ -145,18 +145,29 @@
               <!-- 3. Ersetzen durch -->
               <StackPanel Spacing="4">
                 <TextBlock Text="Ersetzen durch" Classes="muted"/>
-                <ComboBox HorizontalAlignment="Stretch"
-                          ItemsSource="{Binding Generators}"
-                          SelectedItem="{Binding Selected.Generator}">
-                  <ComboBox.ItemTemplate>
-                    <DataTemplate x:DataType="vm:GeneratorOption">
-                      <StackPanel Orientation="Horizontal" Spacing="8">
-                        <TextBlock Text="{Binding Name}" MinWidth="96"/>
-                        <TextBlock Text="{Binding Description}" Classes="muted"/>
-                      </StackPanel>
-                    </DataTemplate>
-                  </ComboBox.ItemTemplate>
-                </ComboBox>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                  <ComboBox Grid.Column="0" HorizontalAlignment="Stretch"
+                            ItemsSource="{Binding Generators}"
+                            SelectedItem="{Binding Selected.Generator}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:GeneratorOption">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{Binding Name}" MinWidth="96"/>
+                          <TextBlock Text="{Binding Description}" Classes="muted"/>
+                        </StackPanel>
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <!-- Plan P3d: neuer Generator, wahlweise fuer dieses
+                       Projekt oder alle — bei einer globalen Regel fest auf
+                       "alle Projekte" (siehe SettingsViewModel.CreateGeneratorForRuleAsync). -->
+                  <Button Grid.Column="1" Content="Neuer Generator…" Classes="flat"
+                          Command="{Binding NewGeneratorCommand}"/>
+                </Grid>
+                <!-- Plan P4: eine Regel fuer alle Projekte mit einem
+                     Projekt-Generator nimmt ihn erst beim Übernehmen mit. -->
+                <TextBlock Text="{Binding Selected.GeneratorScopeHint}" Classes="muted small" TextWrapping="Wrap"
+                           IsVisible="{Binding Selected.HasGeneratorScopeHint}"/>
               </StackPanel>
             </StackPanel>
 

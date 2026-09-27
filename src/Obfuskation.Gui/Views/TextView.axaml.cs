@@ -32,16 +32,6 @@ public partial class TextView : UserControl
     };
 
     /// <summary>
-    /// Die beiden Hervorhebungen, halbdurchsichtig, damit der Text darunter
-    /// seine eigene Farbe behaelt. Deckkraft bewusst ueber der Haelfte: auf
-    /// dunklem Fenster ging ein Drittel im Hintergrund schlicht unter, auf
-    /// hellem traegt es immer noch nicht auf.
-    /// </summary>
-    private static readonly IBrush ReplacedBrush = new SolidColorBrush(Color.Parse("#8C3EA25B"));
-
-    private static readonly IBrush ExcludedBrush = new SolidColorBrush(Color.Parse("#8CD97706"));
-
-    /// <summary>
     /// Die Markierung, wie sie beim Oeffnen des Kontextmenues bestand. Wird
     /// dort festgehalten und nicht erst beim Klick auf den Eintrag gelesen:
     /// ob ein aufgehendes Menue den Fokus und damit die Markierung kostet, ist
@@ -128,8 +118,8 @@ public partial class TextView : UserControl
             {
                 Background = segment.Kind switch
                 {
-                    TextSegmentKind.Replaced => ReplacedBrush,
-                    TextSegmentKind.Excluded => ExcludedBrush,
+                    TextSegmentKind.Replaced => HighlightTextBox.ReplacedBrush,
+                    TextSegmentKind.Excluded => HighlightTextBox.ExcludedBrush,
                     _ => null,
                 },
             });

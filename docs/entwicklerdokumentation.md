@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.9.0
+version: 1.10.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 24.09.2026
+date: 26.09.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.9.0 · Stand 24. September 2026
+Fassung 1.10.0 · Stand 26. September 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -616,6 +616,133 @@ kennt weder `Window` noch einen Dateidialog unmittelbar:
   Pseudonyme bleiben unveränderlich — nur `Remove`/`RemoveNamespace`, kein
   Bearbeiten: ein geändertes Pseudonym hätte mit bereits erzeugten
   Pseudodateien nichts mehr zu tun.
+
+  **Regeln & Generatoren (1.10.0):** Das Fenster „Einstellungen“ heißt jetzt
+  „Regeln & Generatoren“ (`SettingsViewModel.WindowTitle`, neu: „Regeln &
+  Generatoren – {Projekt}“ bzw. ohne Profil „– alle Projekte“) — die
+  Kennungen im Code (`SettingsViewModel`, `SettingsTab`, `ShowSettingsCommand`
+  …) bleiben unverändert, es ändern sich nur sichtbare Texte. Vier
+  gleichwertige Einstiege führen jetzt dorthin: die Kopfzeile (Knopf und
+  Strg+,, wie zuvor), „Regeln bearbeiten…“ in Datei- und Textansicht (ersetzt
+  den Knopf „Immer ersetzen…“ der Dateiansicht — der kleine Dialog bleibt nur
+  noch beim Markieren von Text erreichbar) und neu die Startseite, deren
+  Knopf `StartViewModel.GlobalRulesCommand` auf
+  `MainViewModel.ShowGlobalRulesCommand` zeigt:
+  `MainViewModel.ShowSettingsAsync` bekommt dafür den Parameter `bool
+  globalOnly = false`, der `session: null` statt der laufenden Sitzung an
+  `SettingsViewModel` übergibt — das Fenster zeigt dann unabhängig von einem
+  im Hintergrund geladenen Profil nur die Regeln und Generatoren für alle
+  Projekte (`SettingsViewModel.HasProfile` steuert dafür auch die
+  Hinweiszeile über dem `TabControl` und blendet die Karte „Dieses Projekt“
+  im Reiter „Eigene Generatoren“ aus). `MainViewModel.ShowAlwaysReplaceCommand`
+  und `CurrentFileContextText()` sind entfallen, da die Dateiansicht den
+  Dialog „Immer ersetzen…“ nicht mehr direkt öffnet.
+
+  **Herkunft in der Fundliste:** `TextViewModel.DetermineScope(TextRule)`
+  bestimmt je Fund über die Regelreferenz, nicht über den Namen, ob sie aus
+  `ProfileSession.Extensions.TextRules` stammt (`RuleScope.Global`) oder aus
+  dem Profil (`RuleScope.Project`) — verlässlich, weil `TextRuleEngine.FindMatches`
+  die Regelreferenz durchreicht und `ExtensionLibrary.MergeTextRules` bei
+  gleichem Namen nur die Profilregel in die Vereinigung aufnimmt. Neu an
+  `TextMatchViewModel`: `Scope`, `ScopeLabel` („dieses Projekt“/„alle
+  Projekte“), `OriginLabel` (`"{RuleName} · {ScopeLabel}"`, eine zusätzliche
+  Spalte in `TextView.axaml`) und `OriginTooltip`, der bei einer der vier
+  eingebauten Regeln erklärt, dass sie beim Anlegen des Projekts aus
+  `ProfileScaffolder.DefaultTextRules` unverändert übernommen wurde.
+
+  **Projekt-Generatoren wandern mit globalen Regeln:** `ExtensionLibrary.AdoptProjectGenerators(Profile)`
+  geht `TextRules` und `FieldRules` der Erweiterung durch und kopiert per
+  `ProfileStore.DeepCopy` jeden Generator in `Generators`, der weder
+  eingebaut noch `scanText` ist, den es dort noch nicht gibt, aber im
+  übergebenen Profil — Rückgabe die kopierten Namen. Aufgerufen wird sie an
+  zwei Stellen, die beide schon vorher eine globale Regel mit einem nur im
+  Projekt vorhandenen Generator zulassen konnten, ohne ihn mitzunehmen:
+  `SettingsViewModel.Apply` (vor `ProfileValidator.Validate`, kopierte Namen
+  setzen `_globalDirty`) und `AlwaysReplaceViewModel.CreateRule` bei
+  `UseExtension` (vor `_extensions.Save`, mit Rücknahme der kopierten
+  Generatoren im selben `catch`, der auch die Regel zurücknimmt).
+  `TextRuleViewModel.GeneratorScopeHint` bzw.
+  `AlwaysReplaceViewModel.GeneratorScopeHint` zeigen den Hinweis dazu schon
+  vorher unter der Generator-Auswahl. `TextRulesViewModel.ChangeScope`
+  kopierte einen mitgenommenen Generator schon vorher beim Bereichswechsel
+  selbst — das war nicht die Lücke, die `AdoptProjectGenerators` schließt.
+
+  **Generator-Dialog (`GeneratorEditorViewModel`/`GeneratorEditorWindow`):**
+  ein einziges Ansichtsmodell für Anlegen *und* Bearbeiten eines eigenen
+  Generators, aus drei Stellen erreichbar (Dialog „Immer ersetzen…“, Reiter
+  „Eigene Generatoren“, „Neuer Generator…“ neben „Ersetzen durch“ im
+  Regelformular). Es schreibt selbst nichts: der Aufrufer liest `ResultName`,
+  `ResultSettings` und `ResultScope`, nachdem `ApplyCommand` `Confirmed`
+  gesetzt hat — dasselbe Muster wie `AlwaysReplaceViewModel`. Die
+  Optionsfelder (`ShowPrefix`/`Prefix`, `ShowPatternMask`/`Pattern`, …)
+  spiegeln `FieldRuleViewModel` und richten ihre Sichtbarkeit nach
+  `ProfileValidator.OptionOwnership`; `BuildResult()` setzt `Type` auf die
+  gewählte `SelectedBaseType` und verwirft dabei alle Optionen anderer
+  Basistypen, lässt aber `MaxDays`/`Formats`/`Country`/`Domain` unangetastet,
+  damit von Hand gepflegtes JSON beim Bearbeiten nicht verloren geht. Ist der
+  Generator schon in Verwendung (`users`-Parameter), sperren `CanRename` und
+  `CanChangeType` Name und Art. Die Vorschau läuft über das neue
+  `Obfuskation.Core.Generation.GeneratorPreview.TryExample(key, settings,
+  sample, deriver, out example, out error)`: ein Wegwerf-Profil mit genau
+  diesem einen Generator, `GeneratorRegistry.Build` und `Generate` darauf,
+  `ConfigurationException`/`GenerationException` werden zu `false` samt
+  Meldung. Der `SeedDeriver` dafür lebt eine Dialoglebenszeit lang in
+  `GeneratorEditorViewModel` selbst (`new(SeedDeriver.CreateSalt())`), damit
+  das Beispiel beim Tippen nicht bei jedem Tastenschlag springt. Die
+  Namensprüfung (`NameError`) verbietet leere, unzulässige, eingebaute und im
+  Zielbereich schon vergebene Namen (außer an den Eintrag selbst beim
+  Umbenennen); `NameHint` warnt zusätzlich ohne zu sperren, wenn derselbe
+  Name im jeweils anderen Bereich schon existiert.
+
+  **Farben im Eingabefeld (`HighlightTextBox`):** Ein `TextBox` kann keine
+  Hintergründe je Textabschnitt tragen, darum zeigte die Textansicht ihre
+  Farben bis 1.9.0 nur in der schreibgeschützten Prüffassung. Seit 1.10.0
+  ist das Eingabefeld ein `HighlightTextBox : TextBox`
+  (`src/Obfuskation.Gui/Views/HighlightTextBox.cs`, `StyleKeyOverride =>
+  typeof(TextBox)`, damit Vorlage und Stile unverändert greifen). In
+  `OnApplyTemplate` sucht es `PART_TextPresenter`; in der Fluent-Vorlage
+  von Avalonia 12 liegt der in einem `Panel` innerhalb des ScrollViewers.
+  Direkt davor setzt es eine eigene Zeichenebene (`TextHighlightLayer`), die
+  damit deckungsgleich unter dem Text liegt und ohne eigenes Zutun
+  mitscrollt. Sie zeichnet je Bereich die Rechtecke aus
+  `presenter.TextLayout.HitTestTextRange(start, length)`, also aus demselben
+  Layout, das den Text setzt (Umbruch, Schrift, Zeilenhöhe stimmen immer),
+  und zeichnet nach jedem `LayoutUpdated` des Presenters neu. Fehlt der
+  erwartete Aufbau (künftige Vorlage), bleibt das Feld ein gewöhnliches
+  Eingabefeld ohne Farben. Die Bereiche liefert
+  `TextViewModel.InputHighlights` (`TextHighlight(Start, Length, Kind)`),
+  gebaut in `RecomputeResultText` parallel zu `InputSegments`; sie sind nur
+  gültig, solange `InputText` dem Text des letzten Laufs entspricht, sonst
+  ist die Liste leer. Während der Entprellung steht damit keine Farbe an
+  einer verschobenen Stelle. Die beiden Pinsel liegen als statische Felder
+  an `HighlightTextBox` und werden von der Prüffassung (`TextView.Fill`)
+  mitbenutzt.
+
+  **Verschachtelte Dialoge:** `AlwaysReplaceViewModel` und `SettingsViewModel`
+  tragen je die Eigenschaft `Func<GeneratorEditorViewModel, Task<bool>>?
+  ShowGeneratorEditor`. `DialogService.ShowAlwaysReplaceAsync` und
+  `ShowSettingsAsync` setzen sie, bevor sie ihr eigenes Fenster mit
+  `ShowDialog` öffnen, auf `editor => ShowGeneratorEditorAsync(editor,
+  window)` — mit dem gerade entstehenden eigenen Fenster als Besitzer des
+  verschachtelten Dialogs. `IDialogService` selbst bleibt unverändert, das
+  Muster lebt vollständig in `DialogService` und den beiden
+  Ansichtsmodellen; ein Test setzt die Eigenschaft direkt auf einen Handler,
+  der Felder füllt und `ApplyCommand` ausführt, ganz ohne dass dabei ein
+  Fenster entstünde. `TextRulesViewModel` bekommt denselben Anschluss über
+  einen schlichteren Rückruf, `Func<RuleScope, string?, Task<string?>>?
+  createGenerator` (Bereich und Namensvorschlag hinein, neuer Name oder
+  `null` heraus) — `SettingsViewModel.CreateGeneratorForRuleAsync` sperrt den
+  Bereich dabei auf „alle Projekte“, wenn die Regel selbst schon global ist.
+
+  `GeneratorEntryViewModel` (Reiter „Eigene Generatoren“) ist seit dieser
+  Fassung nur noch Anzeige: `Name` und `Prefix` haben keine Setter mehr,
+  `DescriptionLabel` (`GeneratorDescriptions.For`) und `OptionsSummary` (eine
+  Kurzfassung wie „Kennzeichnung FW~“ oder „3 Werte“, sonst leer) ersetzen
+  die frühere Inline-Bearbeitung; ein neues `EditCommand` öffnet den
+  Generator-Dialog mit `existingName` und `users`. `SettingsViewModel.EditGeneratorAsync`
+  entfernt bei einer tatsächlichen Umbenennung den alten Schlüssel aus dem
+  Wörterbuch und baut danach beide Generatorenlisten komplett neu, statt den
+  bestehenden Eintrag zu mutieren.
 
 Weil die Bedienlogik so von der laufenden Anwendung entkoppelt ist, lässt
 sie sich ohne Fenster prüfen — `tests/Obfuskation.Gui.Tests/MainViewModelTests.cs`

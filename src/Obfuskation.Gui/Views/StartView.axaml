@@ -87,8 +87,14 @@
         </Button>
       </Grid>
 
-      <Button Classes="flat" Content="Kurzhilfe…" Command="{Binding HelpCommand}"
-              HorizontalAlignment="Center"/>
+      <!-- Einheitlicher Einstieg (Plan P1): derselbe Weg wie in beiden
+           Ansichten, hier ohne Profilbezug — ohne geladenes Profil zeigt das
+           Fenster ohnehin nur "alle Projekte". -->
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+        <Button Classes="flat" Content="Regeln &amp; Generatoren…" Command="{Binding GlobalRulesCommand}"
+                ToolTip.Tip="Regeln und Generatoren für alle Projekte"/>
+        <Button Classes="flat" Content="Kurzhilfe…" Command="{Binding HelpCommand}"/>
+      </StackPanel>
     </StackPanel>
   </Grid>
 </UserControl>

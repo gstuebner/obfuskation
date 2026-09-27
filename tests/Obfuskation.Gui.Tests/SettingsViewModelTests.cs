@@ -247,6 +247,25 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal(RuleScope.Global, modell.TextRules.Selected!.Scope);
     }
 
+    // ------------------------------------------------------- Fenstertitel
+
+    [Fact]
+    public void Fenstertitel_nennt_das_Projekt()
+    {
+        var session = Sitzung();
+        var modell = Modell(session, ExtensionLibrary.Empty);
+
+        Assert.Equal("Regeln & Generatoren – test", modell.WindowTitle);
+    }
+
+    [Fact]
+    public void Fenstertitel_ohne_Profil_nennt_alle_Projekte()
+    {
+        var modell = Modell(null, ExtensionLibrary.Empty);
+
+        Assert.Equal("Regeln & Generatoren – alle Projekte", modell.WindowTitle);
+    }
+
     // ----------------------------------------------------------- Bereich
 
     [Fact]
@@ -311,6 +330,33 @@ public sealed class SettingsViewModelTests : IDisposable
         regel.IsGlobalScope = true;
 
         Assert.Contains(modell.TextRules.Rules, r => r.Name == "gleich2" && r.Scope == RuleScope.Global);
+    }
+
+    [Fact]
+    public void Uebernehmen_kopiert_den_Projekt_Generator_einer_bereits_globalen_Regel_mit()
+    {
+        // Plan P4: anders als beim Bereichswechsel (siehe oben, das kopiert
+        // schon selbst) bekommt eine schon global angelegte Regel ihren
+        // Generator erst zugewiesen, nachdem sie im Formular auf "Alle
+        // Projekte" steht -- genau die Luecke, die AdoptProjectGenerators beim
+        // Übernehmen schliesst.
+        var session = Sitzung(p => p.Generators["fw"] = new GeneratorSettings { Type = "token", Prefix = "FW~" });
+        var extensions = ExtensionLibrary.Empty;
+
+        var modell = Modell(session, extensions);
+
+        modell.TextRules.AddCommand.Execute(null);
+        var regel = modell.TextRules.Selected!;
+        regel.Pattern = @"\bFW\d{6}\b";
+        regel.IsGlobalScope = true;
+        regel.Generator = modell.TextRules.Generators.Single(g => g.Name == "fw");
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Applied);
+        Assert.True(modell.GlobalChanged);
+        Assert.True(extensions.Generators.ContainsKey("fw"));
+        Assert.Equal("FW~", extensions.Generators["fw"].Prefix);
     }
 
     // ---------------------------------------------------- Erfassungsmodus
@@ -432,6 +478,120 @@ public sealed class SettingsViewModelTests : IDisposable
 
         var globaleRegel = modell.TextRules.Rules.Single(r => r.Name == "hauseigen" && r.Scope == RuleScope.Global);
         Assert.True(globaleRegel.IsOverridden);
+    }
+
+    // -------------------------------------- Eigene Generatoren (Plan P3d)
+
+    /// <summary>Fuellt den Generator-Dialog und bestaetigt ihn sofort -- ohne dabei ein echtes Fenster zu oeffnen.</summary>
+    private static Func<GeneratorEditorViewModel, Task<bool>> FuelleUndUebernehme(
+        string name, string prefix, bool global = false)
+        => editor =>
+        {
+            editor.Name = name;
+            if (global)
+                editor.IsGlobalScope = true;
+            editor.Prefix = prefix;
+            editor.ApplyCommand.Execute(null);
+            return Task.FromResult(editor.Confirmed);
+        };
+
+    [Fact]
+    public async Task Ein_neuer_Generator_im_Projekt_wirkt_erst_nach_Uebernehmen()
+    {
+        var session = Sitzung();
+        var extensions = ExtensionLibrary.Empty;
+        var modell = Modell(session, extensions);
+        modell.ShowGeneratorEditor = FuelleUndUebernehme("projektToken", "PT~");
+
+        modell.NewGeneratorCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Contains(modell.ProjectGenerators, g => g.Name == "projektToken");
+        Assert.False(session.Profile.Generators.ContainsKey("projektToken"));
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Applied);
+        Assert.True(session.Profile.Generators.ContainsKey("projektToken"));
+        Assert.Equal("PT~", session.Profile.Generators["projektToken"].Prefix);
+    }
+
+    [Fact]
+    public async Task Ein_neuer_Generator_fuer_alle_Projekte_wirkt_erst_nach_Uebernehmen()
+    {
+        var session = Sitzung();
+        var extensions = ExtensionLibrary.Empty;
+        var modell = Modell(session, extensions);
+        modell.ShowGeneratorEditor = FuelleUndUebernehme("globalToken", "GT~", global: true);
+
+        modell.NewGeneratorCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.Contains(modell.GlobalGenerators, g => g.Name == "globalToken");
+        Assert.False(extensions.Generators.ContainsKey("globalToken"));
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Applied);
+        Assert.True(extensions.Generators.ContainsKey("globalToken"));
+    }
+
+    [Fact]
+    public async Task Bearbeiten_aendert_das_Praefix()
+    {
+        var session = Sitzung(p => p.Generators["fw"] = new GeneratorSettings { Type = "token", Prefix = "ALT~" });
+        var extensions = ExtensionLibrary.Empty;
+        var modell = Modell(session, extensions);
+
+        var eintrag = Assert.Single(modell.ProjectGenerators, g => g.Name == "fw");
+        modell.ShowGeneratorEditor = editor =>
+        {
+            Assert.Equal("fw", editor.Name);
+            editor.Prefix = "NEU~";
+            editor.ApplyCommand.Execute(null);
+            return Task.FromResult(editor.Confirmed);
+        };
+
+        eintrag.EditCommand.Execute(null);
+        await Task.Yield();
+
+        var aktualisiert = Assert.Single(modell.ProjectGenerators, g => g.Name == "fw");
+        Assert.Equal("Kennzeichnung NEU~", aktualisiert.OptionsSummary);
+
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Applied);
+        Assert.Equal("NEU~", session.Profile.Generators["fw"].Prefix);
+    }
+
+    [Fact]
+    public async Task Umbenennen_ist_gesperrt_solange_eine_Regel_den_Generator_verwendet()
+    {
+        var session = Sitzung(p =>
+        {
+            p.Generators["fw"] = new GeneratorSettings { Type = "token", Prefix = "FW~" };
+            p.TextRules.Add(new TextRule { Name = "fw-regel", Generator = "fw", Pattern = @"\bFW\d{6}\b" });
+        });
+        var extensions = ExtensionLibrary.Empty;
+        var modell = Modell(session, extensions);
+
+        var eintrag = Assert.Single(modell.ProjectGenerators, g => g.Name == "fw");
+        Assert.True(eintrag.IsInUse);
+
+        var gepruft = false;
+        modell.ShowGeneratorEditor = editor =>
+        {
+            Assert.False(editor.CanRename);
+            Assert.False(editor.CanChangeType);
+            Assert.NotNull(editor.UsersHint);
+            gepruft = true;
+            return Task.FromResult(false);
+        };
+
+        eintrag.EditCommand.Execute(null);
+        await Task.Yield();
+
+        Assert.True(gepruft);
     }
 
     // -------------------------------------------------------- Spaltenmuster

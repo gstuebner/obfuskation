@@ -148,6 +148,82 @@ public class ExtensionLibraryTests
         Assert.Contains("***", text);
         Assert.DoesNotContain("INV123456", text);
     }
+
+    // ------------------------------------------ AdoptProjectGenerators (P4)
+
+    [Fact]
+    public void Ein_nur_im_Profil_vorhandener_Generator_wird_mitkopiert()
+    {
+        var profile = new Profile();
+        profile.Generators["fw"] = new GeneratorSettings { Type = "token", Prefix = "FW~" };
+
+        var extensions = new ExtensionLibrary
+        {
+            TextRules = [new TextRule { Name = "fw", Pattern = @"\bFW\d{6}\b", Generator = "fw" }],
+        };
+
+        var kopiert = extensions.AdoptProjectGenerators(profile);
+
+        Assert.Equal(new[] { "fw" }, kopiert);
+        Assert.True(extensions.Generators.ContainsKey("fw"));
+        Assert.Equal("FW~", extensions.Generators["fw"].Prefix);
+
+        // Kopie, keine geteilte Referenz -- eine spaetere Aenderung an der
+        // einen Fassung darf die andere nicht beruehren.
+        Assert.NotSame(profile.Generators["fw"], extensions.Generators["fw"]);
+    }
+
+    [Fact]
+    public void Ein_bereits_vorhandener_globaler_Generator_wird_nicht_ueberschrieben()
+    {
+        var profile = new Profile();
+        profile.Generators["fw"] = new GeneratorSettings { Type = "token", Prefix = "FW~" };
+
+        var extensions = new ExtensionLibrary
+        {
+            Generators = { ["fw"] = new GeneratorSettings { Type = "token", Prefix = "ANDERS~" } },
+            TextRules = [new TextRule { Name = "fw", Pattern = @"\bFW\d{6}\b", Generator = "fw" }],
+        };
+
+        var kopiert = extensions.AdoptProjectGenerators(profile);
+
+        Assert.Empty(kopiert);
+        Assert.Equal("ANDERS~", extensions.Generators["fw"].Prefix);
+    }
+
+    [Fact]
+    public void Eingebaute_Generatoren_und_scanText_werden_ignoriert()
+    {
+        var profile = new Profile();
+
+        var extensions = new ExtensionLibrary
+        {
+            TextRules = [new TextRule { Name = "mail", Pattern = @"\S+@\S+", Generator = "email" }],
+            FieldRules = [new FieldNameRule { Pattern = "Notiz", Generator = "scanText" }],
+        };
+
+        var kopiert = extensions.AdoptProjectGenerators(profile);
+
+        Assert.Empty(kopiert);
+        Assert.Empty(extensions.Generators);
+    }
+
+    [Fact]
+    public void Ein_Feldregel_Generator_aus_dem_Profil_wird_ebenfalls_mitkopiert()
+    {
+        var profile = new Profile();
+        profile.Generators["kundennummer"] = new GeneratorSettings { Type = "numericId" };
+
+        var extensions = new ExtensionLibrary
+        {
+            FieldRules = [new FieldNameRule { Pattern = "Kdnr", Generator = "kundennummer" }],
+        };
+
+        var kopiert = extensions.AdoptProjectGenerators(profile);
+
+        Assert.Equal(new[] { "kundennummer" }, kopiert);
+        Assert.True(extensions.Generators.ContainsKey("kundennummer"));
+    }
 }
 
 /// <summary>

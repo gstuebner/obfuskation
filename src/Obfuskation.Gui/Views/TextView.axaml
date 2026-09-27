@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:Obfuskation.Gui.ViewModels"
+             xmlns:views="using:Obfuskation.Gui.Views"
              mc:Ignorable="d" d:DesignWidth="1040" d:DesignHeight="640"
              x:Class="Obfuskation.Gui.Views.TextView"
              x:DataType="vm:TextViewModel">
@@ -58,11 +59,13 @@
                     ToolTip.Tip="Textdatei öffnen"/>
           </Grid>
 
-          <!-- Zwei Zustaende an derselben Stelle. Ein Eingabefeld kann in
-               Avalonia keine Hintergruende je Textabschnitt tragen, ein
-               SelectableTextBlock kein Tippen — beides zugleich gibt es nicht.
-               Die Prueffassung ist der Regelfall (Text kommt fast immer ueber
-               Einfügen oder Datei herein), das Feld der Ausnahmefall. -->
+          <!-- Zwei Zustaende an derselben Stelle: die schreibgeschuetzte
+               Prueffassung und das Eingabefeld. Farbig sind seit 1.10.0 beide
+               — das Eingabefeld zeichnet die Funde auf einer eigenen Ebene
+               unter seinen Text (HighlightTextBox), weil ein TextBox selbst
+               keine Hintergruende je Textabschnitt tragen kann. Die
+               Prueffassung bleibt vorerst als Regelfall nach dem Einfügen;
+               ob sie entfallen kann, steht in docs/Feature.md. -->
           <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
                         IsVisible="{Binding !IsEditing}">
             <SelectableTextBlock x:Name="InputBlock" TextWrapping="Wrap"
@@ -85,7 +88,8 @@
             </SelectableTextBlock>
           </ScrollViewer>
 
-          <TextBox Grid.Row="1" x:Name="InputBox" Text="{Binding InputText}"
+          <views:HighlightTextBox Grid.Row="1" x:Name="InputBox" Text="{Binding InputText}"
+                   Highlights="{Binding InputHighlights}"
                    IsVisible="{Binding IsEditing}"
                    AcceptsReturn="True" TextWrapping="Wrap"
                    ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -96,7 +100,7 @@
                  Anfaenger markiert. Die vier Standardeintraege rufen dieselben
                  TextBox-Methoden wie das native Menue (Cut/Copy/Paste/SelectAll),
                  es geht also nichts verloren. -->
-            <TextBox.ContextFlyout>
+            <views:HighlightTextBox.ContextFlyout>
               <MenuFlyout>
                 <MenuItem Header="Ausschneiden" InputGesture="Ctrl+X" Click="OnEditCut"/>
                 <MenuItem Header="Kopieren" InputGesture="Ctrl+C" Click="OnEditCopy"/>
@@ -105,8 +109,8 @@
                 <Separator/>
                 <MenuItem x:Name="AlwaysReplaceEditItem" Click="OnAlwaysReplaceSelection"/>
               </MenuFlyout>
-            </TextBox.ContextFlyout>
-          </TextBox>
+            </views:HighlightTextBox.ContextFlyout>
+          </views:HighlightTextBox>
         </Grid>
       </Border>
 
@@ -116,7 +120,7 @@
            Einsteiger nicht von selbst annimmt, darum steht es dauerhaft da. -->
       <TextBlock Grid.Row="1" Grid.Column="0" Classes="muted small" Margin="2,6,0,0"
                  IsVisible="{Binding IsForward}" TextWrapping="Wrap"
-                 Text="Noch etwas Vertrauliches ohne Farbe? Links markieren, rechte Maustaste → „… immer ersetzen…“ (oder Strg+M) — der Dialog fragt in Klartext, kein regulärer Ausdruck nötig, oder Regeln unter ⚙ Einstellungen bearbeiten."/>
+                 Text="Noch etwas Vertrauliches ohne Farbe? Links markieren, rechte Maustaste → „… immer ersetzen…“ (oder Strg+M) — der Dialog fragt in Klartext, kein regulärer Ausdruck nötig, oder Regeln unter ⚙ Regeln &amp; Generatoren bearbeiten."/>
 
       <Border Grid.Column="2" Classes="card" Margin="0">
         <Grid RowDefinitions="Auto,*">
@@ -149,7 +153,7 @@
                eine bestimmte Regel auszuwaehlen (Plan Teil C-2). -->
           <Button Grid.Column="1" Content="Regeln bearbeiten…" Classes="flat"
                   Command="{Binding EditRulesCommand}"
-                  ToolTip.Tip="Textregeln in den Einstellungen bearbeiten"/>
+                  ToolTip.Tip="Regeln im Fenster „Regeln &amp; Generatoren“ bearbeiten"/>
 
           <!-- Die Legende erklaert die Ansicht ohne einen Satz Hilfetext: was
                farbig ist, ist versorgt; was farblos bleibt, ginge im Klartext
@@ -173,10 +177,23 @@
         </Grid>
 
         <ScrollViewer MaxHeight="160" IsVisible="{Binding HasMatches}">
-          <ItemsControl ItemsSource="{Binding Matches}">
+          <!-- Jede Zeile hat ihr eigenes Grid. Ohne gemeinsame Breiten fielen
+               die Auto-Spalten (Herkunft, "immer…" bzw. "Regel entfernen" und
+               "bearbeiten…") je Zeile verschieden breit aus, und Pfeil und
+               Ersatzwert standen in jeder Zeile an anderer Stelle. -->
+          <ItemsControl ItemsSource="{Binding Matches}" Grid.IsSharedSizeScope="True">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:TextMatchViewModel">
-                <Grid ColumnDefinitions="Auto,*,Auto,*,Auto,Auto" ColumnSpacing="8" Margin="0,2">
+                <Grid ColumnSpacing="8" Margin="0,2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="fundHerkunft"/>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="fundKnopf1"/>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="fundKnopf2"/>
+                  </Grid.ColumnDefinitions>
                   <CheckBox Grid.Column="0" IsChecked="{Binding IsIncluded}"
                             IsEnabled="{Binding CanToggle}"
                             ToolTip.Tip="Diesen Fund für diesen Durchgang abschalten"/>
@@ -185,6 +202,12 @@
                   <TextBlock Grid.Column="2" Text="→" Classes="accent small"/>
                   <TextBlock Grid.Column="3" Text="{Binding Replacement}" Classes="mono small accent"
                              TextTrimming="CharacterEllipsis"/>
+                  <!-- Herkunft (Plan P2): ob der Fund aus einer Regel des
+                       Projekts oder einer Regel fuer alle Projekte stammt.
+                       Bei einer Vorgaberegel (iban, email, bic, phone) erklaert
+                       der Tooltip, warum sie trotzdem "dieses Projekt" zeigt. -->
+                  <TextBlock Grid.Column="4" Text="{Binding OriginLabel}" Classes="muted small"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding OriginTooltip}"/>
                   <!-- Zwei Knoepfe an derselben Stelle, je nach Herkunft der
                        Regel. Bei einer selbst angelegten waere "immer…"
                        gegenstandslos (sie gilt bereits immer); gebraucht wird
@@ -193,18 +216,18 @@
                        soll. Die vier eingebauten Regeln bleiben unantastbar:
                        fuer sie ist das Haekchen der richtige Weg, denn es gilt
                        nur fuer diesen einen Durchgang. -->
-                  <Button Grid.Column="4" Content="immer…" Classes="flat"
+                  <Button Grid.Column="5" Content="immer…" Classes="flat"
                           IsVisible="{Binding !IsUserRule}"
                           Command="{Binding AlwaysReplaceCommand}"
                           ToolTip.Tip="Aus diesem Fund eine dauerhafte Ersetzungsregel anlegen"/>
-                  <Button Grid.Column="4" Content="Regel entfernen" Classes="flat"
+                  <Button Grid.Column="5" Content="Regel entfernen" Classes="flat"
                           IsVisible="{Binding IsUserRule}"
                           Command="{Binding RemoveRuleCommand}"
                           ToolTip.Tip="Die selbst angelegte Regel wieder löschen"/>
-                  <Button Grid.Column="5" Content="bearbeiten…" Classes="flat"
+                  <Button Grid.Column="6" Content="bearbeiten…" Classes="flat"
                           IsVisible="{Binding IsUserRule}"
                           Command="{Binding EditRuleCommand}"
-                          ToolTip.Tip="Diese Regel in den Einstellungen bearbeiten"/>
+                          ToolTip.Tip="Diese Regel im Fenster „Regeln &amp; Generatoren“ bearbeiten"/>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>

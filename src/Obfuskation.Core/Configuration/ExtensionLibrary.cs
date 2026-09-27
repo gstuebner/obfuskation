@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Obfuskation.Core.Generation;
 
 namespace Obfuskation.Core.Configuration;
 
@@ -349,6 +350,61 @@ public sealed class ExtensionLibrary
         var temporary = full + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(this, ProfileStore.JsonOptions));
         File.Move(temporary, full, overwrite: true);
+    }
+
+    /// <summary>
+    /// Nimmt Generatoren mit auf, die eine Regel dieser Erweiterung verwendet,
+    /// aber die es bislang nur im uebergebenen Profil gibt (Plan P4).
+    ///
+    /// Der Anlass: eine Regel fuer alle Projekte (<see cref="TextRules"/> oder
+    /// <see cref="FieldRules"/>) kann im Formular oder im AlwaysReplace-Dialog
+    /// einen Generator waehlen, den es nur im gerade offenen Profil gibt. In
+    /// diesem Projekt laeuft das, weil <see cref="Generation.GeneratorRegistry.Build"/>
+    /// zuerst die Erweiterung, dann das Profil einmischt -- in jedem anderen
+    /// Projekt fehlt der Generator dann ganz.
+    ///
+    /// Ein Generator gilt als "nur im Projekt", wenn er weder eingebaut
+    /// (<see cref="GeneratorRegistry.KnownNames"/>) noch <c>scanText</c> ist,
+    /// nicht schon in <see cref="Generators"/> steht (ein vorhandener globaler
+    /// Eintrag wird nie ueberschrieben) und tatsaechlich in
+    /// <paramref name="profile"/> existiert. Kopiert wird per
+    /// <see cref="ProfileStore.DeepCopy{T}"/>, damit spaetere Aenderungen an der
+    /// einen Fassung die andere nicht beruehren.
+    /// </summary>
+    /// <param name="profile">Das Profil, aus dem ein fehlender Generator kopiert wird.</param>
+    /// <returns>Die Namen der tatsaechlich kopierten Generatoren.</returns>
+    public IReadOnlyList<string> AdoptProjectGenerators(Profile profile)
+    {
+        var kopiert = new List<string>();
+
+        void UebernehmenFallsNoetig(string? generatorName)
+        {
+            if (string.IsNullOrWhiteSpace(generatorName))
+                return;
+
+            if (GeneratorRegistry.KnownNames.Contains(generatorName, StringComparer.OrdinalIgnoreCase))
+                return;
+
+            if (string.Equals(generatorName, "scanText", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (Generators.ContainsKey(generatorName))
+                return;
+
+            if (!profile.Generators.TryGetValue(generatorName, out var settings))
+                return;
+
+            Generators[generatorName] = ProfileStore.DeepCopy(settings);
+            kopiert.Add(generatorName);
+        }
+
+        foreach (var regel in TextRules)
+            UebernehmenFallsNoetig(regel.Generator);
+
+        foreach (var regel in FieldRules)
+            UebernehmenFallsNoetig(regel.Generator);
+
+        return kopiert;
     }
 
     /// <summary>

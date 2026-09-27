@@ -120,33 +120,39 @@
 
       <!-- Feldliste -->
       <Border Grid.Column="0" Classes="card" Margin="0">
-        <Grid RowDefinitions="Auto,*">
-          <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
-            <TextBlock Grid.Column="0" Text="Felder" Classes="card-title" VerticalAlignment="Center"/>
+        <Grid RowDefinitions="Auto,Auto,*">
+          <TextBlock Grid.Row="0" Text="Felder" Classes="card-title"/>
 
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-              <!-- Begriffe und Muster ohne Regex (Teil C): aus einem
-                   Beispielwert eine dauerhafte Ersetzungsregel anlegen, im
-                   Profil oder in der Erweiterungsdatei. -->
-              <Button Content="Immer ersetzen…" Classes="flat"
-                      Command="{Binding ShowAlwaysReplaceCommand}"
-                      ToolTip.Tip="Aus einem Beispielwert eine Ersetzungsregel anlegen, die auch künftig automatisch greift — ohne regulären Ausdruck"/>
+          <!-- Eigene Zeile unter der Ueberschrift statt daneben: die Karte ist
+               fest 320 Punkte breit, und beide Knoepfe zusammen sind breiter als
+               der Platz neben "Felder" — sie ueberdeckten die Ueberschrift und
+               "Felder automatisch erkennen…" wurde abgeschnitten, auch bei
+               Standardbreite (gemessen fuer 1.10.0). WrapPanel, damit eine
+               laengere Beschriftung umbricht statt wieder abzuschneiden. -->
+          <WrapPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,6">
+            <!-- Einheitlicher Einstieg wie die Textansicht (Plan P1): fuehrt
+                 auf das grosse Fenster "Regeln & Generatoren", Reiter
+                 "Textregeln". Der kleine Dialog "Immer ersetzen" bleibt nur
+                 beim Markieren von Text erreichbar (Kontextmenue, Strg+M,
+                 "immer…" in der Fundliste der Textansicht). -->
+            <Button Content="Regeln bearbeiten…" Classes="flat"
+                    Command="{Binding ShowSettingsCommand}"
+                    ToolTip.Tip="Textregeln und Generatoren im Fenster „Regeln &amp; Generatoren“ bearbeiten"/>
 
-              <!-- Wertbasierte Vorschlaege (Feature: Mustererkennung), aus den
-                   eingebauten Mustern und der Erweiterungsdatei. Nur
-                   sinnvoll, wenn ueberhaupt Felder da sind. Name nach dem
-                   Nutzen statt nach dem Verfahren (Teil D-2). -->
-              <Button Content="Felder automatisch erkennen…" Classes="flat"
-                      Command="{Binding ShowPatternSuggestionsCommand}"
-                      ToolTip.Tip="Beispielwerte gegen bekannte Muster prüfen und passende Generatoren vorschlagen"/>
-            </StackPanel>
-          </Grid>
+            <!-- Wertbasierte Vorschlaege (Feature: Mustererkennung), aus den
+                 eingebauten Mustern und der Erweiterungsdatei. Nur
+                 sinnvoll, wenn ueberhaupt Felder da sind. Name nach dem
+                 Nutzen statt nach dem Verfahren (Teil D-2). -->
+            <Button Content="Felder automatisch erkennen…" Classes="flat"
+                    Command="{Binding ShowPatternSuggestionsCommand}"
+                    ToolTip.Tip="Beispielwerte gegen bekannte Muster prüfen und passende Generatoren vorschlagen"/>
+          </WrapPanel>
 
           <!-- Freitexthinweis (Teil D-1): eine geoeffnete Datei ohne Felder
                ist entweder wirklich leer (kein Profil, keine Datei) oder
                schlicht Fliesstext; dann fuehrt der Knopf direkt in die
                Textansicht, mit dem Dateiinhalt schon eingefuegt. -->
-          <StackPanel Grid.Row="1" Spacing="10" IsVisible="{Binding ShowEmptyHint}"
+          <StackPanel Grid.Row="2" Spacing="10" IsVisible="{Binding ShowEmptyHint}"
                       VerticalAlignment="Center">
             <TextBlock Text="{Binding EmptyHint}" Classes="muted" TextWrapping="Wrap"/>
             <Button Content="In der Textansicht öffnen" Classes="flat" HorizontalAlignment="Left"
@@ -156,7 +162,7 @@
           <!-- Mehrfachauswahl mit Strg und Umschalt, Strg+A waehlt alles.
                Grosse Tabellen haben oft ganze Gruppen gleichartiger Spalten;
                die sollen sich in einem Zug entscheiden lassen. -->
-          <ListBox Grid.Row="1" x:Name="FieldList" ItemsSource="{Binding Fields}"
+          <ListBox Grid.Row="2" x:Name="FieldList" ItemsSource="{Binding Fields}"
                    IsVisible="{Binding !ShowEmptyHint}"
                    SelectedItem="{Binding SelectedField}"
                    SelectionMode="Multiple"

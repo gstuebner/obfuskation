@@ -233,11 +233,33 @@ public sealed class DialogService : IDialogService
         var window = new AlwaysReplaceWindow { DataContext = viewModel };
         viewModel.CloseRequested += () => window.Close();
 
-        // "In den Einstellungen bearbeiten…" schliesst diesen schlichten
-        // Dialog; MainViewModel oeffnet danach die Einstellungen selbst
-        // (siehe AlwaysReplaceViewModel.EditRulesRequested) -- hier ist nichts
-        // weiter zu tun.
+        // "Neuer Generator…" (Plan P3d) oeffnet den Generator-Dialog
+        // verschachtelt, mit diesem Fenster als Besitzer.
+        viewModel.ShowGeneratorEditor = editor => ShowGeneratorEditorAsync(editor, window);
+
+        // "Regeln & Generatoren…" schliesst diesen schlichten Dialog;
+        // MainViewModel oeffnet danach das Fenster "Regeln & Generatoren"
+        // selbst (siehe AlwaysReplaceViewModel.EditRulesRequested) -- hier ist
+        // nichts weiter zu tun.
         await window.ShowDialog(_owner);
+
+        return viewModel.Confirmed;
+    }
+
+    /// <summary>
+    /// Der Generator-Dialog (Plan P3), verschachtelt in einem bereits offenen
+    /// Fenster (<paramref name="owner"/>) -- "Immer ersetzen", "Regeln &
+    /// Generatoren" oder deren Regelformular. <paramref name="viewModel"/>
+    /// traegt das Ergebnis selbst (<see cref="GeneratorEditorViewModel.Confirmed"/>,
+    /// <see cref="GeneratorEditorViewModel.ResultName"/>, ...); der jeweilige
+    /// Aufrufer schreibt es in Profil oder Erweiterung.
+    /// </summary>
+    private static async Task<bool> ShowGeneratorEditorAsync(GeneratorEditorViewModel viewModel, Window owner)
+    {
+        var window = new GeneratorEditorWindow { DataContext = viewModel };
+        viewModel.CloseRequested += () => window.Close();
+
+        await window.ShowDialog(owner);
 
         return viewModel.Confirmed;
     }
@@ -287,6 +309,10 @@ public sealed class DialogService : IDialogService
     {
         var window = new SettingsWindow { DataContext = viewModel };
 
+        // "+ Neuer Generator…" (Plan P3d) oeffnet den Generator-Dialog
+        // verschachtelt, mit diesem Fenster als Besitzer.
+        viewModel.ShowGeneratorEditor = editor => ShowGeneratorEditorAsync(editor, window);
+
         viewModel.OpenFolderRequested += path => OpenWithShell(path);
         viewModel.OpenEditorRequested += path => OpenWithShell(path);
 
@@ -314,7 +340,7 @@ public sealed class DialogService : IDialogService
             {
                 var confirm = new ConfirmWindow(
                     "Ungespeicherte Änderungen",
-                    "Die Einstellungen haben ungespeicherte Änderungen. Übernehmen, bevor das Fenster schließt?",
+                    "„Regeln & Generatoren“ hat ungespeicherte Änderungen. Übernehmen, bevor das Fenster schließt?",
                     new (string Label, string Result)[]
                     {
                         ("Weiter bearbeiten", "continue"),

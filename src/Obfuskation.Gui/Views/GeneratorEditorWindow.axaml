@@ -1,0 +1,193 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Obfuskation.Gui.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="700"
+        x:Class="Obfuskation.Gui.Views.GeneratorEditorWindow"
+        x:DataType="vm:GeneratorEditorViewModel"
+        Title="{Binding WindowTitle}"
+        Width="600" MinWidth="600" MaxHeight="760" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Icon="avares://obfuskation-gui/Assets/obfuskation.png"
+        Background="{DynamicResource BrushBackground}">
+
+  <!--
+      Anlegen und Bearbeiten eines eigenen Generators (Plan P3), aus drei
+      Stellen erreichbar: "Immer ersetzen", Reiter "Eigene Generatoren" und dem
+      Regelformular. Aufbau wie AlwaysReplaceWindow: feste Breite, Hoehe nach
+      Inhalt, mit Deckel bei 760 und Bildlauf darunter, falls die Art viele
+      Optionen zeigt. Die Optionsbloecke sind fast wortgleich aus
+      GeneratorOptionsWindow.axaml uebernommen, nur ohne das Praefix "Field.",
+      denn hier ist das Ansichtsmodell selbst der DataContext.
+  -->
+  <Grid RowDefinitions="*,Auto" Margin="16">
+    <ScrollViewer Grid.Row="0">
+      <StackPanel Spacing="14">
+
+        <!-- 1. Bezeichnung -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Bezeichnung" Classes="muted"/>
+          <TextBox Text="{Binding Name}" Classes="mono" IsEnabled="{Binding CanRename}"
+                   PlaceholderText="z. B. fw"
+                   ToolTip.Tip="Unter diesem Namen erscheint der Generator in jeder Auswahlliste."/>
+          <TextBlock Text="{Binding NameError}" Classes="error small" TextWrapping="Wrap"
+                     IsVisible="{Binding HasNameError}"/>
+          <TextBlock Text="{Binding NameHint}" Classes="warning small" TextWrapping="Wrap"
+                     IsVisible="{Binding HasNameHint}"/>
+          <TextBlock Text="{Binding UsersHint}" Classes="muted small" TextWrapping="Wrap"
+                     IsVisible="{Binding HasUsers}"/>
+        </StackPanel>
+
+        <!-- 2. Art der Ersetzung -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Art der Ersetzung" Classes="muted"/>
+          <ComboBox HorizontalAlignment="Stretch" IsEnabled="{Binding CanChangeType}"
+                    ItemsSource="{Binding BaseTypes}" SelectedItem="{Binding SelectedBaseType}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:GeneratorOption">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding Name}" MinWidth="96"/>
+                  <TextBlock Text="{Binding Description}" Classes="muted"/>
+                </StackPanel>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+
+        <!-- 3. Optionsbloecke, wie in GeneratorOptionsWindow.axaml -->
+
+        <!-- Kennzeichnung (token) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowPrefix}">
+          <TextBlock Text="Kennzeichnung" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Prefix}" PlaceholderText="z. B. Artikelkategorie~"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Wird jedem erzeugten Pseudonym vorangestellt, etwa aus TOK_A1B2C3D4 wird Artikelkategorie~TOK_A1B2C3D4."/>
+        </StackPanel>
+
+        <!-- Platzhalter (redact) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowPlaceholder}">
+          <TextBlock Text="Platzhalter" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Placeholder}" PlaceholderText="ohne Angabe: Vorgabe des Profils"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ersetzt den Wert vollständig. Ohne Angabe gilt der Platzhalter aus den Profilvorgaben."/>
+        </StackPanel>
+
+        <!-- Zeitraum (dateRange) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowDateRange}">
+          <TextBlock Text="Zeitraum" Classes="card-title" Margin="0"/>
+          <Grid ColumnDefinitions="60,*,60,*" ColumnSpacing="8">
+            <TextBlock Grid.Column="0" Text="Von" Classes="muted" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="1" Text="{Binding From}" Classes="mono" PlaceholderText="JJJJ-MM-TT"/>
+            <TextBlock Grid.Column="2" Text="Bis" Classes="muted" VerticalAlignment="Center"/>
+            <TextBox Grid.Column="3" Text="{Binding To}" Classes="mono" PlaceholderText="JJJJ-MM-TT"/>
+          </Grid>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ohne Angabe bleibt das Kalenderjahr des Originals erhalten, nur Tag und Monat werden neu gezogen."/>
+        </StackPanel>
+
+        <!-- Rundungsstufe (dateGeneralize) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowGranularity}">
+          <TextBlock Text="Rundungsstufe" Classes="card-title" Margin="0"/>
+          <ComboBox HorizontalAlignment="Stretch"
+                    ItemsSource="{Binding GranularityOptions}"
+                    SelectedItem="{Binding SelectedGranularity}"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Rundet auf den Anfang von Monat, Quartal oder Jahr. Nicht umkehrbar: „Klartext wiederherstellen“ lässt dieses Feld unverändert."/>
+        </StackPanel>
+
+        <!-- Maske (pattern) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowPatternMask}">
+          <TextBlock Text="Zeichenmaske" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Pattern}" Classes="mono"
+                   PlaceholderText="ohne Angabe: aus dem Original abgeleitet"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="'A' Großbuchstabe, 'a' Kleinbuchstabe, '9' Ziffer, 'X' alphanumerisch, '\' escaped das Folgezeichen, alles Übrige bleibt wörtlich. Eine kurze Maske lässt nur wenige Werte zu — bei vielen Klartexten kann der Lauf dann mit einer Kollisionsmeldung abbrechen."/>
+        </StackPanel>
+
+        <!-- Werteliste (wordlist) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowWordlist}">
+          <TextBlock Text="Werteliste" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding ValuesText}" Classes="mono" AcceptsReturn="True"
+                   MinHeight="90" TextWrapping="Wrap"
+                   PlaceholderText="ein Wert je Zeile"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ein Wert je Zeile. Ohne Werte bricht der Lauf mit einer Fehlermeldung ab — eine kurze Liste lässt zudem nur wenige verschiedene Pseudonyme zu und kann bei vielen Klartexten mit einer Kollisionsmeldung abbrechen."/>
+        </StackPanel>
+
+        <!-- Teilmaskierung (partialMask) -->
+        <StackPanel Spacing="4" IsVisible="{Binding ShowPartialMask}">
+          <TextBlock Text="Teilmaskierung" Classes="card-title" Margin="0"/>
+          <Grid ColumnDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8" RowDefinitions="Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="Anfang sichtbar" Classes="muted" VerticalAlignment="Center"/>
+            <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding KeepFirst}"
+                           Width="100" Minimum="0" Maximum="64" Increment="1" FormatString="0"/>
+            <TextBlock Grid.Row="0" Grid.Column="2" Text="Ende sichtbar" Classes="muted" VerticalAlignment="Center"/>
+            <NumericUpDown Grid.Row="0" Grid.Column="3" Value="{Binding KeepLast}"
+                           Width="100" Minimum="0" Maximum="64" Increment="1" FormatString="0"/>
+          </Grid>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Maskierungszeichen" Classes="muted" VerticalAlignment="Center"/>
+            <TextBox Text="{Binding MaskChar}" Classes="mono" Width="60" MaxLength="1"/>
+          </StackPanel>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ohne Angabe bleiben die letzten vier Zeichen sichtbar. Sobald „Anfang sichtbar“ oder „Ende sichtbar“ gesetzt ist, gilt nur noch das hier Eingestellte — die Vier-Zeichen-Vorgabe greift nur, solange beide auf 0 stehen. Ist der Wert kürzer als die Summe der sichtbaren Zeichen, wird er vollständig maskiert. Nicht umkehrbar."/>
+        </StackPanel>
+
+        <!-- 4. Gilt fuer -->
+        <StackPanel Spacing="4">
+          <TextBlock Text="Gilt für" Classes="muted"/>
+
+          <!-- Bearbeiten-Modus: der Bereich eines bestehenden Generators
+               laesst sich hier nicht mehr wechseln, nur noch anzeigen. -->
+          <TextBlock Text="{Binding ScopeLabel}" IsVisible="{Binding IsEditMode}"/>
+
+          <StackPanel Spacing="4" IsVisible="{Binding !IsEditMode}" IsEnabled="{Binding CanChooseScope}">
+            <RadioButton GroupName="generator-bereich" Content="Dieses Projekt" IsChecked="{Binding IsProjectScope}"/>
+            <RadioButton GroupName="generator-bereich" Content="Alle Projekte" IsChecked="{Binding IsGlobalScope}"/>
+          </StackPanel>
+          <TextBlock Text="{Binding ScopeHint}" Classes="warning small" TextWrapping="Wrap"
+                     IsVisible="{Binding HasScopeHint}"/>
+        </StackPanel>
+
+        <!-- 5. Beispiel -->
+        <Border Classes="card-raised" Padding="10">
+          <StackPanel Spacing="6">
+            <TextBlock Text="Beispiel" Classes="card-title" Margin="0"/>
+            <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
+              <TextBox Grid.Column="0" Text="{Binding SampleInput}" Classes="mono"/>
+              <TextBlock Grid.Column="1" Text="→" Classes="accent" VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="2" Text="{Binding PreviewText}" Classes="mono accent"
+                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+            </Grid>
+            <TextBlock Text="{Binding PreviewError}" Classes="warning small" TextWrapping="Wrap"
+                       IsVisible="{Binding HasPreviewError}"/>
+            <TextBlock Classes="muted small" TextWrapping="Wrap"
+                       Text="Nur ein Beispiel – die echten Werte entstehen beim Lauf."/>
+          </StackPanel>
+        </Border>
+
+        <!-- 6. Fehlerliste -->
+        <Border Classes="card" BorderBrush="{DynamicResource BrushError}" IsVisible="{Binding HasErrors}">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Zu beheben:" Classes="error" FontWeight="SemiBold"/>
+            <ItemsControl ItemsSource="{Binding Errors}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Text="{Binding}" Classes="error small" TextWrapping="Wrap"/>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- 7. Knoepfe -->
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+      <Button Content="Abbrechen" Command="{Binding CancelCommand}"/>
+      <Button Content="{Binding ApplyLabel}" Classes="primary" Command="{Binding ApplyCommand}"/>
+    </StackPanel>
+  </Grid>
+</Window>
