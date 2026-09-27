@@ -2,9 +2,9 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.10.0
+version: 1.11.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 26.09.2026
+date: 27.09.2026
 lang: de
 preset: modern
 ---
@@ -294,6 +294,46 @@ wird beim Laden zurückgewiesen (`MappingStore.BuildReverseIndex`,
    und in der Oberfläche als nacktes englisches Wort erscheint.
 4. Bei Bedarf `ValidateGenerators` in `ProfileValidator.cs` erweitern, falls
    der neue Generator eigene Pflichteinstellungen mitbringt.
+
+### Ausdrucksgenerator (`GeneratorExpression`/`ExpressionGenerator`)
+
+Der Generator `expression` (Plan `docs/plan-ausdruck-generator.md`) erzeugt
+Werte nach einem RegEx-ähnlichen Ausdruck, aber nur zum Erzeugen, nicht zum
+Suchen. Die beiden Klassen liegen in `src/Obfuskation.Core/Generation/`:
+
+- **`GeneratorExpression`** ist der Parser und die Erzeugung. `TryParse`
+  liefert bei einem fehlerhaften Ausdruck `false` und ein `ExpressionError`
+  mit 1-basierter Stelle und deutscher Meldung, statt eine Ausnahme zu
+  werfen — ein fehlerhafter Ausdruck ist eine erwartbare Anwendereingabe
+  (ein Tippfehler im Profil), keine Ausnahmesituation. Intern entsteht ein
+  kleiner Syntaxbaum (Folge, Alternative, Wiederholung, Zeichenklasse,
+  Tabellenverweis, wörtliches Zeichen), rekursiv absteigend geparst
+  (`GeneratorExpression.Parser`, privat verschachtelt). `{` wird anhand des
+  Folgezeichens unterschieden: eine Ziffer macht es zu einer Anzahl wie
+  `{2,3}`, ein Buchstabe zu einem Tabellenverweis wie `{kreis}`.
+  `ValuePool` schätzt den Wertevorrat (Folge = Produkt, Alternative = Summe,
+  `{n,m}` = Σ pᵏ, Klasse/Tabelle = Größe) und sättigt bei einer übergebenen
+  Obergrenze, damit die Rechnung bei einem sehr weiten Ausdruck nicht
+  überläuft und für eine reine Warnschwelle nicht genauer sein muss als
+  nötig. `MinLength`/`MaxLength` liefern die kürzeste bzw. längste mögliche
+  Werteslänge, beide von `ProfileValidator.ValidateExpression` genutzt (ein
+  möglicher leerer Wert und eine zu große Obergrenze sind dort Fehler).
+- **`ExpressionGenerator`** implementiert `IPseudonymGenerator`. `Configure`
+  parst den Ausdruck einmal und merkt sich einen Parserfehler statt sofort
+  zu werfen; `Generate` wirft dann erst bei Bedarf eine
+  `GenerationException` (Muster wie bei `WordlistGenerator`) — mit
+  fehlendem Ausdruck, Parserfehler oder einer im Ausdruck referenzierten,
+  aber unter `tables` fehlenden Tabelle als Meldung. `IsWordLike` ist
+  `true`, obwohl ein erzeugter Wert kein Wort im üblichen Sinn ist: die
+  Werte sind kurz und unterschiedlich lang (ein Kennzeichen mal mit, mal
+  ohne „E“), und ohne Wortgrenze würde `ReverseTextMapper` einen kürzeren
+  erzeugten Wert auch mitten in einem längeren wiederfinden.
+- Die Tabellen (`GeneratorSettings.Tables`, `Dictionary<string, List<string>>?`)
+  liegen im Generator selbst, nicht in einer eigenen Konfigurationsdatei —
+  der Generator ist damit samt seinen Tabellen in sich vollständig und lässt
+  sich unverändert in ein anderes Profil übernehmen. `ProfileStore.JsonOptions`
+  setzt keine `DictionaryKeyPolicy`, Tabellennamen bleiben also nach
+  Speichern und Laden exakt so geschrieben, wie sie eingegeben wurden.
 
 ### Neue Textregel
 

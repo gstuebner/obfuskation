@@ -34,6 +34,30 @@ public static class GeneratorPreview
         string key, GeneratorSettings settings, string sample, SeedDeriver deriver,
         out string example, out string? error)
     {
+        if (TryExamples(key, settings, sample, deriver, count: 1, out var examples, out error))
+        {
+            example = examples.Count > 0 ? examples[0] : "";
+            return true;
+        }
+
+        example = "";
+        return false;
+    }
+
+    /// <summary>
+    /// Wie <see cref="TryExample"/>, aber mit bis zu <paramref name="count"/>
+    /// Beispielen -- fuer eine Vorschau, die mehrere verschiedene Werte auf
+    /// einmal zeigt (Plan P1d). Jeder Versuch <c>0..count-1</c> nutzt
+    /// <see cref="SeedDeriver.Derive"/> mit einem eigenen Zaehler, wie es
+    /// <see cref="Mapping.Pseudonymizer"/> bei einer Kollision auch tut.
+    /// Liefert nur verschiedene Werte zurueck -- ein Generator mit kleinem
+    /// Wertevorrat (etwa <c>redact</c>) zeigt dann folgerichtig weniger als
+    /// <paramref name="count"/> Beispiele.
+    /// </summary>
+    public static bool TryExamples(
+        string key, GeneratorSettings settings, string sample, SeedDeriver deriver, int count,
+        out IReadOnlyList<string> examples, out string? error)
+    {
         var profile = new Profile();
         profile.Generators[key] = settings;
 
@@ -41,19 +65,29 @@ public static class GeneratorPreview
         {
             var registry = GeneratorRegistry.Build(profile, deriver, ExtensionLibrary.Empty);
             var generator = registry.Get(key);
-            example = generator.Generate(deriver.Derive(key, sample, 0), sample);
+
+            var distinct = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (var attempt = 0; attempt < count; attempt++)
+            {
+                var value = generator.Generate(deriver.Derive(key, sample, attempt), sample);
+                if (seen.Add(value))
+                    distinct.Add(value);
+            }
+
+            examples = distinct;
             error = null;
             return true;
         }
         catch (ConfigurationException ex)
         {
-            example = "";
+            examples = Array.Empty<string>();
             error = ex.Message;
             return false;
         }
         catch (GenerationException ex)
         {
-            example = "";
+            examples = Array.Empty<string>();
             error = ex.Message;
             return false;
         }

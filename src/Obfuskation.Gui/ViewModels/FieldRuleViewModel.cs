@@ -350,7 +350,10 @@ public sealed class FieldRuleViewModel : ObservableObject
     /// <summary>
     /// Ob der gewaehlte Generator ueberhaupt Optionen kennt -- steuert, ob
     /// die Schaltflaeche zum Optionsdialog neben der Generator-Auswahl
-    /// erscheint.
+    /// erscheint. Bewusst ohne "expression": dessen Ausdruck und Tabellen
+    /// haben hier keinen eigenen Block, sie werden ausschliesslich im
+    /// Generator-Dialog unter "Regeln &amp; Generatoren" bearbeitet
+    /// (<see cref="GeneratorEditorViewModel"/>).
     /// </summary>
     public bool HasOptions
         => ShowPrefix || ShowPlaceholder || ShowDateRange || ShowGranularity

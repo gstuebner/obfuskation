@@ -442,6 +442,149 @@ public class ScanAndConfigTests
     }
 
     [Fact]
+    public void Ein_fehlender_Ausdruck_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kfz"] = new GeneratorSettings { Type = "expression" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.kfz.expression");
+    }
+
+    [Fact]
+    public void Ein_Ausdruck_mit_fehlender_Tabelle_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kfz"] = new GeneratorSettings { Type = "expression", Expression = "{kreis}-9999" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.kfz.expression"
+            && b.Message.Contains("kreis"));
+    }
+
+    [Fact]
+    public void Eine_fehlende_Tabelle_ergibt_genau_eine_Meldung()
+    {
+        // Eine fehlende Tabelle zaehlt fuer Laenge und Vorrat als leer --
+        // "leerer Wert moeglich" und "nur 0 Werte" waeren blosse Folgemeldungen.
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kfz"] = new GeneratorSettings { Type = "expression", Expression = "{kreis}" };
+
+        var befunde = ProfileValidator.Validate(profile).Where(b => b.Path.StartsWith("generators.kfz")).ToList();
+
+        Assert.Single(befunde);
+    }
+
+    [Fact]
+    public void Eine_leere_Tabelle_gilt_nicht_zusaetzlich_als_fehlend()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kfz"] = new GeneratorSettings
+        {
+            Type = "expression",
+            Expression = "{kreis}-9999",
+            Tables = new Dictionary<string, List<string>> { ["kreis"] = new() },
+        };
+
+        var befunde = ProfileValidator.Validate(profile).Where(b => b.Path.StartsWith("generators.kfz")).ToList();
+
+        Assert.Single(befunde);
+        Assert.Equal("generators.kfz.tables.kreis", befunde[0].Path);
+    }
+
+    [Fact]
+    public void Eine_leere_Tabelle_beim_Ausdruck_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kfz"] = new GeneratorSettings
+        {
+            Type = "expression",
+            Expression = "{kreis}-9999",
+            Tables = new Dictionary<string, List<string>> { ["kreis"] = new() },
+        };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.kfz.tables.kreis");
+    }
+
+    [Fact]
+    public void Ein_Ausdruck_der_einen_leeren_Wert_erzeugen_kann_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["opt"] = new GeneratorSettings { Type = "expression", Expression = "A?" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.opt.expression"
+            && b.Message.Contains("leeren Wert"));
+    }
+
+    [Fact]
+    public void Ein_Ausdruck_mit_Wertevorrat_1_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["fest"] = new GeneratorSettings { Type = "expression", Expression = "ABC" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.fest.expression"
+            && b.Message.Contains("immer denselben Wert"));
+    }
+
+    [Fact]
+    public void Tables_an_einem_token_Generator_wird_bemaengelt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["fw"] = new GeneratorSettings
+        {
+            Type = "token",
+            Tables = new Dictionary<string, List<string>> { ["kreis"] = ["B"] },
+        };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Error && b.Path == "generators.fw.tables");
+    }
+
+    [Fact]
+    public void Eine_nicht_verwendete_Tabelle_wird_angemahnt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["kfz"] = new GeneratorSettings
+        {
+            Type = "expression",
+            Expression = @"[A-Z]{3}-\d{4}",
+            Tables = new Dictionary<string, List<string>> { ["kreis"] = ["B", "HH", "M"] },
+        };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Warning && b.Path == "generators.kfz.tables.kreis");
+    }
+
+    [Fact]
+    public void Ein_Ausdruck_mit_kleinem_Wertevorrat_wird_angemahnt()
+    {
+        var profile = new Profile { ProfileName = "test" };
+        profile.Generators["klein"] = new GeneratorSettings { Type = "expression", Expression = "[AB][CD]" };
+
+        var befunde = ProfileValidator.Validate(profile);
+
+        Assert.Contains(befunde, b =>
+            b.Severity == ValidationSeverity.Warning && b.Path == "generators.klein.expression");
+    }
+
+    [Fact]
     public void ScanText_in_fieldRules_ist_kein_unbekannter_Generator()
     {
         var extensions = new ExtensionLibrary

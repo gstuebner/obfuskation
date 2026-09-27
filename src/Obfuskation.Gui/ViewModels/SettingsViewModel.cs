@@ -846,6 +846,20 @@ public sealed class GeneratorEntryViewModel : ObservableObject
                 return $"Zeitraum {settings.From ?? "…"} bis {settings.To ?? "…"}";
             }
 
+            if (string.Equals(baseType, "expression", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(settings.Expression))
+            {
+                var ausdruck = settings.Expression.Length > 40
+                    ? settings.Expression[..40] + "…"
+                    : settings.Expression;
+                var text = $"Ausdruck {ausdruck}";
+
+                if (settings.Tables is { Count: > 0 } tabellen)
+                    text += tabellen.Count == 1 ? " · 1 Tabelle" : $" · {tabellen.Count} Tabellen";
+
+                return text;
+            }
+
             return "";
         }
     }

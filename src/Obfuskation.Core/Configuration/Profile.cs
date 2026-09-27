@@ -240,4 +240,21 @@ public sealed class GeneratorSettings
     /// <c>MultiFileTests.Auch_bei_verschiedenen_Spaltennamen_bleibt_die_Verknuepfung</c>).
     /// </summary>
     public string? Prefix { get; set; }
+
+    /// <summary>
+    /// Ausdruck fuer <c>expression</c>, angelehnt an RegEx, aber nur zum
+    /// Erzeugen gedacht (siehe <see cref="Generation.GeneratorExpression"/>).
+    /// Ein Tabellenverweis darin lautet <c>{name}</c> und schlaegt in
+    /// <see cref="Tables"/> nach.
+    /// </summary>
+    public string? Expression { get; set; }
+
+    /// <summary>
+    /// Eigene Tabellen fuer Tabellenverweise im <see cref="Expression"/> (nur
+    /// <c>expression</c>), etwa <c>{ "kreis": ["B", "HH", "M"] }</c>. Sie
+    /// liegen im Generator selbst, damit er samt seinen Tabellen in sich
+    /// vollstaendig ist und sich unveraendert in ein anderes Projekt
+    /// uebernehmen laesst.
+    /// </summary>
+    public Dictionary<string, List<string>>? Tables { get; set; }
 }

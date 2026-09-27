@@ -206,13 +206,14 @@ public class GeneratorTests
     {
         var profile = new Profile();
 
-        // wordlist ist der einzige Generator mit einer echten Pflichtoption:
-        // ohne "values" wirft er eine GenerationException (siehe
-        // Wordlist_ohne_Werte_meldet_einen_Fehler unten). Damit dieser
+        // wordlist und expression haben eine echte Pflichtoption: ohne
+        // "values" bzw. "expression" werfen sie eine GenerationException
+        // (siehe Wordlist_ohne_Werte_meldet_einen_Fehler unten). Damit dieser
         // Bestandstest trotzdem alle eingebauten Generatoren durchlaufen kann,
-        // bekommt er hier eine Minimalkonfiguration -- kein Schein-Default im
-        // Generator selbst, nur diese eine Ausnahme im Test.
+        // bekommen sie hier eine Minimalkonfiguration -- kein Schein-Default im
+        // Generator selbst, nur diese Ausnahme im Test.
         profile.Generators["wordlist"] = new GeneratorSettings { Values = ["Alpha", "Beta", "Gamma"] };
+        profile.Generators["expression"] = new GeneratorSettings { Expression = @"[A-Z]{2}-\d{4}" };
 
         var deriver = Deriver();
         var registry = GeneratorRegistry.Build(profile, deriver);

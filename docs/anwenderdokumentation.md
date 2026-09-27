@@ -2,9 +2,9 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.10.0
+version: 1.11.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 26.09.2026
+date: 27.09.2026
 lang: de
 preset: modern
 ---
@@ -576,17 +576,24 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
    direkt zur Datei.
 
 **Der Generator-Dialog** (neu, „+ Neuer Generator…“ bzw. „Bearbeiten…“) fragt
-Bezeichnung, Art der Ersetzung (dieselbe Auswahl wie unter „Ersetzen durch“,
-mit Beschreibung) und die zur Art passenden Optionen ab — dieselben Felder wie
-im bisherigen Optionsdialog der Dateiansicht, nur ohne Feldbezug. Darunter
-„Gilt für“ (beim Anlegen wählbar, beim Bearbeiten nur als Text) und eine
-**Vorschau**: ein Beispielwert samt Ergebnis, mit gleichbleibendem Zufall
-während des Tippens, dazu der Hinweis „Nur ein Beispiel – die echten Werte
-entstehen beim Lauf.“ Wird der Generator schon irgendwo verwendet, sperrt der
-Dialog Bezeichnung und Art, mit einem Hinweis, wer ihn verwendet — nur die
-Optionen bleiben änderbar. Derselbe Dialog öffnet sich auch aus dem Formular
-einer Textregel heraus („Neuer Generator…“ neben „Ersetzen durch“) und aus dem
-Dialog „Immer ersetzen…“.
+Bezeichnung, **Grundlage** und die zur Grundlage passenden Optionen ab. Die
+Grundlage ist **nicht** dieselbe Liste wie unter „Ersetzen durch“: dort stehen
+alle eingebauten Generatoren, hier nur die acht, die überhaupt eigene
+Einstellungen haben — `token`, `expression`, `pattern`, `wordlist`,
+`partialMask`, `redact`, `dateRange` und `dateGeneralize`, jede Zeile mit
+Titel und Beispielwert. Die übrigen eingebauten Generatoren (etwa `numericId`)
+lassen sich weiterhin als eigener Namensraum nutzen, aber nur noch über die
+Konfigurationsdatei anlegen; ein so angelegter Generator bekommt beim
+Bearbeiten einen eigenen Listeneintrag mit dem Hinweis „Diese Art hat hier
+keine Einstellungen – sie trennt nur die Ersetzungstabelle.“ Darunter „Gilt
+für“ (beim Anlegen wählbar, beim Bearbeiten nur als Text) und eine
+**Vorschau**: zu einem Beispielwert bis zu drei Ergebnisse, eines je Zeile,
+mit gleichbleibendem Zufall während des Tippens, dazu der Hinweis „Nur
+Beispiele – die echten Werte entstehen beim Lauf.“ Wird der Generator schon irgendwo verwendet,
+sperrt der Dialog Bezeichnung und Grundlage, mit einem Hinweis, wer ihn
+verwendet — nur die Optionen bleiben änderbar. Derselbe Dialog öffnet sich
+auch aus dem Formular einer Textregel heraus („Neuer Generator…“ neben
+„Ersetzen durch“) und aus dem Dialog „Immer ersetzen…“.
 
 Ist die Erweiterungsdatei gesperrt, erscheint zusätzlich eine **Sperrleiste**
 oben im Fenster, auf jeder Seite: „🔒 Regeln für alle Projekte sind nur
@@ -833,6 +840,7 @@ Generatoren stehen zur Auswahl, sobald ein Feld auf „ersetzen“ steht:
 | `dateRange` | zufälliges Datum aus einem Zeitraum; ohne Angabe bleibt das Kalenderjahr des Originals erhalten |
 | `dateGeneralize` | auf Monats-, Quartals- oder Jahresanfang gerundet — **nicht umkehrbar** |
 | `pattern` | Wert nach Zeichenmaske, ohne Angabe formaterhaltend aus dem Original abgeleitet — Einzelheiten in Kapitel 11 |
+| `expression` | Wert nach einem RegEx-ähnlichen Ausdruck, etwa ein KFZ-Kennzeichen — Einzelheiten in Kapitel 11 |
 | `wordlist` | Wert aus einer eigenen Werteliste |
 | `partialMask` | teilweise maskiert, Anfang und Ende bleiben sichtbar — **nicht umkehrbar** |
 | `street`, `city`, `postalCode` | Anschriftsbestandteile aus Wortlisten |
@@ -1141,6 +1149,51 @@ Ohne gesetzte Maske leitet der Generator sie selbst aus dem Original ab
 (Ziffer → `9`, Großbuchstabe → `A`, Kleinbuchstabe → `a`, Rest wörtlich) —
 dann ist er ein allgemeiner, formaterhaltender Ersatz etwa für Vertrags-,
 Beleg- oder Auftragsnummern, ohne dass dafür eine eigene Maske nötig wäre.
+
+### Ausdruck: Werte nach Muster mit eigenen Tabellen
+
+Reicht eine Zeichenmaske nicht — weil zum Beispiel je nach Stelle
+verschieden viele Zeichen stehen dürfen, oder ein Teil des Werts aus einer
+festen Liste kommen soll —, erzeugt der Generator `expression` Werte nach
+einem **Ausdruck**, angelehnt an reguläre Ausdrücke (RegEx), aber nur zum
+**Erzeugen** gedacht, nicht zum Suchen. Ein Tabellenverweis darin lautet
+`{name}` und schlägt in einer eigenen Tabelle nach, die im selben
+`generators`-Eintrag unter `tables` steht — der Generator ist damit in sich
+vollständig und lässt sich samt seinen Tabellen unverändert in ein anderes
+Projekt übernehmen.
+
+| Schreibweise | Bedeutung |
+|---|---|
+| `x` | wörtliches Zeichen |
+| `\x` | ein Sonderzeichen wörtlich, etwa `\.`, `\{`, `\\` |
+| `\d` | eine Ziffer |
+| `[A-Z0-9ÄÖÜ]` | ein Zeichen aus der angegebenen Menge, Bereiche mit `-` |
+| `(a\|b)`, `(?:…)` | eine der Alternativen |
+| `{2}`, `{2,3}` | genau 2-mal, bzw. 2- bis 3-mal — höchstens 64 |
+| `?` | kann fehlen (entspricht `{0,1}`) |
+| `{kreis}` | ein Wert aus der Tabelle „kreis“ |
+
+Nicht unterstützt sind `*`, `+` (unbegrenzt — stattdessen `{n,m}` mit fester
+Obergrenze) und `.` für ein beliebiges Zeichen (stattdessen eine Klasse wie
+`[A-Z0-9]`). Ein fehlerhafter Ausdruck meldet die Stelle im Text, an der das
+Problem beginnt.
+
+Am Beispiel eines KFZ-Kennzeichens (1–3 Zeichen aus einer Tabelle für
+Kreis/Stadt, zwei zufällige Buchstaben, 2 oder 3 Ziffern, optional ein „E“
+für Elektrofahrzeuge):
+
+```json
+"kfz": { "type": "expression", "expression": "{kreis}-[A-Z]{2} \\d{2,3}E?",
+         "tables": { "kreis": ["B", "HH", "M"] } }
+```
+
+Der Rückwärtsschrägstrich ist in JSON doppelt zu schreiben. Im
+Generator-Dialog (siehe oben) steht dieselbe Schreibweise-Tabelle immer
+sichtbar unter dem Eingabefeld, dazu der Knopf „Beispiel einsetzen ▾“ mit
+drei vorgefertigten Ausdrücken (KFZ-Kennzeichen, Kundennummer,
+Artikelnummer) und eine Verwaltung der Tabellen, die auf eine im Ausdruck
+verwendete, aber noch nicht angelegte Tabelle mit einem Knopf „Anlegen“
+hinweist.
 
 ### Rezept: ein eigener Namensraum für ein hauseigenes Muster
 

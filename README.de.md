@@ -415,6 +415,7 @@ Empfehlung, keine Pflicht.
 | `dateRange` | zufälliges Datum aus einem Zeitraum (`from`/`to`); ohne Angabe bleibt das Kalenderjahr des Originals erhalten |
 | `dateGeneralize` | auf Monats-, Quartals- oder Jahresanfang gerundet — **nicht umkehrbar** |
 | `pattern` | Wert nach Zeichenmaske (`A`/`a`/`9`/`X`/`\`), ohne Maske formaterhaltend aus dem Original abgeleitet |
+| `expression` | Wert nach einem RegEx-ähnlichen Erzeugungsausdruck (`expression`) mit Zeichenklassen, Anzahl, Alternativen und eigenen Tabellen (`tables`), etwa ein KFZ-Kennzeichen |
 | `wordlist` | deterministische Wahl aus einer eigenen Werteliste (`values`) |
 | `partialMask` | behält `keepFirst`/`keepLast` Zeichen sichtbar, Rest maskiert — **nicht umkehrbar** |
 | `street`, `city`, `postalCode` | Anschriftsbestandteile aus Wortlisten |

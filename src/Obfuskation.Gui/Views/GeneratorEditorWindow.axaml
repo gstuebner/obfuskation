@@ -13,7 +13,8 @@
         Background="{DynamicResource BrushBackground}">
 
   <!--
-      Anlegen und Bearbeiten eines eigenen Generators (Plan P3), aus drei
+      Anlegen und Bearbeiten eines eigenen Generators (Plan P3, erweitert um
+      den Ausdruck-Generator in docs/plan-ausdruck-generator.md), aus drei
       Stellen erreichbar: "Immer ersetzen", Reiter "Eigene Generatoren" und dem
       Regelformular. Aufbau wie AlwaysReplaceWindow: feste Breite, Hoehe nach
       Inhalt, mit Deckel bei 760 und Bildlauf darunter, falls die Art viele
@@ -39,20 +40,27 @@
                      IsVisible="{Binding HasUsers}"/>
         </StackPanel>
 
-        <!-- 2. Art der Ersetzung -->
+        <!-- 2. Grundlage — nur die einstellbaren Arten (Plan P2a). Die
+             uebrigen eingebauten Generatoren (etwa "numericId") gibt es
+             weiterhin, aber nur noch per JSON als eigener Namensraum. -->
         <StackPanel Spacing="4">
-          <TextBlock Text="Art der Ersetzung" Classes="muted"/>
+          <TextBlock Text="Grundlage" Classes="muted"/>
+          <TextBlock Classes="muted small" TextWrapping="Wrap"
+                     Text="Ein eigener Generator nutzt eines dieser Verfahren – mit eigenen Einstellungen und eigener Ersetzungstabelle."/>
           <ComboBox HorizontalAlignment="Stretch" IsEnabled="{Binding CanChangeType}"
                     ItemsSource="{Binding BaseTypes}" SelectedItem="{Binding SelectedBaseType}">
             <ComboBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:GeneratorOption">
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <TextBlock Text="{Binding Name}" MinWidth="96"/>
-                  <TextBlock Text="{Binding Description}" Classes="muted"/>
-                </StackPanel>
+              <DataTemplate x:DataType="vm:GeneratorKindOption">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold"/>
+                  <TextBlock Grid.Column="1" Text="{Binding Example}" Classes="mono muted"/>
+                </Grid>
               </DataTemplate>
             </ComboBox.ItemTemplate>
           </ComboBox>
+          <TextBlock Text="{Binding SelectedBaseType.Description}" Classes="muted small" TextWrapping="Wrap"/>
+          <TextBlock Text="{Binding KindHint}" Classes="warning small" TextWrapping="Wrap"
+                     IsVisible="{Binding HasKindHint}"/>
         </StackPanel>
 
         <!-- 3. Optionsbloecke, wie in GeneratorOptionsWindow.axaml -->
@@ -63,6 +71,84 @@
           <TextBox Text="{Binding Prefix}" PlaceholderText="z. B. Artikelkategorie~"/>
           <TextBlock Classes="muted small" TextWrapping="Wrap"
                      Text="Wird jedem erzeugten Pseudonym vorangestellt, etwa aus TOK_A1B2C3D4 wird Artikelkategorie~TOK_A1B2C3D4."/>
+        </StackPanel>
+
+        <!-- Ausdruck (expression) -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowExpression}">
+          <TextBlock Text="Ausdruck" Classes="card-title" Margin="0"/>
+          <TextBox Text="{Binding Expression}" Classes="mono"
+                   PlaceholderText="{}{kreis}-[A-Z]{2} \d{2,3}E?"/>
+
+          <!-- Immer sichtbar statt hinter einem Spickzettel-Knopf (wie
+               PatternHelpButton): die Tabelle ist kurz genug, um staendig
+               mitzulaufen, waehrend jemand den Ausdruck tippt. -->
+          <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                RowSpacing="2" ColumnSpacing="8">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="[A-Z]" Classes="mono small"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="ein Zeichen aus dem Bereich" Classes="small"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="\d" Classes="mono small"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="eine Ziffer" Classes="small"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{}{2} / {2,3}" Classes="mono small"/>
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="genau 2-mal / 2- bis 3-mal" Classes="small"/>
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="?" Classes="mono small"/>
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="kann fehlen" Classes="small"/>
+            <TextBlock Grid.Row="4" Grid.Column="0" Text="(E|H)" Classes="mono small"/>
+            <TextBlock Grid.Row="4" Grid.Column="1" Text="eines davon" Classes="small"/>
+            <TextBlock Grid.Row="5" Grid.Column="0" Text="{}{kreis}" Classes="mono small"/>
+            <TextBlock Grid.Row="5" Grid.Column="1" Text="ein Wert aus der Tabelle „kreis“" Classes="small"/>
+            <TextBlock Grid.Row="6" Grid.Column="0" Text="\." Classes="mono small"/>
+            <TextBlock Grid.Row="6" Grid.Column="1" Text="Sonderzeichen wörtlich" Classes="small"/>
+          </Grid>
+
+          <Button Content="Beispiel einsetzen ▾">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="KFZ-Kennzeichen" Command="{Binding ApplyTemplateCommand}" CommandParameter="kfz"/>
+                <MenuItem Header="Kundennummer" Command="{Binding ApplyTemplateCommand}" CommandParameter="kundennummer"/>
+                <MenuItem Header="Artikelnummer" Command="{Binding ApplyTemplateCommand}" CommandParameter="artikelnummer"/>
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+
+          <!-- Tabellen: eine Karte je Tabelle, mit Name, Werten (ein Wert je
+               Zeile, wie beim Werteliste-Generator) und einem Hinweis, falls
+               sie im Ausdruck gerade nicht vorkommt. -->
+          <ItemsControl ItemsSource="{Binding Tables}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ExpressionTableViewModel">
+                <Border Classes="card" Margin="0,4,0,0" Padding="8">
+                  <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                      <TextBox Grid.Column="0" Text="{Binding Name}" Classes="mono" PlaceholderText="Tabellenname"/>
+                      <TextBlock Grid.Column="1" Text="{Binding CountLabel}" Classes="muted small" VerticalAlignment="Center"/>
+                      <Button Grid.Column="2" Content="Entfernen" Classes="flat" Command="{Binding RemoveCommand}"/>
+                    </Grid>
+                    <TextBox Text="{Binding ValuesText}" Classes="mono" AcceptsReturn="True"
+                             MinHeight="60" MaxHeight="140" TextWrapping="Wrap" PlaceholderText="ein Wert je Zeile"/>
+                    <TextBlock Text="{Binding UnusedHint}" Classes="warning small"
+                               IsVisible="{Binding HasUnusedHint}"/>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Button Content="+ Tabelle" Command="{Binding AddTableCommand}"/>
+
+          <!-- Im Ausdruck verwendete, aber nicht angelegte Tabellen. -->
+          <ItemsControl ItemsSource="{Binding MissingTableHints}" IsVisible="{Binding HasMissingTables}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:MissingTableHint">
+                <Border Classes="card" BorderBrush="{DynamicResource BrushWarning}" Margin="0,4,0,0" Padding="8">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBlock Grid.Column="0" Text="{Binding Message}" Classes="warning small"
+                               TextWrapping="Wrap" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Content="Anlegen" Command="{Binding AddCommand}"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
         </StackPanel>
 
         <!-- Platzhalter (redact) -->
@@ -154,16 +240,19 @@
         <Border Classes="card-raised" Padding="10">
           <StackPanel Spacing="6">
             <TextBlock Text="Beispiel" Classes="card-title" Margin="0"/>
-            <Grid ColumnDefinitions="*,Auto,*" ColumnSpacing="8">
-              <TextBox Grid.Column="0" Text="{Binding SampleInput}" Classes="mono"/>
+            <!-- Bis zu drei Beispiele, eines je Zeile (siehe RefreshPreview).
+                 Die Eingabe ist schmal gehalten, damit auch ein Token mit
+                 Kennzeichnung ungekuerzt daneben passt. -->
+            <Grid ColumnDefinitions="180,Auto,*" ColumnSpacing="8">
+              <TextBox Grid.Column="0" Text="{Binding SampleInput}" Classes="mono" VerticalAlignment="Center"/>
               <TextBlock Grid.Column="1" Text="→" Classes="accent" VerticalAlignment="Center"/>
               <TextBlock Grid.Column="2" Text="{Binding PreviewText}" Classes="mono accent"
-                         VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                         VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
             </Grid>
             <TextBlock Text="{Binding PreviewError}" Classes="warning small" TextWrapping="Wrap"
                        IsVisible="{Binding HasPreviewError}"/>
             <TextBlock Classes="muted small" TextWrapping="Wrap"
-                       Text="Nur ein Beispiel – die echten Werte entstehen beim Lauf."/>
+                       Text="Nur Beispiele – die echten Werte entstehen beim Lauf."/>
           </StackPanel>
         </Border>
 

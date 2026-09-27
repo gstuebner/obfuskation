@@ -49,11 +49,14 @@ public sealed class GeneratorEditorViewModel : ObservableObject
     /// </summary>
     private readonly SeedDeriver _deriver = new(SeedDeriver.CreateSalt());
 
+    private readonly List<GeneratorKindOption> _baseTypes;
+
     private string _name;
     private string _selectedBaseTypeName;
     private string _sampleInput;
     private string? _previewText;
     private string? _previewError;
+    private IReadOnlyList<string> _missingTableNames = Array.Empty<string>();
 
     public GeneratorEditorViewModel(
         Profile? profile,
@@ -89,12 +92,30 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         if (!GeneratorRegistry.KnownNames.Contains(_selectedBaseTypeName, StringComparer.OrdinalIgnoreCase))
             _selectedBaseTypeName = "token";
 
+        // Die Liste zeigt nur die einstellbaren Arten (Plan P2a). Eine per
+        // JSON angelegte, hier nicht einstellbare Art (etwa "numericId")
+        // bekommt trotzdem einen Eintrag angehaengt, damit das Bearbeiten
+        // eines solchen Generators nicht still auf "token" zurueckfaellt.
+        _baseTypes = new List<GeneratorKindOption>(GeneratorKindOption.Configurable);
+        if (!_baseTypes.Any(o => string.Equals(o.Name, _selectedBaseTypeName, StringComparison.OrdinalIgnoreCase)))
+            _baseTypes.Add(GeneratorKindOption.ForUnconfigurable(_selectedBaseTypeName));
+
         _name = existingName ?? SuggestUniqueName(ProfileScaffolder.ToGeneratorKey(suggestedName ?? "generator"));
         _sampleInput = string.IsNullOrWhiteSpace(sampleValue) ? "Beispiel 4711" : sampleValue!;
 
+        Tables = new ObservableCollection<ExpressionTableViewModel>();
+        if (_draft.Tables is not null)
+        {
+            foreach (var (tableName, values) in _draft.Tables)
+                Tables.Add(NewTableViewModel(tableName, values));
+        }
+
         ApplyCommand = new RelayCommand(Apply, () => CanApply);
         CancelCommand = new RelayCommand(() => CloseRequested?.Invoke());
+        AddTableCommand = new RelayCommand(() => AddTable(SuggestTableName(), Array.Empty<string>()));
+        ApplyTemplateCommand = new RelayCommand<string>(ApplyTemplate);
 
+        RefreshTableUsage();
         RefreshPreview();
         RefreshErrors();
     }
@@ -212,10 +233,14 @@ public sealed class GeneratorEditorViewModel : ObservableObject
 
     // ------------------------------------------------------------------ Art
 
-    /// <summary>Die eingebauten Basistypen, aus denen ein eigener Generator seine Grundlage waehlt.</summary>
-    public IReadOnlyList<GeneratorOption> BaseTypes { get; } = GeneratorOption.BuiltIn;
+    /// <summary>
+    /// Die einstellbaren Grundlagen, aus denen ein eigener Generator seine
+    /// Art waehlt (Plan P2a) -- nicht alle eingebauten Generatoren, siehe
+    /// <see cref="GeneratorKindOption"/>.
+    /// </summary>
+    public IReadOnlyList<GeneratorKindOption> BaseTypes => _baseTypes;
 
-    public GeneratorOption SelectedBaseType
+    public GeneratorKindOption SelectedBaseType
     {
         get => BaseTypes.FirstOrDefault(o => string.Equals(o.Name, _selectedBaseTypeName, StringComparison.OrdinalIgnoreCase))
                ?? BaseTypes.First(o => o.Name == "token");
@@ -227,11 +252,24 @@ public sealed class GeneratorEditorViewModel : ObservableObject
 
             _selectedBaseTypeName = value.Name;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(KindHint));
+            OnPropertyChanged(nameof(HasKindHint));
             RaiseOptionVisibilityChanged();
             RefreshPreview();
             RefreshErrors();
         }
     }
+
+    /// <summary>
+    /// Hinweis fuer eine nicht einstellbare Art (etwa ein per JSON angelegtes
+    /// "numericId"): sie hat hier keine Einstellungen, sondern trennt nur die
+    /// Ersetzungstabelle vom eingebauten Generator gleichen Basistyps.
+    /// </summary>
+    public string? KindHint => SelectedBaseType.Example.Length == 0
+        ? "Diese Art hat hier keine Einstellungen – sie trennt nur die Ersetzungstabelle."
+        : null;
+
+    public bool HasKindHint => KindHint is not null;
 
     // ------------------------------------------------- Sperren beim Bearbeiten
 
@@ -329,6 +367,160 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         set => SetOption(s => s.MaskChar = string.IsNullOrEmpty(value) || value == "*" ? null : value);
     }
 
+    // ------------------------------------------------------------- Ausdruck
+
+    public bool ShowExpression => IsBaseType(OptionBaseTypes["expression"]);
+
+    public string? Expression
+    {
+        get => _draft.Expression;
+        set
+        {
+            var neu = string.IsNullOrEmpty(value) ? null : value;
+            if (_draft.Expression == neu)
+                return;
+
+            _draft.Expression = neu;
+            OnPropertyChanged();
+            RefreshTableUsage();
+            RefreshPreview();
+            RefreshErrors();
+        }
+    }
+
+    /// <summary>Die Tabellen des Entwurfs, in der Reihenfolge, in der sie im Dialog stehen.</summary>
+    public ObservableCollection<ExpressionTableViewModel> Tables { get; private set; }
+
+    public RelayCommand AddTableCommand { get; private set; }
+
+    /// <summary>Die drei Vorlagen fuer den Knopf "Beispiel einsetzen ▾".</summary>
+    public IReadOnlyList<ExpressionTemplate> ExpressionTemplates => ExpressionTemplate.All;
+
+    public RelayCommand<string> ApplyTemplateCommand { get; private set; }
+
+    /// <summary>Im Ausdruck verwendete, aber unter <see cref="Tables"/> fehlende Tabellennamen.</summary>
+    public IReadOnlyList<string> MissingTableNames
+    {
+        get => _missingTableNames;
+        private set => SetProperty(ref _missingTableNames, value);
+    }
+
+    public bool HasMissingTables => MissingTableNames.Count > 0;
+
+    /// <summary>
+    /// Wie <see cref="MissingTableNames"/>, aber mit einem eigenen
+    /// "Anlegen"-Befehl je Name -- fuer die Anzeige im Dialog (siehe
+    /// <see cref="MissingTableHint"/>).
+    /// </summary>
+    public IReadOnlyList<MissingTableHint> MissingTableHints
+        => MissingTableNames.Select(name => new MissingTableHint(name, () => AddTable(name, Array.Empty<string>()))).ToList();
+
+    private ExpressionTableViewModel NewTableViewModel(string name, IReadOnlyList<string> values)
+        => new(name, values, onChanged: SyncTablesToDraft, remove: RemoveTable);
+
+    private void AddTable(string name, IReadOnlyList<string> values)
+    {
+        Tables.Add(NewTableViewModel(name, values));
+        SyncTablesToDraft();
+    }
+
+    private void RemoveTable(ExpressionTableViewModel table)
+    {
+        Tables.Remove(table);
+        SyncTablesToDraft();
+    }
+
+    /// <summary>
+    /// Der Name fuer den naechsten Knopfdruck auf "+ Tabelle": zuerst ein im
+    /// Ausdruck verwendeter, aber fehlender Tabellenname, sonst "tabelle",
+    /// eindeutig gemacht.
+    /// </summary>
+    private string SuggestTableName()
+    {
+        var fehlend = MissingTableNames.FirstOrDefault();
+        if (fehlend is not null)
+            return fehlend;
+
+        var vergeben = new HashSet<string>(Tables.Select(t => t.Name.Trim()), StringComparer.OrdinalIgnoreCase);
+        if (!vergeben.Contains("tabelle"))
+            return "tabelle";
+
+        var i = 2;
+        while (vergeben.Contains($"tabelle{i}"))
+            i++;
+        return $"tabelle{i}";
+    }
+
+    /// <summary>
+    /// Ersetzt Ausdruck und Tabellen durch eine Vorlage (Plan P2b, Knopf
+    /// "Beispiel einsetzen ▾"). Unbekannte Schluessel bewirken nichts.
+    /// </summary>
+    private void ApplyTemplate(string? key)
+    {
+        var vorlage = ExpressionTemplate.Find(key);
+        if (vorlage is null)
+            return;
+
+        _draft.Expression = vorlage.Expression;
+        OnPropertyChanged(nameof(Expression));
+
+        Tables.Clear();
+        foreach (var tabelle in vorlage.Tables)
+            Tables.Add(NewTableViewModel(tabelle.Name, tabelle.Values));
+
+        SyncTablesToDraft();
+    }
+
+    /// <summary>
+    /// Baut <see cref="GeneratorSettings.Tables"/> aus <see cref="Tables"/>
+    /// neu auf (in deren Reihenfolge) und stoesst die davon abhaengigen
+    /// Neuberechnungen an. Leere Namen werden ausgelassen -- sie meldet
+    /// <see cref="RefreshErrors"/> als eigenen Befund.
+    /// </summary>
+    private void SyncTablesToDraft()
+    {
+        _draft.Tables = Tables.Count == 0 ? null : BuildTablesDictionary();
+
+        RefreshTableUsage();
+        RefreshPreview();
+        RefreshErrors();
+    }
+
+    private Dictionary<string, List<string>> BuildTablesDictionary()
+    {
+        var result = new Dictionary<string, List<string>>();
+        foreach (var tabelle in Tables)
+        {
+            var name = tabelle.Name.Trim();
+            if (name.Length > 0)
+                result[name] = tabelle.Values;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Markiert jede Tabelle, ob sie im aktuellen Ausdruck vorkommt, und
+    /// ermittelt die verwendeten, aber fehlenden Tabellennamen. Ein
+    /// fehlerhafter Ausdruck zaehlt dabei als "verweist auf nichts" -- der
+    /// Parserfehler selbst erscheint ueber <see cref="RefreshErrors"/>.
+    /// </summary>
+    private void RefreshTableUsage()
+    {
+        var referenced = GeneratorExpression.TryParse(_draft.Expression, out var expression, out _)
+            ? new HashSet<string>(expression!.TableReferences, StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tabelle in Tables)
+            tabelle.UpdateUsage(referenced.Contains(tabelle.Name.Trim()));
+
+        MissingTableNames = referenced
+            .Where(name => !Tables.Any(t => string.Equals(t.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        OnPropertyChanged(nameof(HasMissingTables));
+        OnPropertyChanged(nameof(MissingTableHints));
+    }
+
     private void SetOption(Action<GeneratorSettings> anwenden, [System.Runtime.CompilerServices.CallerMemberName] string? propertyName = null)
     {
         anwenden(_draft);
@@ -356,6 +548,8 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         OnPropertyChanged(nameof(KeepFirst));
         OnPropertyChanged(nameof(KeepLast));
         OnPropertyChanged(nameof(MaskChar));
+        OnPropertyChanged(nameof(ShowExpression));
+        OnPropertyChanged(nameof(Expression));
     }
 
     private static List<string> SplitValues(string text)
@@ -448,13 +642,26 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         private set => SetProperty(ref _previewError, value);
     }
 
-    public bool HasPreviewError => _previewError is not null;
+    /// <summary>
+    /// Nur wahr, wenn <see cref="Errors"/> leer ist: Ein Ausdrucksfehler etwa
+    /// erscheint sonst gleich zweimal -- einmal hier, einmal in der
+    /// Fehlerliste, mit derselben Meldung.
+    /// </summary>
+    public bool HasPreviewError => _previewError is not null && !HasErrors;
+
+    /// <summary>Wie viele Beispiele die Vorschau auf einmal zeigt (Plan P2b) -- fuer alle Arten gleich.</summary>
+    private const int PreviewExampleCount = 3;
 
     private void RefreshPreview()
     {
-        if (GeneratorPreview.TryExample(NameForPreview, BuildResult(), _sampleInput, _deriver, out var beispiel, out var fehler))
+        if (GeneratorPreview.TryExamples(
+                NameForPreview, BuildResult(), _sampleInput, _deriver, PreviewExampleCount,
+                out var beispiele, out var fehler))
         {
-            PreviewText = beispiel;
+            // Eine Zeile je Beispiel statt eines Trennzeichens: Werte wie
+            // "HH-OB 255" tragen selbst Leerzeichen und wuerden sonst mitten im
+            // Wert umbrechen, und ein "·" koennte selbst Teil eines Werts sein.
+            PreviewText = string.Join('\n', beispiele);
             PreviewError = null;
         }
         else
@@ -482,6 +689,12 @@ public sealed class GeneratorEditorViewModel : ObservableObject
     {
         Errors.Clear();
 
+        // Doppelte oder leere Tabellennamen kann ein Woerterbuch nicht halten
+        // -- die Pruefung dafuer uebernimmt dieses Ansichtsmodell selbst, vor
+        // jedem Aufruf von BuildResult (siehe AddTableNameErrors).
+        if (ShowExpression)
+            AddTableNameErrors();
+
         var name = _name.Trim();
         if (name.Length > 0)
         {
@@ -497,7 +710,25 @@ public sealed class GeneratorEditorViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasErrors));
+        OnPropertyChanged(nameof(HasPreviewError));
         ApplyCommand.RaiseCanExecuteChanged();
+    }
+
+    private void AddTableNameErrors()
+    {
+        var gesehen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tabelle in Tables)
+        {
+            var name = tabelle.Name.Trim();
+            if (name.Length == 0)
+            {
+                Errors.Add("Ein Tabellenname darf nicht leer sein.");
+                continue;
+            }
+
+            if (!gesehen.Add(name))
+                Errors.Add($"Der Tabellenname „{name}“ ist mehrfach vergeben.");
+        }
     }
 
     /// <summary>
@@ -537,6 +768,8 @@ public sealed class GeneratorEditorViewModel : ObservableObject
             case "keepFirst": settings.KeepFirst = 0; break;
             case "keepLast": settings.KeepLast = 0; break;
             case "maskChar": settings.MaskChar = null; break;
+            case "expression": settings.Expression = null; break;
+            case "tables": settings.Tables = null; break;
         }
     }
 

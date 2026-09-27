@@ -43,6 +43,13 @@ public static class ProfileValidator
     private const long MinimumPatternValuePool = 1000;
 
     /// <summary>
+    /// Saettigungsgrenze fuer <see cref="GeneratorExpression.ValuePool"/>.
+    /// Deutlich groesser als <see cref="MinimumPatternValuePool"/>, damit die
+    /// Saettigung selbst den Vergleich mit dieser Schwelle nicht verfaelscht.
+    /// </summary>
+    private const long ExpressionValuePoolCap = 1_000_000;
+
+    /// <summary>
     /// Ordnet jede generatorspezifische Option ihrem einzig zulaessigen
     /// Basistyp zu. Ersetzt die fruehere Sonderbehandlung einzelner Optionen:
     /// alle gesetzten Optionen eines Generator-Eintrags werden gegen diese
@@ -67,6 +74,8 @@ public static class ProfileValidator
         ("keepFirst", "partialMask"),
         ("keepLast", "partialMask"),
         ("maskChar", "partialMask"),
+        ("expression", "expression"),
+        ("tables", "expression"),
     ];
 
     public static IReadOnlyList<ValidationIssue> Validate(Profile profile, ExtensionLibrary? extensions = null)
@@ -191,6 +200,9 @@ public static class ProfileValidator
 
         if (string.Equals(baseName, "partialMask", StringComparison.OrdinalIgnoreCase))
             ValidatePartialMask(pathPrefix, key, settings, issues);
+
+        if (string.Equals(baseName, "expression", StringComparison.OrdinalIgnoreCase))
+            ValidateExpression(pathPrefix, key, settings, issues);
     }
 
     /// <summary>
@@ -240,6 +252,8 @@ public static class ProfileValidator
         "keepFirst" => settings.KeepFirst > 0,
         "keepLast" => settings.KeepLast > 0,
         "maskChar" => !string.IsNullOrEmpty(settings.MaskChar),
+        "expression" => !string.IsNullOrEmpty(settings.Expression),
+        "tables" => settings.Tables is { Count: > 0 },
         _ => false,
     };
 
@@ -363,6 +377,130 @@ public static class ProfileValidator
         {
             issues.Add(new ValidationIssue($"{pathPrefix}.{key}.maskChar", ValidationSeverity.Error,
                 "'maskChar' muss genau ein Zeichen lang sein."));
+        }
+    }
+
+    /// <summary>
+    /// Prueft einen <c>expression</c>-Eintrag: den Ausdruck selbst (ueber
+    /// <see cref="GeneratorExpression.TryParse"/>), die eigenen
+    /// Tabellen und, aus beidem zusammen, Laenge und Wertevorrat der
+    /// erzeugten Werte. Ein leerer oder fehlerhafter Ausdruck macht die
+    /// weiteren Pruefungen unmoeglich und bricht darum sofort ab.
+    /// </summary>
+    private static void ValidateExpression(
+        string pathPrefix, string key, GeneratorSettings settings, List<ValidationIssue> issues)
+    {
+        if (string.IsNullOrWhiteSpace(settings.Expression))
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.expression", ValidationSeverity.Error,
+                "Der Ausdruck darf nicht leer sein."));
+            return;
+        }
+
+        if (!GeneratorExpression.TryParse(settings.Expression, out var expression, out var parseError))
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.expression", ValidationSeverity.Error,
+                $"Stelle {parseError!.Position}: {parseError.Message}"));
+            return;
+        }
+
+        // Tabellen ohne Ruecksicht auf Gross-/Kleinschreibung, wie ExpressionGenerator.Configure sie liest.
+        var tables = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
+        var declared = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var tablesComplete = true;
+        if (settings.Tables is not null)
+        {
+            foreach (var (name, values) in settings.Tables)
+            {
+                declared.Add(name);
+
+                if (!GeneratorExpression.TableNamePattern.IsMatch(name))
+                {
+                    tablesComplete = false;
+                    issues.Add(new ValidationIssue($"{pathPrefix}.{key}.tables", ValidationSeverity.Error,
+                        $"Der Tabellenname '{name}' ist ungültig. Erlaubt: ein Buchstabe am Anfang, danach " +
+                        "Buchstaben, Ziffern, '_' oder '-'."));
+                    continue;
+                }
+
+                if (values is not { Count: > 0 })
+                {
+                    tablesComplete = false;
+                    issues.Add(new ValidationIssue($"{pathPrefix}.{key}.tables.{name}", ValidationSeverity.Error,
+                        $"Die Tabelle '{name}' braucht mindestens einen Wert."));
+                    continue;
+                }
+
+                if (values.Any(string.IsNullOrEmpty))
+                {
+                    tablesComplete = false;
+                    issues.Add(new ValidationIssue($"{pathPrefix}.{key}.tables.{name}", ValidationSeverity.Error,
+                        $"Die Tabelle '{name}' enthält einen leeren Eintrag."));
+                }
+
+                tables[name] = values;
+            }
+        }
+
+        foreach (var reference in expression!.TableReferences)
+        {
+            // Eine angelegte, aber leere oder falsch benannte Tabelle hat
+            // oben schon ihre eigene Meldung -- "fehlt" waere hier falsch.
+            if (!tables.ContainsKey(reference) && !declared.Contains(reference))
+            {
+                tablesComplete = false;
+                issues.Add(new ValidationIssue($"{pathPrefix}.{key}.expression", ValidationSeverity.Error,
+                    $"Der Ausdruck verweist auf die Tabelle '{reference}', die unter 'tables' fehlt."));
+            }
+        }
+
+        if (settings.Tables is not null)
+        {
+            var referenced = new HashSet<string>(expression.TableReferences, StringComparer.OrdinalIgnoreCase);
+            foreach (var name in settings.Tables.Keys)
+            {
+                if (!referenced.Contains(name))
+                {
+                    issues.Add(new ValidationIssue($"{pathPrefix}.{key}.tables.{name}", ValidationSeverity.Warning,
+                        $"Die Tabelle '{name}' ist angelegt, wird im Ausdruck aber nicht verwendet."));
+                }
+            }
+        }
+
+        // Laenge und Vorrat erst, wenn alle Tabellen in Ordnung sind: eine
+        // fehlende oder leere Tabelle zaehlt dort als leer, und zur einen
+        // Meldung kaemen sonst zwei Folgemeldungen (leerer Wert moeglich,
+        // Vorrat 0), die nur dieselbe Ursache wiederholen.
+        if (!tablesComplete)
+            return;
+
+        if (expression.MinLength(tables) == 0)
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.expression", ValidationSeverity.Error,
+                "Der Ausdruck kann einen leeren Wert erzeugen – ein leeres Pseudonym ließe sich nicht " +
+                "zurückführen."));
+        }
+
+        var maxLength = expression.MaxLength(tables);
+        if (maxLength > GeneratorExpression.MaxValueLength)
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.expression", ValidationSeverity.Error,
+                $"Der Ausdruck kann Werte bis {maxLength} Zeichen erzeugen, erlaubt sind höchstens " +
+                $"{GeneratorExpression.MaxValueLength}."));
+        }
+
+        var pool = expression.ValuePool(tables, ExpressionValuePoolCap);
+        if (pool == 1)
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.expression", ValidationSeverity.Error,
+                "Der Ausdruck erzeugt immer denselben Wert."));
+        }
+        else if (pool < MinimumPatternValuePool)
+        {
+            issues.Add(new ValidationIssue($"{pathPrefix}.{key}.expression", ValidationSeverity.Warning,
+                $"Der Ausdruck lässt nur {pool} verschiedene Werte zu. Bei vielen Klartexten kann der " +
+                "Generator keinen freien Wert mehr finden und der Lauf mit einer MappingConflictException " +
+                "abbrechen; ein längerer Ausdruck oder größere Tabellen schaffen mehr Spielraum."));
         }
     }
 

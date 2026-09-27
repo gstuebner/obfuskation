@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Obfuskation.Core.Configuration;
 using Obfuskation.Gui.ViewModels;
 
@@ -144,5 +145,123 @@ public sealed class GeneratorEditorViewModelTests
         Assert.Null(modell.PreviewError);
         Assert.NotNull(modell.PreviewText);
         Assert.StartsWith("FW~", modell.PreviewText, StringComparison.Ordinal);
+    }
+
+    // --------------------------------------------------------------- Ausdruck
+
+    [Fact]
+    public void Die_Namen_in_BaseTypes_entsprechen_den_Basistypen_aus_OptionOwnership()
+    {
+        var erwartet = new HashSet<string>(
+            ProfileValidator.OptionOwnership.Select(o => o.BaseType), StringComparer.OrdinalIgnoreCase);
+
+        var modell = Neu();
+        var tatsaechlich = new HashSet<string>(
+            modell.BaseTypes.Select(o => o.Name), StringComparer.OrdinalIgnoreCase);
+
+        Assert.True(erwartet.SetEquals(tatsaechlich));
+        Assert.DoesNotContain(modell.BaseTypes, o => string.Equals(o.Name, "firstName", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Bearbeiten_eines_numericId_Generators_behaelt_numericId()
+    {
+        var profil = new Profile();
+        profil.Generators["kundenId"] = new GeneratorSettings { Type = "numericId" };
+
+        var modell = Neu(profile: profil, initialScope: RuleScope.Project, existingName: "kundenId");
+
+        Assert.Equal("numericId", modell.SelectedBaseType.Name);
+        Assert.True(modell.HasKindHint);
+    }
+
+    [Fact]
+    public void Die_Vorlage_KFZ_fuellt_Ausdruck_und_Tabelle()
+    {
+        var modell = Neu();
+        modell.Name = "kfz";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "expression");
+
+        modell.ApplyTemplateCommand.Execute("kfz");
+
+        Assert.False(string.IsNullOrEmpty(modell.Expression));
+        Assert.Single(modell.Tables);
+        Assert.Equal("kreis", modell.Tables[0].Name);
+        Assert.NotEmpty(modell.Tables[0].Values);
+
+        Assert.Null(modell.PreviewError);
+        Assert.NotNull(modell.PreviewText);
+        Assert.Matches(new Regex(@"[A-Z]{1,2}-[A-Z]{2} \d{2,3}E?"), modell.PreviewText);
+    }
+
+    [Fact]
+    public void PlusTabelle_verwendet_den_im_Ausdruck_fehlenden_Tabellennamen()
+    {
+        var modell = Neu();
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "expression");
+        modell.Expression = "{kreis}-9999";
+
+        Assert.True(modell.HasMissingTables);
+
+        modell.AddTableCommand.Execute(null);
+
+        Assert.Single(modell.Tables);
+        Assert.Equal("kreis", modell.Tables[0].Name);
+        Assert.False(modell.HasMissingTables);
+    }
+
+    [Fact]
+    public void Anlegen_bei_einer_fehlenden_Tabelle_legt_sie_an()
+    {
+        var modell = Neu();
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "expression");
+        modell.Expression = "{kreis}-9999";
+
+        var hinweis = Assert.Single(modell.MissingTableHints);
+        Assert.Equal("kreis", hinweis.Name);
+
+        hinweis.AddCommand.Execute(null);
+
+        Assert.Single(modell.Tables);
+        Assert.Equal("kreis", modell.Tables[0].Name);
+        Assert.False(modell.HasMissingTables);
+    }
+
+    [Fact]
+    public void Doppelte_Tabellennamen_sperren_CanApply()
+    {
+        var modell = Neu();
+        modell.Name = "kfz";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "expression");
+        modell.Expression = "{a}{b}";
+
+        modell.AddTableCommand.Execute(null);
+        modell.Tables[0].ValuesText = "X";
+
+        modell.AddTableCommand.Execute(null);
+        modell.Tables[1].Name = "a";
+        modell.Tables[1].ValuesText = "Y";
+
+        Assert.False(modell.CanApply);
+        Assert.Contains(modell.Errors, e => e.Contains("mehrfach vergeben"));
+    }
+
+    [Fact]
+    public void Wechsel_von_expression_zu_token_laesst_Ausdruck_und_Tabellen_fallen()
+    {
+        var modell = Neu();
+        modell.Name = "kfz";
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "expression");
+        modell.Expression = @"[A-Z]{3}-\d{4}";
+
+        modell.SelectedBaseType = modell.BaseTypes.Single(o => o.Name == "token");
+
+        Assert.True(modell.CanApply);
+        modell.ApplyCommand.Execute(null);
+
+        Assert.True(modell.Confirmed);
+        Assert.Equal("token", modell.ResultSettings.Type);
+        Assert.Null(modell.ResultSettings.Expression);
+        Assert.Null(modell.ResultSettings.Tables);
     }
 }

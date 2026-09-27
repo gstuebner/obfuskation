@@ -34,4 +34,31 @@ public class GeneratorPreviewTests
         Assert.Equal("", example);
         Assert.NotNull(error);
     }
+
+    [Fact]
+    public void TryExamples_liefert_bei_token_drei_verschiedene_Werte()
+    {
+        var settings = new GeneratorSettings { Type = "token" };
+
+        var erfolg = GeneratorPreview.TryExamples(
+            "fw", settings, "Beispiel 4711", Deriver(), count: 3, out var examples, out var error);
+
+        Assert.True(erfolg);
+        Assert.Null(error);
+        Assert.Equal(3, examples.Count);
+        Assert.Equal(examples.Count, examples.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void TryExamples_liefert_bei_redact_genau_einen_Wert()
+    {
+        var settings = new GeneratorSettings { Type = "redact" };
+
+        var erfolg = GeneratorPreview.TryExamples(
+            "geschwaerzt", settings, "Beispiel 4711", Deriver(), count: 3, out var examples, out var error);
+
+        Assert.True(erfolg);
+        Assert.Null(error);
+        Assert.Single(examples);
+    }
 }

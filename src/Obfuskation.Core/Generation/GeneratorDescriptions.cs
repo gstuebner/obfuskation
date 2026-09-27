@@ -28,6 +28,7 @@ public static class GeneratorDescriptions
         ["dateRange"] = "Datum, zufällig aus einem Zeitraum — ohne Angabe im Kalenderjahr des Originals",
         ["dateGeneralize"] = "Datum, auf Monats-, Quartals- oder Jahresanfang gerundet — nicht umkehrbar",
         ["pattern"] = "Wert nach Zeichenmaske, ohne Angabe aus dem Original abgeleitet",
+        ["expression"] = "Wert nach Ausdruck, etwa Kennzeichen – mit Zeichenklassen, Anzahl und Tabellen",
         ["wordlist"] = "Wert aus einer eigenen Werteliste",
         ["partialMask"] = "teilweise maskiert, Anfang und Ende bleiben sichtbar — nicht umkehrbar",
         ["token"] = "allgemeine Kennung (TOK_…), mit Kennzeichnung davor",

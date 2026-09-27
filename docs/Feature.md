@@ -1,6 +1,6 @@
 # Feature-Sammlung: Anwenderfreundlichkeit
 
-Fassung 1.10.0 · Stand 26. September 2026
+Fassung 1.11.0 · Stand 27. September 2026
 
 Arbeitsdokument für die nächste größere Version. Ziel ist ein echter Schub
 an Anwenderfreundlichkeit: Obfuskation soll sich **selbst erklären**, für
@@ -173,6 +173,37 @@ Bearbeiten/Fertig-Umschalter ganz entfallen lassen, wenn sich die Farben im
 Eingabefeld selbst bewähren — ein einziger, immer bearbeitbarer Zustand statt
 zweier.
 
+### 3.6 Umgesetzt in 1.11.0
+
+Aus Gregors Test des Generator-Dialogs von 1.10.0 (siehe
+`docs/plan-ausdruck-generator.md`):
+
+1. Der Generator-Dialog zeigte unter „Art der Ersetzung“ alle 20 eingebauten
+   Generatoren, obwohl nur sieben davon eigene Einstellungen haben — das
+   wirkte, als ließe sich nur ein bestehender Generator kopieren. Die Liste
+   heißt jetzt „Grundlage“ und zeigt nur noch die acht einstellbaren Arten,
+   je mit Titel und Beispielwert; die übrigen bleiben per JSON erreichbar.
+2. Neuer Generator `expression`: ein RegEx-ähnlicher Ausdruck nur zum
+   Erzeugen, mit Zeichenklassen, Anzahl, Alternativen und eigenen Tabellen
+   (`{name}`) — die Tabellen liegen im Generator selbst, er ist damit in
+   sich vollständig. Im Dialog dafür ein eigener Block mit immer sichtbarer
+   Schreibweise-Tabelle, drei Vorlagen über „Beispiel einsetzen ▾“
+   (KFZ-Kennzeichen, Kundennummer, Artikelnummer) und einer
+   Tabellenverwaltung, die eine im Ausdruck verwendete, aber fehlende
+   Tabelle anmahnt.
+3. Die Vorschau zeigt jetzt bis zu drei Beispiele auf einmal, für alle
+   Arten, nicht nur für den Ausdruck-Generator.
+
+Idee **C5 · Was heute nur in der JSON-Datei geht, in die Oberfläche holen**
+ist damit für Generatoren ein Stück vorangekommen: `expression` mit seinen
+Tabellen ist jetzt vollständig über den Dialog bedienbar, ohne Texteditor.
+
+**Neue Ideen**, aus der Umsetzung zurückgestellt (siehe C6–C8 unten):
+`domain` (E-Mail), `country` (IBAN/BIC) und `maxDays` (Datumsverschiebung)
+im Dialog einstellbar machen; Gewichte für „?“ und Tabelleneinträge, damit
+nicht jeder Wert gleich wahrscheinlich ist; eine vollständige Kreisliste als
+mitgelieferte Tabelle für das KFZ-Beispiel.
+
 ## 4. Ideen
 
 Format: **Kennung · Titel.** Beschreibung. *Nutzen:* A = Anfänger,
@@ -242,6 +273,19 @@ P = Profi. *Aufwand:* S/M/L, grob geschätzt. Offene Fragen stehen kursiv.
   Schwärzungsplatzhalter, Leerwerte, CSV-Einstellungen. Vorzugsweise
   geführt, zum Beispiel bei der Frage „Was soll mit neuen Spalten passieren,
   die das Profil nicht kennt?“. *A+P · M*
+- **C6 · Mehr Optionen im Generator-Dialog einstellbar.** `domain` (`email`),
+  `country` (`iban`/`bic`) und `maxDays` (`dateShift`) sind heute nur per
+  JSON zu setzen, obwohl der Dialog seit 1.11.0 schon acht andere Arten
+  einstellbar zeigt. *P · S*
+- **C7 · Gewichte statt Gleichverteilung.** Beim Ausdruck-Generator zieht
+  `?` mit 50 % und jede Tabellenzeile gleich wahrscheinlich — für ein
+  KFZ-Kennzeichen etwa träfe eine Gewichtung nach echter Häufigkeit der
+  Kreise die Realität besser. *P · M*
+- **C8 · Mitgelieferte Kreisliste.** Die KFZ-Vorlage des Ausdruck-Generators
+  bringt nur 20 Kürzel mit; eine vollständige Liste aller amtlichen
+  Kfz-Kennzeichen als mitgelieferte Tabelle würde das Beispiel für den
+  echten Gebrauch tauglich machen, statt nur eine Demonstration zu sein.
+  *A+P · S*
 
 ### D · Erkennung
 

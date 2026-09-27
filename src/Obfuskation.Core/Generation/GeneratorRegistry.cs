@@ -40,6 +40,7 @@ public sealed class GeneratorRegistry
         new PatternGenerator(),
         new WordlistGenerator(),
         new PartialMaskGenerator(),
+        new ExpressionGenerator(),
     ];
 
     /// <summary>

@@ -249,6 +249,7 @@ The profile file is named `obfuskation-projekt.json` and is searched for upward 
 | `dateRange` | Random date drawn from a period (`from`/`to`); without them, the original's calendar year is kept |
 | `dateGeneralize` | Rounded to the start of month, quarter, or year — **not reversible** |
 | `pattern` | Value built from a character mask (`A`/`a`/`9`/`X`/`\`), or format-preserving from the original if no mask is set |
+| `expression` | Value built from a RegEx-like generating expression (`expression`) with character classes, counts, alternatives, and its own lookup tables (`tables`), e.g. a license plate |
 | `wordlist` | Deterministic pick from a custom value list (`values`) |
 | `partialMask` | Keeps `keepFirst`/`keepLast` characters visible, masks the rest — **not reversible** |
 | `street`, `city`, `postalCode` | Address components from wordlists |

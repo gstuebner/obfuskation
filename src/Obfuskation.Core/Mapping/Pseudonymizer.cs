@@ -102,6 +102,7 @@ public sealed class Pseudonymizer
         "pattern" => "eine längere Maske unter 'pattern' wählen.",
         "dateRange" => "einen weiteren Zeitraum über 'from' und 'to' setzen; ohne Angabe steht " +
                        "nur das Kalenderjahr des Originals zur Verfügung.",
+        "expression" => "den Ausdruck erweitern (mehr Stellen, größere Zeichenklassen oder längere Tabellen).",
         _ => "einen Generator mit größerem Vorrat wählen (etwa 'token').",
     };
 
