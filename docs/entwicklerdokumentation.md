@@ -2,16 +2,16 @@
 title: Entwicklerdokumentation
 subtitle: Aufbau, Bauen und offene Befunde
 kicker: Obfuskation
-version: 1.13.0
+version: 1.14.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 28.09.2026
+date: 14.11.2026
 lang: de
 preset: modern
 ---
 
 # Entwicklerdokumentation
 
-Fassung 1.13.0 · Stand 28. September 2026
+Fassung 1.14.0 · Stand 14. November 2026
 
 Diese Dokumentation richtet sich an alle, die Obfuskation bauen, erweitern
 oder abnehmen wollen. Sie setzt Vertrautheit mit C# und .NET voraus und
@@ -59,7 +59,8 @@ Ausgaben.
 | `SeedDeriver` | `src/Obfuskation.Core/Generation/SeedDeriver.cs` | Leitet deterministische Seeds per HMAC-SHA256 aus dem Profil-Salt ab. |
 | `GeneratorRegistry` | `src/Obfuskation.Core/Generation/GeneratorRegistry.cs` | Baut die konfigurierten Generatoren eines Laufs auf, einschließlich eigener Namensräume aus `profile.Generators`. |
 | `TextRuleEngine` | `src/Obfuskation.Core/Detection/TextRuleEngine.cs` | Wendet Textregeln überschneidungsfrei auf Freitext an; alle Regeln laufen gegen den unveränderten Originaltext. |
-| `ReverseTextMapper` | `src/Obfuskation.Core/Detection/ReverseTextMapper.cs` | Führt beliebigen Text auf Echtwerte zurück, längster Treffer zuerst, mit Wortgrenzen bei wortartigen Pseudonymen. |
+| `ReverseTextMapper` | `src/Obfuskation.Core/Detection/ReverseTextMapper.cs` | Führt beliebigen Text auf Echtwerte zurück, längster Treffer zuerst, mit Wortgrenzen bei wortartigen Pseudonymen. Seit 1.14.0 über `AhoCorasick`: alle Treffer im unveränderten Text, überschneidungsfrei ausgewählt, Ergebnis in einem Durchgang (keine Kettenersetzung mehr zwischen Blöcken). |
+| `AhoCorasick` | `src/Obfuskation.Core/Detection/AhoCorasick.cs` | Sucht viele Zeichenfolgen in einem Durchgang; genutzt von `ReverseTextMapper` und `ScanTransformer` (vorher quadratisch). |
 | `GeneratorDescriptions` | `src/Obfuskation.Core/Generation/GeneratorDescriptions.cs` | Deutsche Erklärungen zu jedem eingebauten Generator, gemeinsam genutzt von Oberfläche und Hilfetexten. |
 | Prozessoren | `src/Obfuskation.Core/Formats/{Csv,Json,PlainText}Processor.cs` | Zerlegen und Zusammensetzen der drei Dateiformate; delegieren die Feldentscheidung an einen `IRecordTransformer`. |
 | Transformer | `src/Obfuskation.Core/Formats/{Obfuscate,Deobfuscate,Scan}Transformer.cs` | Implementieren `IRecordTransformer` und damit die eigentliche Fachlogik je Vorgang, unabhängig vom Dateiformat. |
@@ -1354,6 +1355,7 @@ Skripte werten sie aus, sie ändern sich nicht stillschweigend.
 | 3 | Feld ohne Regel im strengen Modus |
 | 4 | `scan` hat Verdachtsfälle gefunden |
 | 5 | Ersetzungstabelle widersprüchlich oder gesperrt |
+| 6 | ein Wert ließ sich nicht typgerecht ersetzen (etwa ein unlesbares Datum) |
 
 ### Profilverwaltung auf der Kommandozeile
 
@@ -1411,6 +1413,103 @@ Zeile kommt nur hinten dran. Die Oberfläche zeigt dieselbe Angabe im
 Fenster „Über" (`src/Obfuskation.Gui/Views/AboutWindow.axaml`).
 
 ## 11. Befunde
+
+### Codeprüfung zu 1.13.0 (behoben in 1.14.0)
+
+Eine Durchsicht von Kern, Kommandozeile und Oberfläche ergab die Befunde
+A1 bis A10, B1 bis B11 und die Vorschläge C1 bis C8. Jeder behobene Befund
+hat einen Regressionstest mit der Befundnummer im Namen
+(`tests/Obfuskation.Core.Tests/Codepruefung1130Tests.cs`,
+`tests/Obfuskation.Cli.Tests/Codepruefung1130CliTests.cs`). Kurz:
+
+- **A1** `ObfuscationEngine.Obfuscate` ruft `MappingStore.EnsureCreated`
+  vor `Save`: auch ein Lauf ohne Tabelleneintrag schreibt das Salt fest.
+- **A2** `DateValues`: ohne `MM/dd/yyyy` in der Vorgabeliste; eigene
+  `formats` ersetzen sie. Das Format wird je Spalte festgelegt
+  (`DateValues.DetermineColumnFormat`, Vorablauf über
+  `IRecordTransformer.WantsValues`/`OnFieldValues`, Datumsgeneratoren mit
+  `IDateFormatGenerator`); widersprüchliche Formate brechen ab.
+- **A3** JSON-Zahlen als Rohtext statt über `decimal`; neue Pseudonyme
+  bevorzugt als gültige Zahl (`Pseudonymizer.Pseudonymize`, Parameter
+  `preferred`), sonst Zeichenkette mit Warnung `zahlAlsText`.
+- **A4/C1** `ReverseTextMapper` und `ScanTransformer` über `AhoCorasick`;
+  Warnung `mehrdeutigesPseudonym`.
+- **A5** `TextRuleEngine.FindMatches` wählt nach Priorität, Länge, Start;
+  Warnung `textregelVerdraengt` für nicht überdeckte Reste.
+- **A6** Unbekannte Endung: Warnung `formatUnbekannt`, im strengen Modus
+  `ConfigurationException`; NUL-Zeichen werden abgelehnt; Warnungen
+  `freitextOhneErsetzung`, `freitextOhneTextregeln`.
+- **A7/B1** `IRecordTransformer.OnFields` erhält `FieldOccurrence` je Pfad
+  (`[*]` statt Indizes, `JsonPathMatcher.Normalize`); namenlose Werte über
+  `TransformNameless`. `FieldRuleResolver` normalisiert den Cache-Schlüssel,
+  solange keine Pfadregel einen konkreten Index nennt.
+- **A8** `CsvProcessor` liest alle Datensätze, erhält Leerzeilen und ein
+  fehlendes Zeilenende; überzählige Felder heißen nach Position.
+- **A9** `GeneratorRegistry.CanonicalName`; bestehende Namensräume in
+  alter Schreibweise bleiben lesbar; Prüferwarnung.
+- **A10** `CommandContext.CheckOutput` vor dem Lauf, Ausgabe über `.tmp`;
+  Oberfläche vergleicht Ein- und Ausgabepfad.
+- **B2** Rückgabewert 6 für `GenerationException`, letztes `catch` ohne
+  Stacktrace; unbekannter Zeichensatz wird zur `ConfigurationException`.
+- **B3** `keepDates` (Vorgabe 0001-01-01, 1900-01-01, 9999-12-31);
+  Überlauf ergibt `GenerationException`.
+- **B4** Doppelte JSON-Schlüssel: `ConfigurationException`.
+- **B5/B6** `PhoneGenerator` ohne Ziffern; „passt nicht zum Generator“;
+  `IExpandableGenerator` erweitert Wortlisten erst nach den gewöhnlichen
+  100 Versuchen, bisherige Pseudonyme bleiben gleich.
+- **B7** Relativer `mappingStore` ist ein Prüffehler.
+- **B8/B9** Rechte nur an selbst angelegten Verzeichnissen oder unter dem
+  Vorgabeort; nur lesend wird nichts angelegt; Windows-Warnung nur beim
+  Anlegen außerhalb des Benutzerprofils; keine fremde Sperrdatei löschen.
+- **B10** `.gitignore` um `obfuskation-projekt.json` und `mapping.json*`.
+- **B11** Meldungen ohne Klartext (`GenerationException.WithLocation`),
+  Probelauf mit flüchtiger Merkliste, keine leeren Pseudonyme, Warnung
+  `unbekanntePseudonyme`, strenges Kodieren (`TextFormatDetector.Encode`),
+  Oberfläche schreibt über `.tmp`.
+- **C1** Prüflauf: Automat über die kleingeschriebenen Klartexte, Abgleich
+  ohne Rücksicht auf Groß-/Kleinschreibung; Klartexte aus wortartigen
+  Namensräumen (`IsWordLike`) zählen nur als ganzes Wort
+  (`AhoCorasick.HasWordBoundaries`, gemeinsam mit `ReverseTextMapper`).
+- **C2** `UnsafeRelaxedJsonEscaping`.
+- **C3** `MappingDocument.DateOffsets` (optional, `dateOffsets`): der erste
+  echte Lauf, der einen `dateShift`-Namensraum benutzt
+  (`DateShiftGenerator.WasUsed`), hält dessen Versatz fest
+  (`ObfuscationEngine.RecordDateOffsets`). Danach gilt der festgehaltene
+  Wert (`BuildGenerators`); weicht der abgeleitete ab, Warnung
+  `datumsversatzFestgehalten` ohne den Versatz selbst. Tabellen ohne das Feld
+  bleiben gültig und rechnen wie bisher.
+- **C4** `.bak` und `UnixCreateMode`.
+- **C5** `ProfileStore.Load` sammelt unbekannte Eigenschaften über die
+  Typmetadaten von `ProfileStore.JsonOptions` (`Profile.UnknownProperties`,
+  nicht serialisiert, mit Vorschlag bei Editierabstand ≤ 2); der Prüfer
+  meldet sie als Warnung, die Engine wiederholt sie in jedem Laufbericht
+  (`unbekannteEigenschaft`), damit die Kommandozeile sie zeigt.
+  `ProfileStore.Save` leert die Liste.
+- **C6** `Pseudonymizer`: Leerraum am Rand wird abgetrennt, der Kern
+  nachgeschlagen bzw. erzeugt, der Rand wieder angefügt; in beide
+  Richtungen. Ein vorhandener Eintrag mit Rand im Schlüssel geht vor.
+- **C7** Hinweis unter „Genau dieser Wert“ / „Nur genau dieses eine Wort“
+  (`TextRulesPanel`, `AlwaysReplaceViewModel.LiteralStorageHint`).
+- **C8** einmal dekodieren.
+
+Bewusst nicht umgesetzt:
+
+- **C4, Verschlüsselung:** braucht Schlüsselverwaltung (Kennwort, Schlüsselbund
+  oder DPAPI) in Kommandozeile und Oberfläche; ein vergessenes Kennwort
+  machte jede Rückübersetzung unmöglich. Eigenes Vorhaben.
+- **C6, fachliche Normalisierung** (IBAN ohne Leerzeichen, Groß-/
+  Kleinschreibung): die Tabelle müsste die Gruppierung bzw. Schreibweise
+  wiederherstellen, und die Rückübersetzung von Freitext sucht Pseudonyme
+  wörtlich. Nur der Randleerraum ist verlustfrei.
+- **C8, Strom statt Gesamtspeicher:** die Formate brauchen heute einen
+  Vorablauf über alle Werte (Datumsformat je Spalte, A2) und die
+  Feldliste; ein Strom hieße zweimal lesen. Bei den üblichen Dateigrößen
+  (Beispieldaten für eine KI) ohne Nutzen.
+- **B11, eigener Exitcode** bei unbekannten Pseudonymen: Antworten einer KI
+  enthalten regelmäßig neue Werte; ein Fehlercode brächte Skripte ohne Not
+  zum Halten. Es bleibt bei der Abschlusswarnung `unbekanntePseudonyme`.
+
+### Testdurchführung September 2026
 
 Die Befunde D-1 bis D-9 stammen aus der Testdurchführung vom 4. und
 5. September 2026 (`docs/bilder/protokoll-roh.md`). N-1 und N-2 kamen am

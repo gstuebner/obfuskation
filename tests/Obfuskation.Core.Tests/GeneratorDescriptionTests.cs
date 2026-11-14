@@ -21,7 +21,7 @@ public class GeneratorDescriptionTests
     }
 
     [Theory]
-    [InlineData("street", "Straßenname mit Hausnummer")]
+    [InlineData("street", "Straßenname mit Hausnummer (150 Straßen, danach Eckadressen)")]
     [InlineData("token", "allgemeine Kennung (TOK_…), mit Kennzeichnung davor")]
     [InlineData("dateShift", "Datum, um festen Betrag verschoben")]
     public void Die_Erklaerung_trifft_die_Sache(string generator, string erwartet)
@@ -36,5 +36,5 @@ public class GeneratorDescriptionTests
 
     [Fact]
     public void Name_und_Erklaerung_stehen_in_einer_Zeile()
-        => Assert.Equal("street — Straßenname mit Hausnummer", GeneratorDescriptions.Label("street"));
+        => Assert.Equal("street — Straßenname mit Hausnummer (150 Straßen, danach Eckadressen)", GeneratorDescriptions.Label("street"));
 }

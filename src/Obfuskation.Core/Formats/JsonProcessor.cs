@@ -1,7 +1,9 @@
-using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Obfuskation.Core.Configuration;
+using Obfuskation.Core.Detection;
 using Obfuskation.Core.Reporting;
 
 namespace Obfuskation.Core.Formats;
@@ -12,14 +14,44 @@ namespace Obfuskation.Core.Formats;
 /// JSON-Pfad an eine Position binden.
 ///
 /// Struktur, Reihenfolge und Zahlentypen bleiben erhalten; ersetzt werden nur
-/// Zeichenketten- und Zahlenblaetter.
+/// Zeichenketten- und Zahlenblaetter. Eine Zahl, deren Pseudonym keine gueltige
+/// JSON-Zahl ist, wird als Zeichenkette geschrieben (Befund A3).
 /// </summary>
 public sealed class JsonProcessor
 {
+    private static readonly JsonDocumentOptions DocumentOptions = new()
+    {
+        AllowTrailingCommas = true,
+        CommentHandling = JsonCommentHandling.Skip,
+    };
+
+    // Umlaute, '<', '&' und '+' unmaskiert, wie in ProfileStore.JsonOptions:
+    // inhaltlich gleich, aber die Datei sieht sonst anders aus als die Eingabe
+    // und wird groesser (Befund C2).
+    private static readonly JsonSerializerOptions Indented = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    private static readonly JsonSerializerOptions Compact = new()
+    {
+        WriteIndented = false,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    /// <summary>Die Grammatik eines JSON-Zahlliterals nach RFC 8259.</summary>
+    private static readonly Regex NumberLiteral = new(
+        @"\A-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?\z", RegexOptions.CultureInvariant);
+
     private readonly Profile _profile;
     private CancellationToken _cancellationToken;
+    private readonly HashSet<string> _numbersAsText = new(StringComparer.Ordinal);
 
     public JsonProcessor(Profile profile) => _profile = profile;
+
+    /// <summary>Ob <paramref name="text"/> unveraendert als JSON-Zahl geschrieben werden kann.</summary>
+    public static bool IsJsonNumberLiteral(string text) => NumberLiteral.IsMatch(text);
 
     public byte[] Process(
         byte[] content,
@@ -33,34 +65,33 @@ public sealed class JsonProcessor
 
         report.Format = "json";
 
-        var format = TextFormatDetector.Detect(content, _profile.Input.Encoding, ",");
+        var format = TextFormatDetector.Detect(content, _profile.Input.Encoding, ",", out var text);
         report.Encoding = format.Encoding.WebName;
 
-        var text = TextFormatDetector.Decode(content, format.Encoding, format.HasBom);
         var indented = LooksIndented(text);
-
-        JsonNode? root;
-        try
-        {
-            root = JsonNode.Parse(text, documentOptions: new JsonDocumentOptions
-            {
-                AllowTrailingCommas = true,
-                CommentHandling = JsonCommentHandling.Skip,
-            });
-        }
-        catch (JsonException ex)
-        {
-            throw new ConfigurationException($"Die Eingabe ist kein gültiges JSON: {ex.Message}", ex);
-        }
+        var root = Parse(text);
 
         if (root is null)
             return content;
 
         // Erst die Struktur einsammeln, damit der Abbruch bei unbehandelten
-        // Feldern faellt, bevor irgendetwas veraendert wurde.
-        var fieldNames = new List<string>();
-        CollectFieldNames(root, fieldNames, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
-        transformer.OnFields(fieldNames);
+        // Feldern faellt, bevor irgendetwas veraendert wurde. Gesammelt wird
+        // je Pfad (mit [*] statt konkreter Indizes), damit Regeln mit
+        // matchType jsonPath schon hier greifen (Befund B1).
+        var fields = new List<FieldOccurrence>();
+        CollectFields(root, "$", null, fields, new HashSet<(string, string?)>());
+        transformer.OnFields(fields);
+
+        // Vorablauf: Felder, deren Werte der Transformer als Ganzes sehen
+        // muss (Datumsformat einer Spalte, Befund A2).
+        var wanted = fields.Where(transformer.WantsValues).ToDictionary(f => f.Key, StringComparer.Ordinal);
+        if (wanted.Count > 0)
+        {
+            var values = wanted.Keys.ToDictionary(key => key, _ => new List<string>(), StringComparer.Ordinal);
+            CollectValues(root, "$", null, values);
+            foreach (var (key, field) in wanted)
+                transformer.OnFieldValues(field, values[key]);
+        }
 
         var rowCount = 0;
         var result = Transform(root, "$", null, transformer, report, ref rowCount);
@@ -68,26 +99,132 @@ public sealed class JsonProcessor
         report.RowsProcessed = rowCount;
         fortschritt.Complete(rowCount);
 
-        var serialized = result?.ToJsonString(new JsonSerializerOptions { WriteIndented = indented }) ?? "null";
-        return Encode(serialized, format);
+        var serialized = result?.ToJsonString(indented ? Indented : Compact) ?? "null";
+        return TextFormatDetector.Encode(serialized, format);
     }
 
-    private static void CollectFieldNames(JsonNode? node, List<string> names, HashSet<string> seen)
+    private static JsonNode? Parse(string text)
+    {
+        try
+        {
+            // Doppelte Schluessel zuerst selbst pruefen: JsonNode wirft sonst
+            // je nach Laufzeit erst beim ersten Zugriff eine rohe
+            // ArgumentException, oder nimmt stillschweigend einen der Werte
+            // (Befund B4).
+            using (var document = JsonDocument.Parse(text, DocumentOptions))
+                CheckDuplicateKeys(document.RootElement, "$");
+
+            return JsonNode.Parse(text, documentOptions: DocumentOptions);
+        }
+        catch (JsonException ex)
+        {
+            throw new ConfigurationException($"Die Eingabe ist kein gültiges JSON: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// Die Felder einer JSON-Datei je Pfad, wie <see cref="Process"/> sie dem
+    /// Transformer meldet -- fuer <see cref="ObfuscationEngine.Analyze"/>, damit
+    /// Feldliste und Lauf dasselbe zeigen (Befund B1).
+    /// </summary>
+    public static IReadOnlyList<FieldOccurrence> ListFields(byte[] content, string? encoding)
+    {
+        TextFormatDetector.Detect(content, encoding, ",", out var text);
+        var root = Parse(text);
+        var fields = new List<FieldOccurrence>();
+        if (root is not null)
+            CollectFields(root, "$", null, fields, new HashSet<(string, string?)>());
+        return fields;
+    }
+
+    private static void CheckDuplicateKeys(JsonElement element, string path)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (!seen.Add(property.Name))
+                        throw new ConfigurationException(
+                            $"Die Eingabe enthält unter {path} den Schlüssel '{property.Name}' doppelt. " +
+                            "Welcher der Werte gilt, ist nicht festgelegt; die Datei vorher bereinigen.");
+                    CheckDuplicateKeys(property.Value, path + "." + property.Name);
+                }
+                break;
+
+            case JsonValueKind.Array:
+                var index = 0;
+                foreach (var item in element.EnumerateArray())
+                    CheckDuplicateKeys(item, $"{path}[{index++}]");
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Sammelt jedes Feld je Pfad: Eigenschaften (auch solche mit Objekt oder
+    /// Feld als Wert) und Blaetter, dazu namenlose Blaetter (Befund A7).
+    /// </summary>
+    private static void CollectFields(
+        JsonNode? node, string path, string? fieldName, List<FieldOccurrence> fields, HashSet<(string, string?)> seen)
     {
         switch (node)
         {
             case JsonObject obj:
                 foreach (var (name, child) in obj)
                 {
-                    if (seen.Add(name))
-                        names.Add(name);
-                    CollectFieldNames(child, names, seen);
+                    var childPath = path + "." + name;
+                    Add(new FieldOccurrence(name, JsonPathMatcher.Normalize(childPath)));
+                    CollectFields(child, childPath, name, fields, seen);
                 }
                 break;
 
             case JsonArray array:
-                foreach (var child in array)
-                    CollectFieldNames(child, names, seen);
+                for (var index = 0; index < array.Count; index++)
+                    CollectFields(array[index], $"{path}[{index}]", fieldName, fields, seen);
+                break;
+
+            case JsonValue value:
+                // true, false und null tragen keine Daten, die zu ersetzen waeren.
+                if (value.GetValue<JsonElement>().ValueKind is not (JsonValueKind.String or JsonValueKind.Number))
+                    break;
+
+                var normalized = JsonPathMatcher.Normalize(path);
+                Add(fieldName is null
+                    ? new FieldOccurrence(normalized, normalized, IsNameless: true)
+                    : new FieldOccurrence(fieldName, normalized));
+                break;
+        }
+
+        void Add(FieldOccurrence field)
+        {
+            if (seen.Add((field.Name, field.JsonPath)))
+                fields.Add(field);
+        }
+    }
+
+    private static void CollectValues(JsonNode? node, string path, string? fieldName, Dictionary<string, List<string>> values)
+    {
+        switch (node)
+        {
+            case JsonObject obj:
+                foreach (var (name, child) in obj)
+                    CollectValues(child, path + "." + name, name, values);
+                break;
+
+            case JsonArray array:
+                for (var index = 0; index < array.Count; index++)
+                    CollectValues(array[index], $"{path}[{index}]", fieldName, values);
+                break;
+
+            case JsonValue value:
+                if (!values.TryGetValue(JsonPathMatcher.Normalize(path), out var list))
+                    break;
+                var element = value.GetValue<JsonElement>();
+                if (element.ValueKind == JsonValueKind.String)
+                    list.Add(element.GetString() ?? "");
+                else if (element.ValueKind == JsonValueKind.Number)
+                    list.Add(element.GetRawText());
                 break;
         }
     }
@@ -143,32 +280,48 @@ public sealed class JsonProcessor
 
             case JsonValue value:
             {
-                if (fieldName is null)
-                    return value.DeepClone();
-
                 var element = value.GetValue<JsonElement>();
 
                 if (element.ValueKind == JsonValueKind.String)
                 {
                     var original = element.GetString() ?? "";
-                    var transformed = transformer.TransformField(fieldName, path, original, path);
+
+                    // Werte ohne umgebenden Namen (Elemente eines Wurzelfeldes,
+                    // der Wurzelwert selbst) wurden bis 1.13.0 ungeprueft
+                    // kopiert (Befund A7).
+                    var transformed = fieldName is null
+                        ? transformer.TransformNameless(path, original, path)
+                        : transformer.TransformField(fieldName, path, original, path);
                     return JsonValue.Create(transformed);
                 }
 
                 if (element.ValueKind == JsonValueKind.Number)
                 {
                     var original = element.GetRawText();
-                    var transformed = transformer.TransformField(fieldName, path, original, path);
+                    var transformed = fieldName is null
+                        ? transformer.TransformNameless(path, original, path)
+                        : transformer.TransformNumber(fieldName, path, original, path);
 
                     // Bleibt das Ergebnis eine Zahl, wird es auch als Zahl
                     // geschrieben — sonst zerfaellt der Typ der Testdaten.
                     if (transformed == original)
                         return value.DeepClone();
 
-                    return decimal.TryParse(transformed, System.Globalization.NumberStyles.Any,
-                        System.Globalization.CultureInfo.InvariantCulture, out var number)
-                        ? JsonValue.Create(number)
-                        : JsonValue.Create(transformed);
+                    // Als Rohtext uebernehmen statt ueber decimal: "0657" waere
+                    // sonst zu 657 geworden, waehrend in der Tabelle "0657"
+                    // steht -- die Rueckuebersetzung fand den Wert nicht mehr.
+                    if (IsJsonNumberLiteral(transformed))
+                        return JsonNode.Parse(transformed);
+
+                    var label = fieldName ?? JsonPathMatcher.Normalize(path);
+                    if (_numbersAsText.Add(label))
+                    {
+                        report.Warn("zahlAlsText",
+                            $"Im Feld '{label}' war mindestens ein Ersatzwert keine gültige JSON-Zahl " +
+                            "(etwa wegen einer führenden Null); er steht als Zeichenkette in der Ausgabe.");
+                    }
+
+                    return JsonValue.Create(transformed);
                 }
 
                 return value.DeepClone();
@@ -184,18 +337,5 @@ public sealed class JsonProcessor
         // Ein Zeilenumbruch gefolgt von Leerzeichen deutet auf eingerueckte Ausgabe.
         var newLine = text.IndexOf('\n');
         return newLine >= 0 && newLine + 1 < text.Length && (text[newLine + 1] == ' ' || text[newLine + 1] == '\t');
-    }
-
-    private static byte[] Encode(string text, DetectedTextFormat format)
-    {
-        var body = format.Encoding.GetBytes(text);
-        if (!format.HasBom)
-            return body;
-
-        var preamble = format.Encoding.GetPreamble();
-        var result = new byte[preamble.Length + body.Length];
-        preamble.CopyTo(result, 0);
-        body.CopyTo(result, preamble.Length);
-        return result;
     }
 }

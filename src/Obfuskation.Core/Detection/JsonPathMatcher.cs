@@ -40,6 +40,38 @@ public static class JsonPathMatcher
         return true;
     }
 
+    /// <summary>
+    /// Ersetzt jeden konkreten Feldindex durch <c>[*]</c>:
+    /// <c>$.kunden[17].name</c> wird zu <c>$.kunden[*].name</c>. So bleibt die
+    /// Menge der Pfade einer grossen Datei klein (Befund B1).
+    /// </summary>
+    public static string Normalize(string path)
+    {
+        if (path.IndexOf('[') < 0)
+            return path;
+
+        var builder = new System.Text.StringBuilder(path.Length);
+        for (var i = 0; i < path.Length; i++)
+        {
+            if (path[i] == '[')
+            {
+                var close = path.IndexOf(']', i);
+                if (close > i + 1 && path.AsSpan(i + 1, close - i - 1).IndexOfAnyExceptInRange('0', '9') < 0)
+                {
+                    builder.Append("[*]");
+                    i = close;
+                    continue;
+                }
+            }
+            builder.Append(path[i]);
+        }
+        return builder.ToString();
+    }
+
+    /// <summary>Ob ein Muster einen konkreten Feldindex wie <c>[0]</c> enthaelt.</summary>
+    public static bool HasConcreteIndex(string pattern)
+        => !string.Equals(Normalize(pattern), pattern, StringComparison.Ordinal);
+
     /// <summary>Zerlegt einen Pfad in Abschnitte; Feldindizes bleiben eigenstaendig.</summary>
     private static List<string> Split(string path)
     {

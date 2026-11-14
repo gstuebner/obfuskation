@@ -83,6 +83,7 @@ public static class ProfileValidator
         ("expression", "expression"),
         ("tables", "expression"),
         ("maxDays", "dateShift"),
+        ("keepDates", "dateShift"),
         ("formats", "dateShift"),
         ("formats", "dateRange"),
         ("formats", "dateGeneralize"),
@@ -151,6 +152,28 @@ public static class ProfileValidator
         {
             issues.Add(new ValidationIssue("profileName", ValidationSeverity.Error,
                 "Der Profilname darf nicht leer sein; er bestimmt die Ablage der Ersetzungstabelle."));
+        }
+
+        // Ein relativer Pfad hinge vom aktuellen Verzeichnis ab: von anderswo
+        // aufgerufen entstuende still eine neue Tabelle mit neuem Salt, und die
+        // Rueckuebersetzung faende nichts mehr (Befund B7).
+        if (!string.IsNullOrWhiteSpace(profile.MappingStore)
+            && !Path.IsPathFullyQualified(PathHelper.ExpandHome(profile.MappingStore)))
+        {
+            issues.Add(new ValidationIssue("mappingStore", ValidationSeverity.Error,
+                $"Der Pfad der Ersetzungstabelle '{profile.MappingStore}' ist relativ und hinge vom " +
+                "aktuellen Verzeichnis ab. Einen absoluten Pfad oder einen mit '~/' angeben, oder das " +
+                "Feld leer lassen (Vorgabeort)."));
+        }
+
+        // Ein vertipptes "textRuels" liesse die Regeln still wirkungslos, im
+        // Freitext stuende dann Klartext in der Ausgabe (Befund C5).
+        foreach (var unknown in profile.UnknownProperties)
+        {
+            var hint = unknown.Suggestion is null ? "" : $" Gemeint ist vermutlich '{unknown.Suggestion}'.";
+            issues.Add(new ValidationIssue(unknown.Path, ValidationSeverity.Warning,
+                $"Die Eigenschaft '{unknown.Path}' ist unbekannt und bleibt wirkungslos.{hint} Beim " +
+                "nächsten Speichern über die Oberfläche entfällt sie."));
         }
 
         ValidateGenerators(profile, extensions, issues);
@@ -276,6 +299,16 @@ public static class ProfileValidator
 
         if (settings.Formats is { Count: > 0 })
             ValidateFormats(pathPrefix, key, settings, issues);
+
+        foreach (var date in settings.KeepDates ?? [])
+        {
+            if (!DateTime.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out _))
+            {
+                issues.Add(new ValidationIssue($"{pathPrefix}.{key}.keepDates", ValidationSeverity.Error,
+                    $"'{date}' unter 'keepDates' ist kein Datum im Format yyyy-MM-dd."));
+            }
+        }
     }
 
     /// <summary>
@@ -420,6 +453,7 @@ public static class ProfileValidator
         // Gesetzt heisst darum "weder Vorgabe noch 0" (0 wirkt wie die Vorgabe).
         "maxDays" => settings.MaxDays is not (0 or GeneratorSettings.DefaultMaxDays),
         "formats" => settings.Formats is { Count: > 0 },
+        "keepDates" => settings.KeepDates is not null,
         "country" => !string.IsNullOrWhiteSpace(settings.Country),
         "domain" => !string.IsNullOrWhiteSpace(settings.Domain),
         _ => false,
@@ -825,6 +859,20 @@ public static class ProfileValidator
             issues.Add(new ValidationIssue(path, ValidationSeverity.Error,
                 $"Unbekannter Generator '{generatorName}'. Verfügbar: " +
                 string.Join(", ", GeneratorRegistry.KnownNames)));
+            return;
+        }
+
+        // Aufgeloest wird ohne Ruecksicht auf die Schreibweise, Namensraum und
+        // Seed haengen aber an der Schreibweise des Registers (Befund A9).
+        var canonical = GeneratorRegistry.KnownNames
+            .Concat(extensions.Generators.Keys)
+            .Concat(profile.Generators.Keys)
+            .FirstOrDefault(name => string.Equals(name, generatorName, StringComparison.OrdinalIgnoreCase));
+        if (canonical is not null && !string.Equals(canonical, generatorName, StringComparison.Ordinal))
+        {
+            issues.Add(new ValidationIssue(path, ValidationSeverity.Warning,
+                $"Der Generator '{generatorName}' heißt eigentlich '{canonical}'. Die Schreibweise hier " +
+                "anpassen; gerechnet wird mit der eigentlichen."));
         }
     }
 

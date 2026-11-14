@@ -12,6 +12,7 @@ publish/
 
 # NIEMALS committen: enthaelt saemtliche Echtdaten
 mapping.json
+mapping.json*
 *.map.json
 mapping.lock
 
@@ -19,6 +20,7 @@ mapping.lock
 *.pseudo.*
 *.klartext.*
 obfuskation.json
+obfuskation-projekt.json
 
-# Arbeitsordner fuer gemeldete Fehler und Wuensche samt Testdaten
-features+bugs/
+# Lokale Arbeitsunterlagen (Befunde, Arbeitsberichte, Testdaten), nie committen
+_dev/

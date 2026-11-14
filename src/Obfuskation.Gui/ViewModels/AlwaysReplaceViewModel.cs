@@ -172,6 +172,14 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
     public string ShapeDescription => ShapeOption?.Description ?? "";
 
     /// <summary>
+    /// Hinweis unter "Nur genau dieses eine Wort": das woertliche Muster ist
+    /// der Echtwert selbst und landet im gewaehlten Ziel (Befund C7).
+    /// </summary>
+    public string LiteralStorageHint => UseExtension
+        ? "Der Wert selbst wird als Suchmuster in der Erweiterungsdatei gespeichert. Sie enthält damit Echtdaten und sollte nicht weitergegeben werden."
+        : "Der Wert selbst wird als Suchmuster im Profil gespeichert. Es enthält damit Echtdaten und sollte nicht weitergegeben werden.";
+
+    /// <summary>
     /// "Alles dieser Form" statt "nur genau dieses Wort". Faellt automatisch
     /// auf die woertliche Lesart zurueck, sobald <see cref="CanUseShape"/>
     /// nicht mehr zutrifft -- etwa weil der Anwender das "Was?"-Feld auf einen
@@ -357,6 +365,7 @@ public sealed class AlwaysReplaceViewModel : ObservableObject
                 return;
 
             OnPropertyChanged(nameof(UseProfile));
+            OnPropertyChanged(nameof(LiteralStorageHint));
             OnPropertyChanged(nameof(ExtensionPath));
             OnPropertyChanged(nameof(ExtensionHasComments));
             RaiseGeneratorScopeHintChanged();

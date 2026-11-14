@@ -13,11 +13,11 @@ public static class GeneratorDescriptions
     private static readonly Dictionary<string, string> Descriptions = new(StringComparer.OrdinalIgnoreCase)
     {
         ["personName"] = "Vor- und Nachname",
-        ["firstName"] = "nur Vorname",
-        ["lastName"] = "nur Nachname",
+        ["firstName"] = "nur Vorname (161 Namen, danach Doppelnamen)",
+        ["lastName"] = "nur Nachname (371 Namen, danach Doppelnamen)",
         ["companyName"] = "Firmenname mit Rechtsform",
-        ["street"] = "Straßenname mit Hausnummer",
-        ["city"] = "Ortsname",
+        ["street"] = "Straßenname mit Hausnummer (150 Straßen, danach Eckadressen)",
+        ["city"] = "Ortsname (277 Orte, danach „X bei Y“)",
         ["postalCode"] = "Postleitzahl",
         ["email"] = "E-Mail-Adresse",
         ["phone"] = "Telefonnummer",

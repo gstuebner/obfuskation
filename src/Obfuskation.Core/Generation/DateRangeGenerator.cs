@@ -14,7 +14,7 @@ namespace Obfuskation.Core.Generation;
 /// Fall ab, dass ein zufaelliges Datum zufaellig mit einem echten Datum des
 /// Bestands zusammenfaellt.
 /// </summary>
-public sealed class DateRangeGenerator : IPseudonymGenerator
+public sealed class DateRangeGenerator : IPseudonymGenerator, IDateFormatGenerator, IExpandableGenerator
 {
     private string[] _formats = DateValues.FallbackFormats;
     private DateTime? _from;
@@ -23,6 +23,8 @@ public sealed class DateRangeGenerator : IPseudonymGenerator
     public string Name => "dateRange";
     public bool IsReversible => true;
     public bool IsWordLike => false;
+
+    public string[] Formats => _formats;
 
     public void Configure(GeneratorSettings settings)
     {
@@ -48,10 +50,39 @@ public sealed class DateRangeGenerator : IPseudonymGenerator
     public string Generate(ReadOnlySpan<byte> seed, string original)
     {
         if (!DateValues.TryParse(original, _formats, out var parsed, out var format))
-            throw new GenerationException(Name,
-                $"Wert ist mit keinem der konfigurierten Datumsformate lesbar: '{original}'. " +
-                "Format in generators.dateRange.formats ergänzen oder einen anderen Generator wählen.");
+            throw Unreadable();
 
+        return Draw(seed, parsed, format, widenYears: 0);
+    }
+
+    public string Generate(ReadOnlySpan<byte> seed, string original, string format)
+    {
+        if (!DateValues.TryParseExact(original, format, out var parsed))
+            throw Unreadable();
+
+        return Draw(seed, parsed, format, widenYears: 0);
+    }
+
+    /// <summary>
+    /// Ohne eigenen Zeitraum reicht das Kalenderjahr des Originals nur fuer
+    /// 365 Tage; ein Bestand mit Buchungen ueber ein ganzes Jahr scheiterte
+    /// daran (Befund B6). Ist das Jahr erschoepft, weicht der Generator
+    /// schrittweise auf die Nachbarjahre aus. Mit eigenem Zeitraum gilt der
+    /// ausdruecklich gesetzte Rahmen, und es bleibt beim Abbruch.
+    /// </summary>
+    public string? GenerateExpanded(ReadOnlySpan<byte> seed, string original, int attempt)
+    {
+        if (_from.HasValue && _to.HasValue)
+            return null;
+
+        if (!DateValues.TryParse(original, _formats, out var parsed, out var format))
+            throw Unreadable();
+
+        return Draw(seed, parsed, format, widenYears: 1 + attempt / 25);
+    }
+
+    private string Draw(ReadOnlySpan<byte> seed, DateTime parsed, string format, int widenYears)
+    {
         DateTime from;
         DateTime to;
         if (_from.HasValue && _to.HasValue)
@@ -65,8 +96,8 @@ public sealed class DateRangeGenerator : IPseudonymGenerator
             // erhalten: die Altersstruktur des Bestands bleibt auswertbar,
             // das exakte Datum ist weg -- ohne einen willkuerlichen
             // Vorgabezeitraum zu brauchen.
-            from = new DateTime(parsed.Year, 1, 1);
-            to = new DateTime(parsed.Year, 12, 31);
+            from = new DateTime(Math.Max(1, parsed.Year - widenYears), 1, 1);
+            to = new DateTime(Math.Min(9999, parsed.Year + widenYears), 12, 31);
         }
 
         var reader = new SeedReader(seed);
@@ -78,4 +109,9 @@ public sealed class DateRangeGenerator : IPseudonymGenerator
 
         return DateValues.Format(drawn, format);
     }
+
+    private GenerationException Unreadable() => new(Name,
+        "Wert ist mit keinem der konfigurierten Datumsformate lesbar. " +
+        $"Format in generators.{Name}.formats ergänzen (amerikanische Daten etwa mit \"MM/dd/yyyy\") " +
+        "oder einen anderen Generator wählen.");
 }

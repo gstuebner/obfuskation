@@ -411,7 +411,7 @@ Empfehlung, keine Pflicht.
 | `email` | Adresse unter `example.invalid` (per RFC 2606 reserviert) |
 | `phone` | Ziffern ersetzt, Gliederung des Originals erhalten |
 | `numericId` | Stellenzahl erhalten, führende Nullen bleiben |
-| `dateShift` | alle Daten um denselben Betrag verschoben — Reihenfolge und Abstände bleiben |
+| `dateShift` | alle Daten um denselben Betrag verschoben — Reihenfolge und Abstände bleiben; der Versatz wird beim ersten Lauf in der Ersetzungstabelle festgehalten und gilt auch nach einer Änderung von `maxDays` weiter |
 | `dateRange` | zufälliges Datum aus einem Zeitraum (`from`/`to`); ohne Angabe bleibt das Kalenderjahr des Originals erhalten |
 | `dateGeneralize` | auf Monats-, Quartals- oder Jahresanfang gerundet — **nicht umkehrbar** |
 | `pattern` | Wert nach Zeichenmaske (`A`/`a`/`9`/`X`/`\`), ohne Maske formaterhaltend aus dem Original abgeleitet |
@@ -501,9 +501,12 @@ dürfen, nur weil ein Profil, das sich darauf bezieht, öffentlich ist.
 
 `obfuskation extensions list` zeigt die eingetragenen Generatorschlüssel,
 ihren Basistyp, die Namen der Textregeln und die Spaltenmuster —
-Muster eingeschlossen: anders als die Ersetzungstabelle enthält die
-Erweiterungsdatei keine Echtdaten, nur die Form davon, es gibt also nichts
-zu schützen. Zusätzlich nennt der Befehl, welcher der beiden Orte greift.
+Muster eingeschlossen. Anders als die Ersetzungstabelle enthält die
+Erweiterungsdatei in der Regel keine Echtdaten, nur die Form davon. Eine
+Ausnahme sind Regeln der Art „Genau dieser Wert“ („Immer ersetzen…“): sie
+legen den Echtwert selbst als Muster ab, im Profil oder in der
+Erweiterungsdatei. Wer solche Regeln anlegt, behandelt die Datei wie die
+Ersetzungstabelle. Zusätzlich nennt der Befehl, welcher der beiden Orte greift.
 `obfuskation extensions path` zeigt diesen Ort, oder beide geprüften Orte,
 wenn keiner eine Datei hergibt. `--no-extensions` lässt einen Lauf ohne die
 Erweiterungsdatei laufen, für die Fehlersuche oder für ein Ergebnis, das
@@ -632,6 +635,7 @@ Zeitpunkten der letzten Benutzung und Änderung.
 | 3 | Feld ohne Regel im strengen Modus |
 | 4 | `scan` hat Verdachtsfälle gefunden |
 | 5 | Ersetzungstabelle widersprüchlich oder gesperrt |
+| 6 | ein Wert ließ sich nicht typgerecht ersetzen (etwa ein unlesbares Datum) |
 
 ---
 

@@ -55,6 +55,9 @@
               <StackPanel Spacing="1">
                 <TextBlock Text="Nur genau dieses eine Wort"/>
                 <TextBlock Text="{Binding LiteralDescription}" Classes="muted small"/>
+                <!-- Befund C7: das woertliche Muster ist der Echtwert selbst. -->
+                <TextBlock Text="{Binding LiteralStorageHint}" Classes="muted small" TextWrapping="Wrap"
+                           IsVisible="{Binding UseLiteral}"/>
               </StackPanel>
             </RadioButton>
             <RadioButton GroupName="reichweite" IsChecked="{Binding UseShape}"

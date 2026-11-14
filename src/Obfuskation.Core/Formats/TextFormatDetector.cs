@@ -20,11 +20,19 @@ public static class TextFormatDetector
     private static readonly char[] DelimiterCandidates = [';', ',', '\t', '|'];
 
     public static DetectedTextFormat Detect(byte[] content, string? forcedEncoding, string? forcedDelimiter)
+        => Detect(content, forcedEncoding, forcedDelimiter, out _);
+
+    /// <summary>
+    /// Wie <see cref="Detect(byte[], string?, string?)"/>, gibt aber zugleich den
+    /// dekodierten Text zurueck -- die Prozessoren dekodierten bis 1.13.0 ein
+    /// zweites Mal (Befund C8).
+    /// </summary>
+    public static DetectedTextFormat Detect(byte[] content, string? forcedEncoding, string? forcedDelimiter, out string text)
     {
         RegisterCodePages();
 
         var (encoding, hasBom) = DetectEncoding(content, forcedEncoding);
-        var text = Decode(content, encoding, hasBom);
+        text = Decode(content, encoding, hasBom);
 
         var newLine = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         var delimiter = forcedDelimiter ?? DetectDelimiter(text);
@@ -50,6 +58,41 @@ public static class TextFormatDetector
         return encoding.GetString(content, preambleLength, content.Length - preambleLength);
     }
 
+    /// <summary>
+    /// Kodiert die Ausgabe im Zeichensatz der Eingabe, samt Markierung, falls
+    /// die Eingabe eine trug. Ein Zeichen, das der Zeichensatz nicht darstellen
+    /// kann, fuehrt zum Abbruch, statt still zu "?" zu werden -- das Pseudonym in
+    /// der Datei wiche sonst von dem in der Tabelle ab (Befund B11).
+    /// </summary>
+    public static byte[] Encode(string text, DetectedTextFormat format)
+    {
+        var strict = (Encoding)format.Encoding.Clone();
+        strict.EncoderFallback = EncoderFallback.ExceptionFallback;
+
+        byte[] body;
+        try
+        {
+            body = strict.GetBytes(text);
+        }
+        catch (EncoderFallbackException ex)
+        {
+            throw new Configuration.ConfigurationException(
+                $"Die Ausgabe enthält ein Zeichen (U+{(int)ex.CharUnknown:X4}), das der Zeichensatz " +
+                $"{format.Encoding.WebName} der Eingabe nicht darstellen kann. Es stammt vermutlich aus " +
+                "eigenen Werten eines Generators (values, tables, prefix); dort nur darstellbare Zeichen " +
+                "verwenden oder die Eingabe in UTF-8 liefern.", ex);
+        }
+
+        if (!format.HasBom)
+            return body;
+
+        var preamble = format.Encoding.GetPreamble();
+        var result = new byte[preamble.Length + body.Length];
+        preamble.CopyTo(result, 0);
+        body.CopyTo(result, preamble.Length);
+        return result;
+    }
+
     private static (Encoding Encoding, bool HasBom) DetectEncoding(byte[] content, string? forced)
     {
         if (!string.IsNullOrWhiteSpace(forced))
@@ -59,9 +102,10 @@ public static class TextFormatDetector
             {
                 return (Encoding.GetEncoding(forced), StartsWithBom(content, Encoding.GetEncoding(forced)));
             }
-            catch (ArgumentException)
+            catch (ArgumentException ex)
             {
-                throw new ArgumentException($"Unbekannter Zeichensatz: '{forced}'", nameof(forced));
+                throw new Configuration.ConfigurationException(
+                    $"Unbekannter Zeichensatz unter input.encoding: '{forced}'.", ex);
             }
         }
 

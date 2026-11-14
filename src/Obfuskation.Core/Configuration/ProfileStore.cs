@@ -79,14 +79,116 @@ public static class ProfileStore
 
         try
         {
-            using var stream = File.OpenRead(path);
-            return JsonSerializer.Deserialize<Profile>(stream, JsonOptions)
-                   ?? throw new ConfigurationException($"Konfigurationsdatei ist leer: {path}");
+            var bytes = File.ReadAllBytes(path);
+            var profile = JsonSerializer.Deserialize<Profile>(bytes, JsonOptions)
+                          ?? throw new ConfigurationException($"Konfigurationsdatei ist leer: {path}");
+
+            using var document = JsonDocument.Parse(bytes, ClassifyOptions);
+            profile.UnknownProperties = FindUnknownProperties(document.RootElement, typeof(Profile));
+            return profile;
         }
         catch (JsonException ex)
         {
             throw new ConfigurationException($"Konfigurationsdatei ist kein gültiges JSON: {path}", ex);
         }
+    }
+
+    /// <summary>
+    /// Sucht in <paramref name="element"/> Eigenschaften, die
+    /// <paramref name="type"/> nicht kennt (Befund C5). Grundlage sind dieselben
+    /// Typmetadaten, mit denen <see cref="JsonOptions"/> liest -- was hier
+    /// bekannt ist, wird beim Laden auch uebernommen, und umgekehrt. Ein
+    /// Fehler waere unvertraeglicher als diese Warnung: aeltere Profile koennen
+    /// abgeloeste Felder enthalten.
+    /// </summary>
+    public static IReadOnlyList<UnknownProperty> FindUnknownProperties(JsonElement element, Type type)
+    {
+        var unknown = new List<UnknownProperty>();
+        CollectUnknownProperties(element, type, "", unknown);
+        return unknown;
+    }
+
+    private static void CollectUnknownProperties(JsonElement element, Type type, string path, List<UnknownProperty> unknown)
+    {
+        var info = JsonOptions.GetTypeInfo(type);
+        switch (info.Kind)
+        {
+            case JsonTypeInfoKind.Object when element.ValueKind == JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    var childPath = path.Length == 0 ? property.Name : $"{path}.{property.Name}";
+                    var known = info.Properties.FirstOrDefault(
+                        p => string.Equals(p.Name, property.Name, StringComparison.OrdinalIgnoreCase));
+
+                    if (known is null)
+                        unknown.Add(new UnknownProperty(childPath, Closest(property.Name, info.Properties.Select(p => p.Name))));
+                    else
+                        CollectUnknownProperties(property.Value, known.PropertyType, childPath, unknown);
+                }
+                break;
+
+            case JsonTypeInfoKind.Enumerable when element.ValueKind == JsonValueKind.Array
+                                                   && GenericArgument(type, typeof(IEnumerable<>), 0) is { } itemType:
+                var index = 0;
+                foreach (var item in element.EnumerateArray())
+                    CollectUnknownProperties(item, itemType, $"{path}[{index++}]", unknown);
+                break;
+
+            case JsonTypeInfoKind.Dictionary when element.ValueKind == JsonValueKind.Object
+                                                   && GenericArgument(type, typeof(IDictionary<,>), 1) is { } valueType:
+                foreach (var property in element.EnumerateObject())
+                    CollectUnknownProperties(property.Value, valueType, $"{path}.{property.Name}", unknown);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Typargument einer generischen Schnittstelle, die <paramref name="type"/>
+    /// umsetzt -- der Elementtyp einer Liste, der Werttyp eines Woerterbuchs.
+    /// (<c>JsonTypeInfo.ElementType</c> gibt es erst ab .NET 9.)
+    /// </summary>
+    private static Type? GenericArgument(Type type, Type genericInterface, int position)
+        => type.GetInterfaces().Append(type)
+            .FirstOrDefault(t => t.IsGenericType && t.GetGenericTypeDefinition() == genericInterface)
+            ?.GetGenericArguments()[position];
+
+    /// <summary>Der bekannte Name mit dem kleinsten Editierabstand, hoechstens zwei.</summary>
+    private static string? Closest(string name, IEnumerable<string> candidates)
+    {
+        string? best = null;
+        var bestDistance = 3;
+        foreach (var candidate in candidates)
+        {
+            var distance = EditDistance(name.ToLowerInvariant(), candidate.ToLowerInvariant());
+            if (distance < bestDistance)
+            {
+                best = candidate;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>Editierabstand nach Damerau-Levenshtein (vertauschte Nachbarn zaehlen einfach).</summary>
+    private static int EditDistance(string a, string b)
+    {
+        var d = new int[a.Length + 1, b.Length + 1];
+        for (var i = 0; i <= a.Length; i++)
+            d[i, 0] = i;
+        for (var j = 0; j <= b.Length; j++)
+            d[0, j] = j;
+
+        for (var i = 1; i <= a.Length; i++)
+        {
+            for (var j = 1; j <= b.Length; j++)
+            {
+                var cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+                if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1])
+                    d[i, j] = Math.Min(d[i, j], d[i - 2, j - 2] + 1);
+            }
+        }
+        return d[a.Length, b.Length];
     }
 
     /// <summary>
@@ -113,6 +215,9 @@ public static class ProfileStore
         var temporary = path + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(profile, JsonOptions));
         File.Move(temporary, path, overwrite: true);
+
+        // Geschrieben wird nur, was das Programm kennt; die Warnung ist damit erledigt.
+        profile.UnknownProperties = [];
     }
 
     /// <summary>

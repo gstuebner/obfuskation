@@ -39,12 +39,7 @@ internal static class FilePermissions
     public static void RestrictDirectory(string path, List<string> warnings)
     {
         if (!IsUnix)
-        {
-            warnings.Add(
-                "Zugriffsrechte lassen sich auf diesem System nicht setzen. Der Mapping-Store " +
-                "muss von Hand geschützt werden.");
             return;
-        }
 
         try
         {
@@ -63,7 +58,53 @@ internal static class FilePermissions
         }
     }
 
-    public static void CheckFile(string path, List<string> warnings)
+    /// <summary>Legt eine Datei an, die von Anfang an nur dem Besitzer offensteht (Befund C4).</summary>
+    public static FileStream CreatePrivate(string path)
+    {
+        var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write, Share = FileShare.None };
+        if (IsUnix)
+            options.UnixCreateMode = FileMode600;
+        return new FileStream(path, options);
+    }
+
+    /// <summary>Meldet zu weite Rechte eines Verzeichnisses, ohne sie zu aendern.</summary>
+    public static void CheckDirectory(string path, List<string> warnings)
+    {
+        if (!IsUnix)
+            return;
+
+        try
+        {
+            var current = File.GetUnixFileMode(path);
+            if ((current & ~DirectoryMode700) != 0)
+                warnings.Add(
+                    $"Das Verzeichnis des Mapping-Stores ist für andere zugänglich ({Describe(current)}). " +
+                    "Es wurde nicht vom Programm angelegt, die Rechte bleiben unverändert; bitte selbst prüfen.");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            warnings.Add($"Die Rechte des Verzeichnisses {path} ließen sich nicht prüfen: {ex.Message}");
+        }
+    }
+
+    /// <summary>Unter Windows: Hinweis, wenn die Tabelle ausserhalb des Benutzerprofils entsteht.</summary>
+    public static void WarnIfUnprotected(string path, List<string> warnings)
+    {
+        if (IsUnix)
+            return;
+
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(profile) && Path.GetFullPath(path).StartsWith(
+                Path.GetFullPath(profile).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase))
+            return;
+
+        warnings.Add(
+            "Zugriffsrechte lassen sich auf diesem System nicht setzen, und der Mapping-Store liegt " +
+            "außerhalb des Benutzerprofils. Er muss von Hand geschützt werden.");
+    }
+
+    public static void CheckFile(string path, List<string> warnings, bool restrict = true)
     {
         if (!IsUnix)
             return;
@@ -75,10 +116,11 @@ internal static class FilePermissions
             {
                 warnings.Add(
                     $"Der Mapping-Store war für andere lesbar ({Describe(current)}); " +
-                    "die Rechte wurden auf 0600 gesetzt. Die Datei enthält Echtdaten — " +
+                    "die Rechte werden beim Schreiben auf 0600 gesetzt. Die Datei enthält Echtdaten — " +
                     "prüfen, wer bisher Zugriff hatte.");
             }
-            RestrictFile(path);
+            if (restrict)
+                RestrictFile(path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

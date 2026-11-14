@@ -26,5 +26,12 @@ public sealed class UnhandledFieldException : Exception
                string.Join(", ", fieldNames))
         => FieldNames = fieldNames;
 
+    /// <param name="fieldNames">Die Felder ohne Entscheidung.</param>
+    /// <param name="location">Wo das erste davon auftauchte, etwa bei einem ueberzaehligen CSV-Feld.</param>
+    public UnhandledFieldException(IReadOnlyList<string> fieldNames, string location)
+        : base("Für folgende Felder steht noch keine Entscheidung fest: " +
+               string.Join(", ", fieldNames) + $" (zuerst in {location})")
+        => FieldNames = fieldNames;
+
     public IReadOnlyList<string> FieldNames { get; }
 }

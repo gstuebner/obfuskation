@@ -111,6 +111,22 @@ public sealed class GeneratorRegistry
 
     public bool Contains(string name) => _generators.ContainsKey(name);
 
+    /// <summary>
+    /// Die im Register gefuehrte Schreibweise eines Generatornamens -- bei
+    /// einem eingebauten Generator dessen eigener Name, sonst der Schluessel
+    /// aus <c>generators</c>. Aufgeloest wird ohne Ruecksicht auf Gross- und
+    /// Kleinschreibung; Namensraum und Seed muessen aber an genau einer
+    /// Schreibweise haengen, sonst bekaeme derselbe Klartext unter "IBAN" und
+    /// "iban" zwei Pseudonyme (Befund A9).
+    /// </summary>
+    public string CanonicalName(string name)
+    {
+        _canonical ??= _generators.Keys.ToDictionary(key => key, key => key, StringComparer.OrdinalIgnoreCase);
+        return _canonical.TryGetValue(name, out var canonical) ? canonical : name;
+    }
+
+    private Dictionary<string, string>? _canonical;
+
     public IPseudonymGenerator Get(string name)
         => _generators.TryGetValue(name, out var generator)
             ? generator

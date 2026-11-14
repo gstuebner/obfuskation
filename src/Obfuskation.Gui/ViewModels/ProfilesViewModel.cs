@@ -289,9 +289,14 @@ public sealed class ProfilesViewModel : ObservableObject
                 // Die Sperrdatei ueberlebt einen Absturz waehrend eines Laufs --
                 // ohne sie mitzuloeschen bliebe ein Geisterschloss zurueck, das
                 // MappingStore.AcquireLock spaeter faelschlich als belegt sieht.
-                var sperrdatei = summary.MappingStorePath + ".lock";
-                if (File.Exists(sperrdatei))
-                    File.Delete(sperrdatei);
+                // Ebenso die Sicherungskopie (seit 1.14.0) und eine liegen
+                // gebliebene Zwischendatei: beide enthalten saemtliche Echtdaten.
+                foreach (var endung in new[] { ".lock", ".bak", ".tmp" })
+                {
+                    var nebendatei = summary.MappingStorePath + endung;
+                    if (File.Exists(nebendatei))
+                        File.Delete(nebendatei);
+                }
             }
 
             _index.Forget(summary.Path);

@@ -142,8 +142,28 @@ public sealed class PersonNameGenerator : IPseudonymGenerator
     }
 }
 
-/// <summary>Nur der Vorname.</summary>
-public sealed class FirstNameGenerator : IPseudonymGenerator
+/// <summary>
+/// Zwei verschiedene Eintraege derselben Wortliste, fuer die Erweiterung
+/// kleiner Wertevorraete (<see cref="IExpandableGenerator"/>).
+/// </summary>
+internal static class WordPairs
+{
+    public static (string First, string Second) Pick(ReadOnlySpan<byte> seed, IReadOnlyList<string> list)
+    {
+        var reader = new SeedReader(seed);
+        var first = reader.NextInt(list.Count);
+        var second = reader.NextInt(list.Count - 1);
+        if (second >= first)
+            second++;
+        return (list[first], list[second]);
+    }
+}
+
+/// <summary>
+/// Nur der Vorname. Ist die Wortliste erschoepft, entstehen Doppelnamen
+/// wie "Anna-Lena".
+/// </summary>
+public sealed class FirstNameGenerator : IPseudonymGenerator, IExpandableGenerator
 {
     public string Name => "firstName";
     public bool IsReversible => true;
@@ -154,10 +174,19 @@ public sealed class FirstNameGenerator : IPseudonymGenerator
         var reader = new SeedReader(seed);
         return reader.Pick(WordLists.FirstNames);
     }
+
+    public string? GenerateExpanded(ReadOnlySpan<byte> seed, string original, int attempt)
+    {
+        var (first, second) = WordPairs.Pick(seed, WordLists.FirstNames);
+        return $"{first}-{second}";
+    }
 }
 
-/// <summary>Nur der Nachname.</summary>
-public sealed class LastNameGenerator : IPseudonymGenerator
+/// <summary>
+/// Nur der Nachname. Ist die Wortliste erschoepft, entstehen Doppelnamen
+/// wie "Meier-Brandt".
+/// </summary>
+public sealed class LastNameGenerator : IPseudonymGenerator, IExpandableGenerator
 {
     public string Name => "lastName";
     public bool IsReversible => true;
@@ -167,6 +196,12 @@ public sealed class LastNameGenerator : IPseudonymGenerator
     {
         var reader = new SeedReader(seed);
         return reader.Pick(WordLists.LastNames);
+    }
+
+    public string? GenerateExpanded(ReadOnlySpan<byte> seed, string original, int attempt)
+    {
+        var (first, second) = WordPairs.Pick(seed, WordLists.LastNames);
+        return $"{first}-{second}";
     }
 }
 
@@ -187,8 +222,12 @@ public sealed class CompanyNameGenerator : IPseudonymGenerator
     }
 }
 
-/// <summary>Strassenname mit Hausnummer.</summary>
-public sealed class StreetGenerator : IPseudonymGenerator
+/// <summary>
+/// Strassenname mit Hausnummer. Ist der Vorrat erschoepft, entstehen
+/// Eckadressen ("Ahornweg Ecke Lindenstrasse") beziehungsweise Hausnummern
+/// mit Buchstabenzusatz.
+/// </summary>
+public sealed class StreetGenerator : IPseudonymGenerator, IExpandableGenerator
 {
     public string Name => "street";
     public bool IsReversible => true;
@@ -206,10 +245,28 @@ public sealed class StreetGenerator : IPseudonymGenerator
         var number = reader.NextInt(180) + 1;
         return $"{street} {number}";
     }
+
+    public string? GenerateExpanded(ReadOnlySpan<byte> seed, string original, int attempt)
+    {
+        if (!original.Any(char.IsDigit))
+        {
+            var (first, second) = WordPairs.Pick(seed, WordLists.Streets);
+            return $"{first} Ecke {second}";
+        }
+
+        var reader = new SeedReader(seed);
+        var street = reader.Pick(WordLists.Streets);
+        var number = reader.NextInt(999) + 1;
+        var suffix = (char)('a' + reader.NextInt(6));
+        return $"{street} {number}{suffix}";
+    }
 }
 
-/// <summary>Ortsname.</summary>
-public sealed class CityGenerator : IPseudonymGenerator
+/// <summary>
+/// Ortsname. Ist die Wortliste erschoepft, entstehen Namen der Form
+/// "Aalen bei Ahlen".
+/// </summary>
+public sealed class CityGenerator : IPseudonymGenerator, IExpandableGenerator
 {
     public string Name => "city";
     public bool IsReversible => true;
@@ -219,6 +276,12 @@ public sealed class CityGenerator : IPseudonymGenerator
     {
         var reader = new SeedReader(seed);
         return reader.Pick(WordLists.Cities);
+    }
+
+    public string? GenerateExpanded(ReadOnlySpan<byte> seed, string original, int attempt)
+    {
+        var (first, second) = WordPairs.Pick(seed, WordLists.Cities);
+        return $"{first} bei {second}";
     }
 }
 
@@ -280,6 +343,13 @@ public sealed class PhoneGenerator : IPseudonymGenerator
     public string Generate(ReadOnlySpan<byte> seed, string original)
     {
         var reader = new SeedReader(seed);
+
+        // Ein Wert ohne jede Ziffer ("unbekannt", "folgt") hat keine Struktur,
+        // die sich erhalten liesse: eine vollstaendige Nummer erzeugen, wie
+        // NumericIdGenerator es fuer seinen Fall tut (Befund B5).
+        if (!original.Any(char.IsDigit))
+            return "+49 30 " + (10000000 + reader.NextInt(90000000)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         var builder = new StringBuilder(original.Length);
         var digitIndex = 0;
 
@@ -301,7 +371,7 @@ public sealed class PhoneGenerator : IPseudonymGenerator
             digitIndex++;
         }
 
-        return builder.Length == 0 ? "+49 30 " + reader.NextInt(90000000 - 10000000) : builder.ToString();
+        return builder.ToString();
     }
 }
 

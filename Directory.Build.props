@@ -306,7 +306,35 @@
          Muster die gewaehlte Gruppe gar nicht hat. ProfileValidator.OptionOwnership
          erlaubt dafuer erstmals mehrere Basistypen je Option, mit den neuen
          Helfern OptionBelongsTo und OwnersOf. -->
-    <Version>1.13.0</Version>
+    <!-- 1.14.0: Behebung der Codepruefung zu 1.13.0
+         (_dev/features+bugs/befunde-codepruefung-1.13.0.md, Abschnitt 11 der
+         Entwicklerdokumentation). Mit Datenrisiko: das Salt wird auch ohne
+         Tabelleneintrag gespeichert (A1); dateShift legt das Datumsformat je
+         Spalte fest und kennt "MM/dd/yyyy" nur noch ueber 'formats', eigene
+         Formate ersetzen die Vorgabe (A2); JSON-Zahlen verlieren keine
+         fuehrenden Nullen mehr (A3); keine Kettenersetzung beim
+         Zurueckuebersetzen grosser Bestaende, jetzt ueber Aho-Corasick (A4,
+         C1); Textregeln waehlen nach Prioritaet statt nach Position (A5);
+         unbekannte Endungen, Binaerdateien und Freitextlaeufe ohne Ersetzung
+         fallen auf (A6); namenlose JSON-Werte, JSON-Pfad-Regeln (A7, B1);
+         ueberzaehlige CSV-Felder und Leerzeilen bleiben erhalten (A8);
+         Generatornamen ohne Ruecksicht auf die Schreibweise (A9); die
+         Kommandozeile ueberschreibt die Eingabedatei nicht mehr (A10).
+         Dazu Rueckgabewert 6 statt Stacktrace (B2), Platzhalterdaten
+         'keepDates' (B3), doppelte JSON-Schluessel (B4), erweiterbare
+         Wortlisten (B6), relative Tabellenpfade als Fehler (B7), Rechte nur
+         an eigenen Verzeichnissen (B8, B9), .gitignore (B10), Meldungen
+         ohne Klartext, Schreiben ueber Nebendateien (B11), unmaskierte
+         JSON-Ausgabe (C2) und mapping.json.bak (C4). Aus den Vorschlaegen
+         ausserdem: der Prueflauf ohne Ruecksicht auf Gross-/Kleinschreibung
+         und mit Wortgrenzen (C1), der Datumsversatz je Namensraum in der
+         Tabelle (C3, neues optionales Feld 'dateOffsets'), Warnung bei
+         unbekannten Profileigenschaften (C5), Randleerraum gehoert nicht zum
+         Wert (C6) und ein Hinweis bei woertlichen Textregeln (C7). Der
+         Arbeitsordner liegt jetzt unter _dev/. Nebenversion, weil
+         sich Verhalten sichtbar aendert (Formatliste, Prioritaet, strenger
+         Modus bei unbekannter Endung). -->
+    <Version>1.14.0</Version>
 
     <!-- Lokal ist keine 8.0-Runtime installiert. Mit Major-Roll-Forward laufen
          "dotnet run" und "dotnet test" auf der vorhandenen 10.0-Runtime,

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Obfuskation.Core.Configuration;
 
 /// <summary>
@@ -37,7 +39,21 @@ public sealed class Profile
 
     /// <summary>Einstellungen einzelner Generatoren, adressiert ueber ihren Namen.</summary>
     public Dictionary<string, GeneratorSettings> Generators { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Eigenschaften der geladenen Datei, die das Programm nicht kennt -- meist
+    /// Tippfehler wie <c>textRuels</c> (Befund C5). Fuellt
+    /// <see cref="ProfileStore.Load"/>, meldet <see cref="ProfileValidator"/>
+    /// als Warnung. Wird nicht geschrieben.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<UnknownProperty> UnknownProperties { get; set; } = [];
 }
+
+/// <summary>Eine unbekannte Eigenschaft samt naheliegender bekannter Schreibweise.</summary>
+/// <param name="Path">Fundstelle, etwa <c>generators.iban.contry</c>.</param>
+/// <param name="Suggestion">Ein bekannter Name an derselben Stelle, der sich nur wenig unterscheidet.</param>
+public sealed record UnknownProperty(string Path, string? Suggestion);
 
 public sealed class InputSettings
 {
@@ -195,8 +211,20 @@ public sealed class GeneratorSettings
     [OmitFromJsonWhen(DefaultMaxDays)]
     public int MaxDays { get; set; } = DefaultMaxDays;
 
-    /// <summary>Erkannte Datumsformate (<c>dateShift</c>, <c>dateRange</c>, <c>dateGeneralize</c>).</summary>
+    /// <summary>
+    /// Erkannte Datumsformate (<c>dateShift</c>, <c>dateRange</c>, <c>dateGeneralize</c>).
+    /// Gesetzt ersetzen sie die Standardformate vollstaendig, statt sie zu
+    /// ergaenzen (siehe <see cref="Generation.DateValues.CombineFormats"/>).
+    /// </summary>
     public List<string>? Formats { get; set; }
+
+    /// <summary>
+    /// Platzhalterdaten, die <c>dateShift</c> unveraendert laesst, als ISO-Datum
+    /// ("yyyy-MM-dd"). Ohne Angabe gelten 0001-01-01, 1900-01-01 und
+    /// 9999-12-31 (<see cref="Generation.DateShiftGenerator.DefaultKeepDates"/>);
+    /// eine leere Liste schaltet das ab.
+    /// </summary>
+    public List<string>? KeepDates { get; set; }
 
     /// <summary>Laendercode fuer IBAN und BIC.</summary>
     public string? Country { get; set; }

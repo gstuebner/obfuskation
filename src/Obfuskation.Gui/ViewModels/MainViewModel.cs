@@ -1645,12 +1645,18 @@ public sealed class MainViewModel : ObservableObject
         if (ziel is null)
             return;
 
+        if (IsSameFile(ziel, _dataFilePath))
+        {
+            StatusText = SameFileMessage;
+            return;
+        }
+
         await RunAsync("Erzeugen der Pseudodatei", async (engine, token, fortschritt) =>
         {
             var ergebnis = await engine.ObfuscateAsync(
                 _dataContent, _dataFilePath, new RunOptions { Strict = true }, token, fortschritt);
 
-            await File.WriteAllBytesAsync(ziel, ergebnis.Content, token);
+            await WriteOutputAsync(ziel, ergebnis.Content, token);
 
             _hasRunSinceOpen = true;
             OnPropertyChanged(nameof(ScanRecommended));
@@ -1672,15 +1678,51 @@ public sealed class MainViewModel : ObservableObject
         if (ziel is null)
             return;
 
+        if (IsSameFile(ziel, _dataFilePath))
+        {
+            StatusText = SameFileMessage;
+            return;
+        }
+
         await RunAsync("Erzeugen der Klartextdatei", async (engine, token, fortschritt) =>
         {
             var ergebnis = await engine.DeobfuscateAsync(
                 _dataContent, _dataFilePath, new RunOptions(), token, fortschritt);
 
-            await File.WriteAllBytesAsync(ziel, ergebnis.Content, token);
+            await WriteOutputAsync(ziel, ergebnis.Content, token);
 
             return (ergebnis.Report, $"Geschrieben: {ziel}");
         });
+    }
+
+    private const string SameFileMessage =
+        "Die Ausgabedatei ist die geöffnete Eingabedatei und würde überschrieben. Bitte eine andere Datei wählen.";
+
+    /// <summary>Ob zwei Pfade dieselbe Datei bezeichnen (Befund A10).</summary>
+    internal static bool IsSameFile(string a, string b)
+        => string.Equals(Path.GetFullPath(a), Path.GetFullPath(b),
+            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal);
+
+    /// <summary>
+    /// Schreibt erst in eine Nebendatei und benennt sie dann um: ein Abbruch
+    /// mitten im Schreiben hinterlaesst so keine halbe Datei, und die Meldung
+    /// "Es wurde nichts geschrieben" stimmt (Befund B11).
+    /// </summary>
+    private static async Task WriteOutputAsync(string ziel, byte[] inhalt, CancellationToken token)
+    {
+        var temporaer = ziel + ".tmp";
+        try
+        {
+            await File.WriteAllBytesAsync(temporaer, inhalt, token);
+            File.Move(temporaer, ziel, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(temporaer); } catch (IOException) { }
+            throw;
+        }
     }
 
     private async Task ScanAsync()
@@ -1822,7 +1864,7 @@ public sealed class MainViewModel : ObservableObject
                         : await engine.DeobfuscateAsync(
                             inhalt, eingabe, new RunOptions(), _cancellation.Token, fortschritt);
 
-                    await File.WriteAllBytesAsync(ziel, ergebnis.Content, _cancellation.Token);
+                    await WriteOutputAsync(ziel, ergebnis.Content, _cancellation.Token);
 
                     MergeReport(summe, ergebnis.Report);
                     geschriebenAnzahl++;

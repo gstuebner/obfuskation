@@ -998,6 +998,7 @@ public sealed class GeneratorEditorViewModel : ObservableObject
             case "tables": settings.Tables = null; break;
             case "maxDays": settings.MaxDays = GeneratorSettings.DefaultMaxDays; break;
             case "formats": settings.Formats = null; break;
+            case "keepDates": settings.KeepDates = null; break;
             case "country": settings.Country = null; break;
             case "domain": settings.Domain = null; break;
         }

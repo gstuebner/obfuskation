@@ -121,6 +121,10 @@
                   <StackPanel Spacing="1">
                     <TextBlock Text="Genau dieser Wert"/>
                     <TextBlock Text="{Binding Selected.ExactDescription}" Classes="muted small"/>
+                    <!-- Befund C7: das woertliche Muster ist der Echtwert selbst. -->
+                    <TextBlock Text="Der Wert selbst steht dann als Suchmuster in der Regel – im Profil oder in der Erweiterungsdatei. Diese Datei enthält damit Echtdaten und sollte nicht weitergegeben werden."
+                               Classes="muted small" TextWrapping="Wrap"
+                               IsVisible="{Binding Selected.IsExactMode}"/>
                   </StackPanel>
                 </RadioButton>
                 <RadioButton GroupName="erfassungsmodus" Content="Eigener Ausdruck (für Profis)"

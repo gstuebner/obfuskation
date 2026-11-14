@@ -77,13 +77,38 @@ public sealed class MappingStore : IDisposable
         }
 
         var directory = System.IO.Path.GetDirectoryName(path)!;
-
-        // Ein frisch angelegtes Verzeichnis entsteht mit den Rechten der umask
-        // und wird sofort eingeschraenkt — das ist kein Befund, ueber den zu
-        // berichten waere. Gemeldet wird nur, was vorher schon zu offen stand.
         var existedBefore = Directory.Exists(directory);
-        Directory.CreateDirectory(directory);
-        FilePermissions.RestrictDirectory(directory, existedBefore ? warnings : new List<string>());
+
+        if (readOnly)
+        {
+            // Nur lesend wird nichts angelegt und nichts veraendert -- auch die
+            // Vorschau der Oberflaeche oeffnet so (Befund B8). Gemeldet wird
+            // trotzdem, was zu offen steht.
+            if (existedBefore)
+                FilePermissions.CheckDirectory(directory, warnings);
+        }
+        else
+        {
+            Directory.CreateDirectory(directory);
+
+            // Rechte setzt das Programm nur an Verzeichnissen, die es selbst
+            // angelegt hat oder die unter seinem Vorgabeort liegen. Ein
+            // vorhandenes fremdes Verzeichnis (das Benutzerverzeichnis, ein
+            // Projekt- oder Gruppenordner) bleibt, wie es ist; zu weite Rechte
+            // werden dort nur gemeldet (Befund B8).
+            if (!existedBefore)
+                FilePermissions.RestrictDirectory(directory, new List<string>());
+            else if (PathHelper.IsUnderDefaultMappingRoot(directory))
+                FilePermissions.RestrictDirectory(directory, warnings);
+            else
+                FilePermissions.CheckDirectory(directory, warnings);
+
+            // Unter Windows lassen sich die Rechte nicht setzen. Gesagt wird
+            // das einmal beim Anlegen einer Tabelle, und nur ausserhalb des
+            // Benutzerprofils, das ohnehin nur dem Anwender offensteht.
+            if (!File.Exists(path))
+                FilePermissions.WarnIfUnprotected(path, warnings);
+        }
 
         FileStream? lockStream = null;
         if (!readOnly)
@@ -94,7 +119,7 @@ public sealed class MappingStore : IDisposable
             MappingDocument document;
             if (File.Exists(path))
             {
-                FilePermissions.CheckFile(path, warnings);
+                FilePermissions.CheckFile(path, warnings, restrict: !readOnly);
                 document = Read(path);
 
                 if (!string.Equals(document.ProfileName, profileName, StringComparison.Ordinal))
@@ -124,8 +149,11 @@ public sealed class MappingStore : IDisposable
         }
         catch
         {
+            // Die eigene Sperre verschwindet mit Dispose (DeleteOnClose). Eine
+            // Sperrdatei ausdruecklich zu loeschen hiesse unter Linux, auch
+            // eine fremde, noch offene zu entfernen -- auch bei readOnly, wo
+            // gar keine Sperre genommen wurde (Befund B9).
             lockStream?.Dispose();
-            TryDeleteLock(path + ".lock");
             throw;
         }
     }
@@ -153,7 +181,7 @@ public sealed class MappingStore : IDisposable
             document.UpdatedUtc = DateTimeOffset.UtcNow;
 
             var temporary = path + ".tmp";
-            using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+            using (var stream = FilePermissions.CreatePrivate(temporary))
             {
                 JsonSerializer.Serialize(stream, document, JsonOptions);
                 stream.Flush(flushToDisk: true);
@@ -219,12 +247,15 @@ public sealed class MappingStore : IDisposable
             var reverse = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var (plaintext, pseudonym) in entries)
             {
-                if (reverse.TryGetValue(pseudonym, out var existing))
+                if (reverse.ContainsKey(pseudonym))
                 {
+                    // Ohne die Klartexte selbst: die Meldung landet in
+                    // Statuszeilen und im Absturzprotokoll (Befund B11).
                     throw new MappingConflictException(
                         $"Im Namensraum '{namespaceName}' verweist dasselbe Pseudonym auf zwei " +
-                        $"verschiedene Klartexte ('{existing}' und '{plaintext}'). Die " +
-                        "Rückabbildung wäre mehrdeutig; der Store muss von Hand bereinigt werden.");
+                        "verschiedene Klartexte. Die Rückabbildung wäre mehrdeutig; der Store muss " +
+                        "von Hand bereinigt werden (in der Oberfläche unter Ersetzungstabelle, Suche " +
+                        "nach dem Pseudonym).");
                 }
                 reverse[pseudonym] = plaintext;
             }
@@ -333,6 +364,24 @@ public sealed class MappingStore : IDisposable
         return anzahl;
     }
 
+    /// <summary>Der festgehaltene Datumsversatz eines Namensraums, falls es einen gibt (Befund C3).</summary>
+    public bool TryGetDateOffset(string namespaceName, out int days)
+    {
+        days = 0;
+        return _document.DateOffsets is not null && _document.DateOffsets.TryGetValue(namespaceName, out days);
+    }
+
+    /// <summary>
+    /// Haelt den Datumsversatz eines Namensraums fest. Ein vorhandener Wert
+    /// wird nicht ueberschrieben: aeltere Pseudodateien rechnen mit ihm.
+    /// </summary>
+    public void SetDateOffset(string namespaceName, int days)
+    {
+        _document.DateOffsets ??= new Dictionary<string, int>(StringComparer.Ordinal);
+        if (_document.DateOffsets.TryAdd(namespaceName, days))
+            _dirty = true;
+    }
+
     /// <summary>Alle Zuordnungen eines Namensraums.</summary>
     public IReadOnlyDictionary<string, string> Entries(string namespaceName)
         => _document.Namespaces.TryGetValue(namespaceName, out var entries)
@@ -394,13 +443,23 @@ public sealed class MappingStore : IDisposable
         _document.UpdatedUtc = DateTimeOffset.UtcNow;
 
         var temporary = Path + ".tmp";
-        using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
+        using (var stream = FilePermissions.CreatePrivate(temporary))
         {
             JsonSerializer.Serialize(stream, _document, JsonOptions);
             stream.Flush(flushToDisk: true);
         }
 
         FilePermissions.RestrictFile(temporary);
+
+        // Die vorige Fassung bleibt als .bak stehen: geht die Tabelle verloren
+        // oder wird sie beschaedigt, ist keine Rueckuebersetzung mehr moeglich
+        // (Befund C4).
+        if (File.Exists(Path))
+        {
+            File.Copy(Path, Path + ".bak", overwrite: true);
+            FilePermissions.RestrictFile(Path + ".bak");
+        }
+
         File.Move(temporary, Path, overwrite: true);
         FilePermissions.RestrictFile(Path);
 

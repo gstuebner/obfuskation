@@ -836,7 +836,7 @@ public class MainViewModelTests : IDisposable
         Assert.All(modell.Generators,
             option => Assert.False(string.IsNullOrWhiteSpace(option.Description)));
 
-        Assert.Equal("Straßenname mit Hausnummer",
+        Assert.Equal("Straßenname mit Hausnummer (150 Straßen, danach Eckadressen)",
             modell.Generators.Single(g => g.Name == "street").Description);
     }
 

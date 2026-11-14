@@ -11,7 +11,7 @@ namespace Obfuskation.Core.Generation;
 /// <c>redact</c> bekommt dieser Generator deshalb keinen Eintrag in der
 /// Ersetzungstabelle.
 /// </summary>
-public sealed class DateGeneralizeGenerator : IPseudonymGenerator
+public sealed class DateGeneralizeGenerator : IPseudonymGenerator, IDateFormatGenerator
 {
     private static readonly string[] AllowedGranularities = ["month", "quarter", "year"];
 
@@ -21,6 +21,8 @@ public sealed class DateGeneralizeGenerator : IPseudonymGenerator
     public string Name => "dateGeneralize";
     public bool IsReversible => false;
     public bool IsWordLike => false;
+
+    public string[] Formats => _formats;
 
     public void Configure(GeneratorSettings settings)
     {
@@ -39,10 +41,21 @@ public sealed class DateGeneralizeGenerator : IPseudonymGenerator
     public string Generate(ReadOnlySpan<byte> seed, string original)
     {
         if (!DateValues.TryParse(original, _formats, out var parsed, out var format))
-            throw new GenerationException(Name,
-                $"Wert ist mit keinem der konfigurierten Datumsformate lesbar: '{original}'. " +
-                "Format in generators.dateGeneralize.formats ergänzen oder einen anderen Generator wählen.");
+            throw Unreadable();
 
+        return Round(parsed, format);
+    }
+
+    public string Generate(ReadOnlySpan<byte> seed, string original, string format)
+    {
+        if (!DateValues.TryParseExact(original, format, out var parsed))
+            throw Unreadable();
+
+        return Round(parsed, format);
+    }
+
+    private string Round(DateTime parsed, string format)
+    {
         // Der Zeitanteil entfaellt: die Rundung auf Monats-, Quartals- oder
         // Jahresanfang macht ihn ohnehin bedeutungslos.
         var rounded = _granularity switch
@@ -54,4 +67,9 @@ public sealed class DateGeneralizeGenerator : IPseudonymGenerator
 
         return DateValues.Format(rounded, format);
     }
+
+    private GenerationException Unreadable() => new(Name,
+        "Wert ist mit keinem der konfigurierten Datumsformate lesbar. " +
+        $"Format in generators.{Name}.formats ergänzen (amerikanische Daten etwa mit \"MM/dd/yyyy\") " +
+        "oder einen anderen Generator wählen.");
 }

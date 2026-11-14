@@ -71,6 +71,16 @@ public static class PathHelper
             ? DefaultMappingStorePath(profile.ProfileName)
             : ExpandHome(profile.MappingStore);
 
+    /// <summary>Ob ein Verzeichnis unter dem Vorgabeort der Ersetzungstabellen liegt (Befund B8).</summary>
+    public static bool IsUnderDefaultMappingRoot(string directory)
+    {
+        var root = Path.GetFullPath(Path.GetDirectoryName(Path.GetDirectoryName(DefaultMappingStorePath("x"))!)!);
+        var full = Path.GetFullPath(directory);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return full.Equals(root, comparison)
+               || full.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, comparison);
+    }
+
     /// <summary>Entschaerft einen Profilnamen zur Verwendung als Verzeichnisname.</summary>
     public static string SanitizeName(string name)
     {

@@ -184,6 +184,9 @@ Command BuildObfuscateCommand()
         var json = parseResult.GetValue(jsonOption);
         var dryRun = parseResult.GetValue(dryRunOption);
 
+        if (!dryRun)
+            CommandContext.CheckOutput(input, output, json);
+
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
         var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));
         var engine = new ObfuscationEngine(profile, extensions);
@@ -235,6 +238,8 @@ Command BuildDeobfuscateCommand()
         var input = parseResult.GetValue(inputArgument) ?? "-";
         var output = parseResult.GetValue(outputOption);
         var json = parseResult.GetValue(jsonOption);
+
+        CommandContext.CheckOutput(input, output, json);
 
         var profile = CommandContext.LoadProfile(parseResult.GetValue(configOption));
         var extensions = CommandContext.LoadExtensions(parseResult.GetValue(noExtensionsOption));

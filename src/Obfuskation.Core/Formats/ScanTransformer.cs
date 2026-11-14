@@ -19,6 +19,11 @@ namespace Obfuskation.Core.Formats;
 /// erzeugte Test-IBAN passt zwangslaeufig auf das IBAN-Muster, und ohne diese
 /// Einschraenkung meldete die Pruefung ausschliesslich sich selbst.</item>
 /// </list>
+///
+/// Klartexte werden ohne Ruecksicht auf Gross- und Kleinschreibung gesucht,
+/// solche aus wortartigen Namensraeumen (<see cref="Generation.IPseudonymGenerator.IsWordLike"/>)
+/// nur als ganzes Wort: der Klartext "Mark" ist in "MARK" ein Befund, in
+/// "Marketing" nicht (Befund C1).
 /// </summary>
 public sealed class ScanTransformer : IRecordTransformer
 {
@@ -32,45 +37,83 @@ public sealed class ScanTransformer : IRecordTransformer
     private readonly FieldRuleResolver _resolver;
     private readonly TextRuleEngine _textEngine;
     private readonly RunReport _report;
-    private readonly IReadOnlyList<(string Namespace, string Plaintext)> _knownPlaintexts;
+    /// <summary>Ein Automat ueber alle Klartexte (Befund C1) und ihre Namensraeume je Muster.</summary>
+    private readonly Detection.AhoCorasick? _plaintextFinder;
+    private readonly List<List<(string Namespace, bool WordLike)>> _namespacesByPlaintext = new();
     private readonly HashSet<string> _knownPseudonyms;
 
+    /// <param name="generators">
+    /// Bestimmt, welche Namensraeume wortartig sind. Ohne Register (oder fuer
+    /// einen Namensraum, den das Profil nicht mehr kennt) wird jede
+    /// Teilzeichenfolge gemeldet -- die vorsichtigere Richtung.
+    /// </param>
     public ScanTransformer(
         Profile profile,
         FieldRuleResolver resolver,
         TextRuleEngine textEngine,
         MappingStore store,
-        RunReport report)
+        RunReport report,
+        Generation.GeneratorRegistry? generators = null)
     {
         _profile = profile;
         _resolver = resolver;
         _textEngine = textEngine;
         _report = report;
 
-        _knownPlaintexts = store.AllPlaintexts()
-            .Where(entry => entry.Plaintext.Length >= MinimumPlaintextLength)
-            .ToList();
+        var plaintexts = new List<string>();
+        var index = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (namespaceName, plaintext) in store.AllPlaintexts())
+        {
+            if (plaintext.Length < MinimumPlaintextLength)
+                continue;
+
+            // ToLowerInvariant bildet Zeichen fuer Zeichen ab, die Laenge
+            // bleibt gleich; Fundstellen im kleingeschriebenen Wert gelten
+            // damit auch im Original.
+            var folded = plaintext.ToLowerInvariant();
+            if (!index.TryGetValue(folded, out var position))
+            {
+                position = plaintexts.Count;
+                index[folded] = position;
+                plaintexts.Add(folded);
+                _namespacesByPlaintext.Add(new List<(string, bool)>());
+            }
+
+            var wordLike = generators is not null && generators.Contains(namespaceName)
+                && generators.Get(namespaceName).IsWordLike;
+            if (!_namespacesByPlaintext[position].Contains((namespaceName, wordLike)))
+                _namespacesByPlaintext[position].Add((namespaceName, wordLike));
+        }
+
+        if (plaintexts.Count > 0)
+            _plaintextFinder = new Detection.AhoCorasick(plaintexts);
 
         _knownPseudonyms = store.AllReverseEntries()
             .Select(entry => entry.Pseudonym)
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    public void OnFields(IReadOnlyList<string> fieldNames)
+    public void OnFields(IReadOnlyList<FieldOccurrence> fields)
     {
-        foreach (var fieldName in fieldNames)
+        foreach (var field in fields)
         {
-            var rule = _resolver.Resolve(fieldName);
-            _report.FieldActions[fieldName] = rule.Action.ToString().ToLowerInvariant();
+            var rule = _resolver.Resolve(field.Name, field.JsonPath);
+            _report.FieldActions[field.Name] = rule.Action.ToString().ToLowerInvariant();
 
-            if (rule.IsFromDefault)
-                _report.UnhandledFields.Add(fieldName);
+            if (rule.IsFromDefault && !_report.UnhandledFields.Contains(field.Name))
+                _report.UnhandledFields.Add(field.Name);
         }
     }
 
     public bool ShouldDrop(string fieldName, string? jsonPath) => false;
 
     public string TransformField(string fieldName, string? jsonPath, string value, string location)
+    {
+        Inspect(value, location);
+        return value;
+    }
+
+    public string TransformNameless(string jsonPath, string value, string location)
     {
         Inspect(value, location);
         return value;
@@ -101,13 +144,27 @@ public sealed class ScanTransformer : IRecordTransformer
 
         // Der harte Befund zuerst: ein Wert, der als Klartext in der Tabelle steht.
         var reportedAsPlaintext = false;
-        foreach (var (namespaceName, plaintext) in _knownPlaintexts)
+        if (_plaintextFinder is not null)
         {
-            if (value.Contains(plaintext, StringComparison.Ordinal))
+            // Je Muster: ob es irgendwo vorkommt, und ob einmal als ganzes Wort.
+            var found = new SortedDictionary<int, bool>();
+            foreach (var (start, length, pattern) in _plaintextFinder.FindAll(value.ToLowerInvariant()))
             {
-                _report.Findings.Add(new ReportFinding(namespaceName, location, "echtwertAusTabelle"));
-                _report.CountHit("fund:echtwert");
-                reportedAsPlaintext = true;
+                var whole = Detection.AhoCorasick.HasWordBoundaries(value, start, length);
+                found[pattern] = whole || found.GetValueOrDefault(pattern);
+            }
+
+            foreach (var (pattern, wholeWord) in found)
+            {
+                foreach (var (namespaceName, wordLike) in _namespacesByPlaintext[pattern])
+                {
+                    if (wordLike && !wholeWord)
+                        continue;
+
+                    _report.Findings.Add(new ReportFinding(namespaceName, location, "echtwertAusTabelle"));
+                    _report.CountHit("fund:echtwert");
+                    reportedAsPlaintext = true;
+                }
             }
         }
 

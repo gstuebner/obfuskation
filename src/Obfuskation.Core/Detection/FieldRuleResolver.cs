@@ -28,6 +28,14 @@ public sealed class FieldRuleResolver
     private readonly Dictionary<string, ResolvedFieldRule> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TextRule> _textRulesByName;
 
+    /// <summary>
+    /// Ob eine Pfadregel einen konkreten Index nennt (<c>$.kunden[0].name</c>).
+    /// Nur ohne solche Regeln darf die Aufloesung -- und damit der
+    /// Zwischenspeicher -- auf Pfaden mit <c>[*]</c> arbeiten; sonst wuchse er
+    /// je Blatt einer grossen Datei um einen Eintrag (Befund B1).
+    /// </summary>
+    private readonly bool _concreteIndexRule;
+
     public FieldRuleResolver(Profile profile)
     {
         _profile = profile;
@@ -49,6 +57,9 @@ public sealed class FieldRuleResolver
                 }
             }
             _rules.Add((rule, pattern));
+
+            if (rule.MatchType == FieldMatchType.JsonPath && JsonPathMatcher.HasConcreteIndex(rule.Match))
+                _concreteIndexRule = true;
         }
     }
 
@@ -60,6 +71,9 @@ public sealed class FieldRuleResolver
     /// <param name="jsonPath">Vollstaendiger JSON-Pfad, falls vorhanden.</param>
     public ResolvedFieldRule Resolve(string fieldName, string? jsonPath = null)
     {
+        if (jsonPath is not null && !_concreteIndexRule)
+            jsonPath = JsonPathMatcher.Normalize(jsonPath);
+
         var cacheKey = jsonPath ?? fieldName;
         if (_cache.TryGetValue(cacheKey, out var cached))
             return cached;

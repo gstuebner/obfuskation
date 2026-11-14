@@ -23,4 +23,10 @@ public static class ExitCodes
 
     /// <summary>Die Ersetzungstabelle ist widerspruechlich oder gesperrt.</summary>
     public const int MappingProblem = 5;
+
+    /// <summary>
+    /// Ein Wert liess sich nicht typgerecht ersetzen, etwa ein unlesbares
+    /// Datum (GenerationException).
+    /// </summary>
+    public const int GenerationError = 6;
 }

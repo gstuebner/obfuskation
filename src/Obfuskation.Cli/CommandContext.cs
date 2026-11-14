@@ -99,12 +99,24 @@ public static class CommandContext
     {
         if (!string.IsNullOrWhiteSpace(path))
         {
-            var expanded = PathHelper.ExpandHome(path);
-            var directory = Path.GetDirectoryName(Path.GetFullPath(expanded));
+            var expanded = Path.GetFullPath(PathHelper.ExpandHome(path));
+            var directory = Path.GetDirectoryName(expanded);
             if (!string.IsNullOrEmpty(directory))
                 Directory.CreateDirectory(directory);
 
-            File.WriteAllBytes(expanded, content);
+            // Erst in eine Nebendatei, dann umbenennen -- wie bei Tabelle und
+            // Profil: ein Abbruch hinterlaesst nie eine halbe Ausgabe (Befund A10).
+            var temporary = expanded + ".tmp";
+            try
+            {
+                File.WriteAllBytes(temporary, content);
+                File.Move(temporary, expanded, overwrite: true);
+            }
+            catch
+            {
+                try { File.Delete(temporary); } catch (IOException) { }
+                throw;
+            }
             return;
         }
 
@@ -123,8 +135,41 @@ public static class CommandContext
     }
 
     /// <summary>
-    /// Fuehrt einen Unterbefehl aus und bildet bekannte Ausnahmen auf
-    /// Rueckgabewerte ab. Unerwartete Ausnahmen bleiben unbehandelt.
+    /// Prueft die Ausgabe, bevor irgendetwas verarbeitet wird (Befund A10):
+    /// die Ausgabedatei darf nicht die Eingabedatei sein, und <c>--json</c>
+    /// verlangt <c>-o</c>. Beides fiel frueher erst nach dem Lauf auf -- im
+    /// ersten Fall gar nicht, die Echtdatei war dann ueberschrieben, im
+    /// zweiten hatte die Tabelle schon neue Eintraege.
+    /// </summary>
+    public static void CheckOutput(string? input, string? output, bool jsonReport)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            if (jsonReport)
+                throw new InvalidOperationException(
+                    "Mit --json muss die Ausgabedatei ueber -o angegeben werden, sonst " +
+                    "vermischen sich Bericht und Daten auf der Standardausgabe.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(input) || input == "-")
+            return;
+
+        var eingabe = Path.GetFullPath(PathHelper.ExpandHome(input));
+        var ausgabe = Path.GetFullPath(PathHelper.ExpandHome(output));
+        var vergleich = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (string.Equals(eingabe, ausgabe, vergleich))
+            throw new InvalidOperationException(
+                $"Die Ausgabedatei ist die Eingabedatei ({eingabe}); sie wuerde ueberschrieben. " +
+                "Eine andere Datei mit -o angeben.");
+    }
+
+    /// <summary>
+    /// Fuehrt einen Unterbefehl aus und bildet Ausnahmen auf Rueckgabewerte
+    /// ab: eine Zeile "Fehler: ..." statt eines Stacktraces (Befund B2).
     /// </summary>
     public static int Run(Func<int> action)
     {
@@ -166,9 +211,28 @@ public static class CommandContext
             ConsoleOutput.WriteError(ex.Message);
             return ExitCodes.Failure;
         }
+        catch (Obfuskation.Core.Generation.GenerationException ex)
+        {
+            ConsoleOutput.WriteError(ex.Message);
+            return ExitCodes.GenerationError;
+        }
+        catch (System.Text.RegularExpressions.RegexMatchTimeoutException ex)
+        {
+            ConsoleOutput.WriteError(
+                $"Ein regulaerer Ausdruck brauchte zu lange ({ex.Pattern}). Das Muster der " +
+                "betroffenen Text- oder Feldregel vereinfachen.");
+            return ExitCodes.Failure;
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             ConsoleOutput.WriteError(ex.Message);
+            return ExitCodes.Failure;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Unerwartet: kurz melden statt Stacktrace. Die Art der Ausnahme
+            // hilft bei der Fehlersuche, ohne Echtdaten preiszugeben.
+            ConsoleOutput.WriteError($"Unerwarteter Fehler ({ex.GetType().Name}): {ex.Message}");
             return ExitCodes.Failure;
         }
     }

@@ -245,7 +245,7 @@ The profile file is named `obfuskation-projekt.json` and is searched for upward 
 | `email` | Address under `example.invalid` (reserved per RFC 2606) |
 | `phone` | Digits replaced, original formatting preserved |
 | `numericId` | Digit count preserved, leading zeros retained |
-| `dateShift` | All dates shifted by the same offset — sequence and intervals preserved |
+| `dateShift` | All dates shifted by the same offset — sequence and intervals preserved; the offset is recorded in the mapping table on the first run and stays in effect even if `maxDays` changes later |
 | `dateRange` | Random date drawn from a period (`from`/`to`); without them, the original's calendar year is kept |
 | `dateGeneralize` | Rounded to the start of month, quarter, or year — **not reversible** |
 | `pattern` | Value built from a character mask (`A`/`a`/`9`/`X`/`\`), or format-preserving from the original if no mask is set |
@@ -437,6 +437,7 @@ Common options: `--config <path-or-profile-name>`, `--format csv|json|text`, `--
 | 3 | Field without rule in strict mode |
 | 4 | `scan` found suspect unreplaced values |
 | 5 | Substitution table conflicting or locked |
+| 6 | a value could not be replaced in a type-preserving way (e.g. an unreadable date) |
 
 ---
 

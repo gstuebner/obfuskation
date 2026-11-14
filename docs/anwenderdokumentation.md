@@ -2,16 +2,16 @@
 title: Anwenderdokumentation
 subtitle: Oberfläche obfuskation-gui
 kicker: Obfuskation
-version: 1.13.0
+version: 1.14.0
 author: Gregor Stübner & Claude (Anthropic)
-date: 28.09.2026
+date: 14.11.2026
 lang: de
 preset: modern
 ---
 
 # Anwenderdokumentation
 
-Fassung 1.13.0 · Stand 28. September 2026
+Fassung 1.14.0 · Stand 14. November 2026
 
 Die Bilder zeigen teilweise noch den Stand 1.9.
 
@@ -547,7 +547,10 @@ gibt es keinen eigenen Reiter mehr für „Projekt“ und „Alle Projekte“:
    Kopie mit demselben Namen im Profil an, die die hauseigene Regel für
    dieses Projekt ersetzt, ohne die Erweiterungsdatei anzufassen.
 
-   Unter „Erweitert“ stehen Priorität (höhere gewinnt bei Überlappung),
+   Unter „Erweitert“ stehen Priorität (überschneiden sich zwei Funde, gewinnt
+   die höhere Priorität, bei gleicher der längere, dann der weiter links
+   beginnende; bleibt von einem verdrängten Fund ein Rest stehen, warnt der
+   Bericht),
    „Groß-/Kleinschreibung egal“ und **„Ersetzte Gruppe“**: `0` ersetzt den
    ganzen Treffer, eine höhere Zahl nur die genannte Gruppe des Musters —
    bei einem eigenen Ausdruck wie `IBAN:\s*(\S+)` mit Gruppe 1 bleibt
@@ -1021,6 +1024,64 @@ der Statuszeile, meist kürzer.
 | „Das Profil „…“ hat ungespeicherte Änderungen. Speichern, bevor fortgefahren wird?“ | Fenster schließen oder Profil wechseln, während noch nicht gespeicherte Regeländerungen offen sind | Eine der drei Schaltflächen wählen: Speichern, Verwerfen oder Abbrechen (Abschnitt 6) |
 | Profilzeile in Fehlerfarbe mit der Fehlermeldung im Klartext (Übersicht) | Die Profildatei ist nicht mehr lesbar — gelöscht, kein gültiges JSON, oder von Hand fehlerhaft bearbeitet | `Öffnen` ist gesperrt; entweder die Datei außerhalb reparieren oder den Eintrag über `Aus Liste entfernen` dauerhaft ausblenden (rührt die Datei selbst nicht an) |
 | „Es gibt bereits ein Profil an diesem Ort.“ | Beim Anlegen ist der gewählte Name im Ablageort schon vergeben | `Anlegen` bleibt gesperrt; entweder `Stattdessen öffnen` wählen oder einen anderen Namen beziehungsweise Ort setzen |
+| „Die Dateiendung .dat ist unbekannt; die Datei würde als Freitext verarbeitet …“ | Nur `.csv`, `.tsv`, `.json` und die Textendungen `.txt`, `.text`, `.md`, `.markdown`, `.log` sind bekannt. Im strengen Modus (und in der Oberfläche beim Erzeugen der Pseudodatei) bricht der Lauf ab, sonst steht eine Warnung im Bericht | Datei passend umbenennen oder auf der Kommandozeile `--format csv`, `json` oder `text` setzen |
+| Warnung „freitextOhneErsetzung“ oder „freitextOhneTextregeln“ | Ein Freitextlauf hat nichts ersetzt; dort greifen nur Textregeln, keine Feldregeln | Prüfen, ob die Datei wirklich Freitext ist; sonst Endung oder `--format` anpassen |
+| „Die Eingabe enthält Binärdaten (NUL-Zeichen) …“ | Bild, Archiv, Office-Dokument oder UTF-16 ohne Markierung | Nur CSV, JSON und Text verarbeiten |
+| „Wert ist mit keinem der konfigurierten Datumsformate lesbar.“ (Rückgabewert 6) | Das Datum passt auf kein Format, etwa ein amerikanisches Datum `01/14/2024` ohne eigenes Format | Unter `generators.<name>.formats` das passende Format eintragen, etwa `["MM/dd/yyyy"]` |
+| „Die Datumswerte im Feld … sind mehrdeutig …“ | Unter `formats` stehen zwei Formate, die dieselben Werte verschieden lesen (`dd/MM/yyyy` und `MM/dd/yyyy`) | Nur das zutreffende Format angeben |
+| „Der Wert passt nicht zum Generator …“ | Der Generator kann am Wert nichts ersetzen, etwa eine Telefonnummer „0“ | Den Wert unter `defaults.emptyValues` eintragen oder einen anderen Generator wählen |
+| „… fand kein freies Pseudonym mehr; … bereits N Werte vergeben“ | Der Wertevorrat ist erschöpft | Siehe „Grenzen der Wertevorräte“ unten |
+| Warnung „abweichendeFeldanzahl“ | CSV-Zeilen mit mehr oder weniger Feldern als die Kopfzeile. Überzählige Felder heißen nach ihrer Position (`3`, `4`, …) und gelten als unbekannte Felder; bei „offen“ bricht der Lauf mit Zeilenangabe ab | Datei bereinigen oder für die Positionsnamen Regeln anlegen |
+| Warnung „zahlAlsText“ | Eine JSON-Zahl bekam einen Ersatzwert, der keine gültige Zahl ist (etwa mit führender Null); er steht als Zeichenkette in der Ausgabe | Gewollt; bei Bedarf `numericId` statt `token` wählen |
+| Warnung „unbekanntePseudonyme“ beim Zurückübersetzen | Werte ließen sich nicht zurückführen und stehen unverändert in der Klartextdatei | Richtiges Profil verwenden; prüfen, ob die Datei nach dem Verschleiern verändert wurde |
+| „Der Pfad der Ersetzungstabelle … ist relativ …“ | `mappingStore` ist ein relativer Pfad; er hinge vom aktuellen Verzeichnis ab | Absoluten Pfad oder `~/…` angeben, oder das Feld leer lassen |
+| „Die Ausgabedatei ist die Eingabedatei …“ | `-o` beziehungsweise das gewählte Ziel ist die Eingabedatei selbst | Eine andere Ausgabedatei wählen |
+
+### Grenzen der Wertevorräte
+
+Jeder Klartext braucht ein eigenes Pseudonym. Die Wortlisten-Generatoren
+haben einen kleinen einfachen Vorrat: 161 Vornamen, 371 Nachnamen, 277
+Orte, 150 Straßen. Ist er erschöpft, weichen sie seit 1.14.0 auf
+zusammengesetzte Werte aus, statt abzubrechen: Doppelnamen („Anna-Lena“,
+„Meier-Brandt“), Orte der Form „Aalen bei Ahlen“, Straßen als Eckadresse
+oder mit Hausnummernzusatz. `dateRange` ohne `from`/`to` weicht auf die
+Nachbarjahre aus. Was schon vorher ein Pseudonym bekam, behält es. Kein
+Ausweg gibt es bei `wordlist` (nur die eingetragenen Werte), `pattern`,
+`expression` und `dateRange` mit festem Zeitraum: dort bricht der Lauf ab
+und nennt die Zahl der vergebenen Werte.
+
+### Weitere Hinweise seit 1.14.0
+
+- **Datumsformate:** Das Format wird je Spalte einmal festgelegt, nicht je
+  Wert geraten. Amerikanische Daten (`MM/dd/yyyy`) gehören nicht mehr zu
+  den eingebauten Formaten; eigene `formats` ersetzen die eingebauten.
+  Ältere Pseudodateien im Format `MM/dd/yyyy` lassen sich nur mit
+  `formats: ["MM/dd/yyyy"]` zurückrechnen.
+- **Platzhalterdaten** wie 31.12.9999 bleiben bei `dateShift` unverändert
+  (`keepDates`).
+- **Sicherungskopie:** Beim Speichern bleibt die vorige Ersetzungstabelle als
+  `mapping.json.bak` daneben stehen. Sie enthält ebenfalls sämtliche
+  Echtdaten. Wer Projekte unter Git führt, trägt `mapping.json*` und
+  `obfuskation-projekt.json` in die `.gitignore` ein.
+- **JSON-Ausgabe:** Umlaute und Zeichen wie `<`, `&`, `+` stehen unmaskiert
+  in der Ausgabe. Werte ohne Eigenschaftsnamen (Elemente eines
+  Wurzelfeldes) laufen durch die Textregeln oder eine Pfadregel wie `$[*]`.
+- **Datumsversatz:** Der erste Lauf, der `dateShift` benutzt, hält den
+  Versatz in der Ersetzungstabelle fest. Wer danach `maxDays` ändert,
+  behält trotzdem den alten Versatz (mit Warnung), damit ältere Dateien
+  richtig zurückgerechnet werden. Ein neuer Versatz braucht einen neuen
+  Generatoreintrag mit `"type": "dateShift"`.
+- **Leerraum am Rand** gehört nicht zum Wert: „ Müller“ und „Müller“
+  bekommen dasselbe Pseudonym, der Leerraum bleibt in der Ausgabe stehen
+  (in CSV dann in Anführungszeichen).
+- **Prüflauf (`scan`):** Echtwerte aus der Tabelle werden ohne Rücksicht
+  auf Groß-/Kleinschreibung gefunden. Namen, Orte und Straßen zählen nur
+  als ganzes Wort („Mark“ meldet „MARK“, nicht „Marketing“).
+- **Tippfehler im Profil:** Unbekannte Eigenschaften wie `textRuels`
+  meldet die Prüfung als Warnung, meist mit der gemeinten Schreibweise.
+- **„Genau dieser Wert“:** Eine solche Textregel speichert den Echtwert als
+  Suchmuster im Profil oder in der Erweiterungsdatei. Die Oberfläche weist
+  beim Anlegen darauf hin; diese Dateien dann nicht weitergeben.
 
 Eine Eigenheit verdient besondere Aufmerksamkeit:
 
@@ -1113,6 +1174,7 @@ Rückgabewerte:
 | 3 | Feld ohne Regel im strengen Modus |
 | 4 | `scan` hat Verdachtsfälle gefunden |
 | 5 | Ersetzungstabelle widersprüchlich oder gesperrt |
+| 6 | ein Wert ließ sich nicht typgerecht ersetzen (etwa ein unlesbares Datum) |
 
 Ein Beispiel mit echten Zahlen — die Antwort einer KI von der
 Standardeingabe zurückübersetzen:
@@ -1204,7 +1266,8 @@ Datei, der Generator-Dialog lässt beim Anlegen keinen eingebauten Namen zu.
 | `maskChar` | `partialMask` | Maskierungszeichen, genau ein Zeichen; Vorgabe `*` | ja |
 | `expression`, `tables` | `expression` | Ausdruck und Tabellen (unten) | ja |
 | `maxDays` | `dateShift` | höchste Verschiebung in Tagen, 1 bis 36 500; Vorgabe 400. Nachträglich geändert, lassen sich ältere Pseudodateien nicht mehr zurückführen (Kapitel 5) | ja |
-| `formats` | `dateShift`, `dateRange`, `dateGeneralize` | zusätzliche Datumsformate, etwa `["dd.MM.yy"]`; sie werden vor den eingebauten geprüft | ja, Block „Eigene Datumsformate“ |
+| `formats` | `dateShift`, `dateRange`, `dateGeneralize` | eigene Datumsformate, etwa `["MM/dd/yyyy"]`; gesetzt **ersetzen** sie die eingebauten (seit 1.14.0, vorher ergänzten sie sie). Amerikanische Daten gibt es nur noch auf diesem Weg | ja, Block „Eigene Datumsformate“ |
+| `keepDates` | `dateShift` | Platzhalterdaten, die unverändert bleiben, als JJJJ-MM-TT; Vorgabe `0001-01-01`, `1900-01-01`, `9999-12-31`, eine leere Liste schaltet das ab | nein |
 | `country` | `iban`, `bic` | Ländercode für Originale ohne erkennbaren Ländercode; Vorgabe `DE` | ja, Block „Land“ |
 | `domain` | `email` | Domain der erzeugten Adressen; Vorgabe `example.invalid` | ja, Block „Domain“ |
 

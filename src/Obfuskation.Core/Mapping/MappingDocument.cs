@@ -35,6 +35,17 @@ public sealed class MappingDocument
     /// </summary>
     [JsonPropertyName("namespaces")]
     public Dictionary<string, Dictionary<string, string>> Namespaces { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Datumsversatz in Tagen je <c>dateShift</c>-Namensraum, festgehalten beim
+    /// ersten echten Lauf, der ihn benutzt hat (Befund C3). Ohne diesen Eintrag
+    /// ergaebe sich der Versatz bei jeder Rueckuebersetzung neu aus Salt und
+    /// <c>maxDays</c>; nach einer Aenderung von <c>maxDays</c> kaemen dann
+    /// plausible, aber falsche Daten heraus. Optional: Tabellen aus der Zeit
+    /// davor haben das Feld nicht und bleiben gueltig.
+    /// </summary>
+    [JsonPropertyName("dateOffsets")]
+    public Dictionary<string, int>? DateOffsets { get; set; }
 }
 
 /// <summary>Der Mapping-Bestand ist in sich widerspruechlich.</summary>

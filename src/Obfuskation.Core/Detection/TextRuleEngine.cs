@@ -29,6 +29,15 @@ public sealed class TextRuleEngine
 
     /// <summary>Sammelt alle ueberschneidungsfreien Funde in Reihenfolge.</summary>
     public IReadOnlyList<TextMatch> FindMatches(string text, IReadOnlyList<TextRule> rules)
+        => FindMatches(text, rules, displaced: null);
+
+    /// <summary>
+    /// Wie <see cref="FindMatches(string, IReadOnlyList{TextRule})"/>; zusaetzlich
+    /// landen in <paramref name="displaced"/> die verdraengten Funde, deren
+    /// Bereich die gewaehlten nicht vollstaendig abdecken -- dort bleibt ein
+    /// Teil stehen, den eine Regel fuer ersetzenswert hielt.
+    /// </summary>
+    public IReadOnlyList<TextMatch> FindMatches(string text, IReadOnlyList<TextRule> rules, List<TextMatch>? displaced)
     {
         if (string.IsNullOrEmpty(text) || rules.Count == 0)
             return Array.Empty<TextMatch>();
@@ -54,33 +63,82 @@ public sealed class TextRuleEngine
         if (candidates.Count == 0)
             return Array.Empty<TextMatch>();
 
-        // Auswahlreihenfolge: von links nach rechts, bei gleicher Startposition
-        // gewinnt die hoehere Prioritaet, danach der laengere Fund.
+        // Auswahlreihenfolge: die hoehere Prioritaet zuerst, danach der
+        // laengere Fund, danach der weiter links beginnende. Jeder Fund, der
+        // sich mit keinem schon gewaehlten ueberschneidet, wird uebernommen.
+        //
+        // Bis 1.13.0 ging die Auswahl von links nach rechts, und die Prioritaet
+        // entschied nur bei gleicher Startposition. Ein frueher beginnender
+        // Fund niedriger Prioritaet verdraengte dann einen spaeter beginnenden
+        // hoher Prioritaet vollstaendig, und dessen nicht ueberdeckter Teil
+        // blieb im Klartext stehen (Befund A5).
         candidates.Sort(static (left, right) =>
         {
-            var byStart = left.Start.CompareTo(right.Start);
-            if (byStart != 0)
-                return byStart;
-
             var byPriority = right.Rule.Priority.CompareTo(left.Rule.Priority);
             if (byPriority != 0)
                 return byPriority;
 
-            return right.Length.CompareTo(left.Length);
+            var byLength = right.Length.CompareTo(left.Length);
+            if (byLength != 0)
+                return byLength;
+
+            return left.Start.CompareTo(right.Start);
         });
 
+        // Gewaehlte Funde nach Start geordnet, fuer die Ueberschneidungspruefung
+        // per Binaersuche.
         var selected = new List<TextMatch>(candidates.Count);
-        var nextFreePosition = 0;
+        var losers = displaced is null ? null : new List<TextMatch>();
         foreach (var candidate in candidates)
         {
-            if (candidate.Start < nextFreePosition)
-                continue;
+            var index = selected.BinarySearch(candidate, StartComparer.Instance);
+            if (index < 0)
+                index = ~index;
 
-            selected.Add(candidate);
-            nextFreePosition = candidate.End;
+            var overlapsLeft = index > 0 && selected[index - 1].End > candidate.Start;
+            var overlapsRight = index < selected.Count && selected[index].Start < candidate.End;
+            if (overlapsLeft || overlapsRight)
+            {
+                losers?.Add(candidate);
+                continue;
+            }
+
+            selected.Insert(index, candidate);
+        }
+
+        if (losers is not null)
+        {
+            foreach (var loser in losers)
+            {
+                if (!IsCovered(loser, selected))
+                    displaced!.Add(loser);
+            }
         }
 
         return selected;
+    }
+
+    /// <summary>Ob die gewaehlten Funde den Bereich von <paramref name="match"/> lueckenlos abdecken.</summary>
+    private static bool IsCovered(TextMatch match, List<TextMatch> selected)
+    {
+        var position = match.Start;
+        foreach (var chosen in selected)
+        {
+            if (chosen.End <= position)
+                continue;
+            if (chosen.Start > position)
+                return false;
+            position = chosen.End;
+            if (position >= match.End)
+                return true;
+        }
+        return position >= match.End;
+    }
+
+    private sealed class StartComparer : IComparer<TextMatch>
+    {
+        public static readonly StartComparer Instance = new();
+        public int Compare(TextMatch? x, TextMatch? y) => x!.Start.CompareTo(y!.Start);
     }
 
     /// <summary>
@@ -89,8 +147,13 @@ public sealed class TextRuleEngine
     /// </summary>
     public string Replace(string text, IReadOnlyList<TextRule> rules, Func<TextMatch, string> replace,
         out int replacementCount)
+        => Replace(text, rules, replace, out replacementCount, displaced: null);
+
+    /// <summary>Wie oben; verdraengte, nicht ueberdeckte Funde landen in <paramref name="displaced"/>.</summary>
+    public string Replace(string text, IReadOnlyList<TextRule> rules, Func<TextMatch, string> replace,
+        out int replacementCount, List<TextMatch>? displaced)
     {
-        var matches = FindMatches(text, rules);
+        var matches = FindMatches(text, rules, displaced);
         replacementCount = matches.Count;
 
         if (matches.Count == 0)

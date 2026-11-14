@@ -88,6 +88,9 @@ public sealed class ObfuscationEngine
     /// </summary>
     private readonly Profile _effectiveProfile;
 
+    /// <summary>Warnungen zum Profil selbst, die jeder Laufbericht wiederholt.</summary>
+    private readonly IReadOnlyList<string> _profileWarnings;
+
     public ObfuscationEngine(Profile profile, ExtensionLibrary? extensions = null)
     {
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
@@ -95,6 +98,16 @@ public sealed class ObfuscationEngine
         _effectiveProfile = MergeTextRules(_profile, _extensions);
 
         var issues = ProfileValidator.Validate(profile, _extensions);
+
+        // Prueferwarnungen sieht sonst nur die Oberflaeche. Ein Tippfehler im
+        // Profil betrifft aber gerade die Kommandozeile mit ihren von Hand
+        // gepflegten Dateien; er gehoert deshalb in jeden Laufbericht (Befund C5).
+        var unknownPaths = profile.UnknownProperties.Select(u => u.Path).ToHashSet(StringComparer.Ordinal);
+        _profileWarnings = issues
+            .Where(issue => issue.Severity == ValidationSeverity.Warning && unknownPaths.Contains(issue.Path))
+            .Select(issue => issue.Message)
+            .ToList();
+
         var errors = issues.Where(issue => issue.Severity == ValidationSeverity.Error).ToList();
         if (errors.Count > 0)
             throw new ConfigurationException(
@@ -122,14 +135,44 @@ public sealed class ObfuscationEngine
         var file = FieldInspector.Inspect(content, inputName, _profile.Input);
         var resolver = CreateResolver(options);
 
+        // Bei JSON entscheidet der Lauf je Pfad (Befund B1); die Feldliste
+        // muss dasselbe zeigen. Ein Feld gilt als entschieden, wenn es das an
+        // jedem seiner Pfade ist, und zeigt die Regel seines ersten offenen
+        // oder sonst seines tiefsten Pfades -- dort sitzt der Wert.
+        var occurrences = file.Format == DataFormat.Json
+            ? JsonProcessor.ListFields(content, _profile.Input.Encoding)
+            : Array.Empty<FieldOccurrence>();
+
         var fields = new List<FieldAnalysis>(file.FieldNames.Count);
         foreach (var fieldName in file.FieldNames)
         {
-            var rule = resolver.Resolve(fieldName);
+            var rules = occurrences
+                .Where(o => !o.IsNameless && string.Equals(o.Name, fieldName, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(o => o.JsonPath!.Length)
+                .Select(o => resolver.Resolve(o.Name, o.JsonPath))
+                .ToList();
+            if (rules.Count == 0)
+                rules.Add(resolver.Resolve(fieldName));
+
+            var rule = rules.FirstOrDefault(r => r.Action == FieldAction.Error) ?? rules[0];
 
             fields.Add(new FieldAnalysis(
                 fieldName,
                 rule.Action,
+                rule.Generator,
+                IsDecided: rule.Action != FieldAction.Error,
+                rule.IsFromDefault));
+        }
+
+        // Namenlose Werte (Elemente eines Wurzelfeldes) laufen ohne eigene
+        // Regel durch die Textregeln -- ausser die Vorgabe verlangt den Abbruch.
+        foreach (var nameless in occurrences.Where(o => o.IsNameless))
+        {
+            var rule = resolver.Resolve(nameless.Name, nameless.JsonPath);
+            var asText = rule.IsFromDefault && rule.Action != FieldAction.Error;
+            fields.Add(new FieldAnalysis(
+                nameless.Name,
+                asText ? FieldAction.ScanText : rule.Action,
                 rule.Generator,
                 IsDecided: rule.Action != FieldAction.Error,
                 rule.IsFromDefault));
@@ -156,8 +199,8 @@ public sealed class ObfuscationEngine
             readOnly: true, allowInsideGitWorkingTree: true);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver, _extensions);
-        var pseudonymizer = new Pseudonymizer(deriver, generators, store);
+        var generators = BuildGenerators(deriver, store, report: null);
+        var pseudonymizer = CreatePseudonymizer(deriver, generators, store);
 
         return pseudonymizer.Pseudonymize(generatorName, sampleValue, persist: false);
     }
@@ -221,8 +264,8 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver, _extensions);
-        var pseudonymizer = new Pseudonymizer(deriver, generators, store);
+        var generators = BuildGenerators(deriver, store, report);
+        var pseudonymizer = CreatePseudonymizer(deriver, generators, store);
         var resolver = CreateResolver(options);
 
         var transformer = new ObfuscateTransformer(
@@ -230,8 +273,29 @@ public sealed class ObfuscationEngine
 
         var result = RunProcessor(content, inputName, options, transformer, report, progress, cancellationToken);
 
+        if (report.Format == "text")
+        {
+            if (_effectiveProfile.TextRules.Count == 0)
+                report.Warn("freitextOhneTextregeln",
+                    "Die Eingabe wurde als Freitext verarbeitet, das Profil hat aber keine Textregeln. " +
+                    "Im Freitext greifen nur Textregeln.");
+            if (transformer.TextReplacementCount == 0)
+                report.Warn("freitextOhneErsetzung",
+                    "Die Eingabe wurde als Freitext verarbeitet, und keine Textregel hat etwas gefunden; " +
+                    "die Ausgabe entspricht der Eingabe. Feldregeln wirken im Freitext nicht -- handelt es " +
+                    "sich um CSV oder JSON, die Endung anpassen oder --format setzen.");
+        }
+
+        // Auch ein Lauf ohne einzigen Tabelleneintrag (nur dateShift, nur
+        // nicht umkehrbare Generatoren) muss das Salt festschreiben: sonst
+        // wuerfelt der naechste Lauf ein neues, und mit ihm einen neuen
+        // Datumsversatz (Befund A1).
         if (!options.DryRun)
+        {
+            RecordDateOffsets(generators, store);
+            store.EnsureCreated();
             store.Save();
+        }
 
         report.NewMappings = store.NewEntries;
         report.TotalMappings = store.TotalEntries;
@@ -255,13 +319,28 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var deriver = new SeedDeriver(store.Salt);
-        var generators = GeneratorRegistry.Build(_profile, deriver, _extensions);
-        var pseudonymizer = new Pseudonymizer(deriver, generators, store);
+        var generators = BuildGenerators(deriver, store, report);
+        var pseudonymizer = CreatePseudonymizer(deriver, generators, store);
         var reverseMapper = new ReverseTextMapper(store, generators);
         var resolver = CreateResolver(options);
 
         var transformer = new DeobfuscateTransformer(_effectiveProfile, resolver, pseudonymizer, reverseMapper, report);
         var result = RunProcessor(content, inputName, options, transformer, report, progress, cancellationToken);
+
+        if (reverseMapper.AmbiguousCount > 0 && report.RuleHits.GetValueOrDefault("freitext") > 0)
+            report.Warn("mehrdeutigesPseudonym",
+                $"{reverseMapper.AmbiguousCount} Pseudonym(e) stehen in mehreren Namensräumen für " +
+                "verschiedene Klartexte. Im Freitext ist die Rückübersetzung dort mehrdeutig; es gilt " +
+                "jeweils der Eintrag des alphabetisch ersten Namensraums.");
+
+        // Eine deutliche Abschlusszeile statt nur Einzelbefunden: wer die
+        // Klartextdatei weitergibt, soll sehen, dass sie Pseudonyme enthaelt.
+        var unbekannt = report.Findings.Count(f => f.Kind == "unbekanntesPseudonym");
+        if (unbekannt > 0)
+            report.Warn("unbekanntePseudonyme",
+                $"{unbekannt} Wert(e) ließen sich nicht zurückführen und stehen unverändert in der " +
+                "Ausgabe. Stammt die Datei aus einem anderen Profil oder wurde sie nach dem " +
+                "Verschleiern verändert?");
 
         // Generatoren mit eigener Umkehrung (heute nur dateShift) rechnen ohne
         // Tabelleneintrag ueber den profilweiten Offset zurueck. Mit einem
@@ -305,7 +384,8 @@ public sealed class ObfuscationEngine
         TransferOpenWarnings(store, report);
 
         var resolver = CreateResolver(options);
-        var transformer = new ScanTransformer(_effectiveProfile, resolver, new TextRuleEngine(), store, report);
+        var generators = GeneratorRegistry.Build(_profile, new SeedDeriver(store.Salt), _extensions);
+        var transformer = new ScanTransformer(_effectiveProfile, resolver, new TextRuleEngine(), store, report, generators);
 
         // Das Ergebnis wird verworfen: geprueft wird, nicht veraendert.
         RunProcessor(content, inputName, options, transformer, report, progress, cancellationToken);
@@ -381,11 +461,75 @@ public sealed class ObfuscationEngine
     private MappingStore OpenStore(RunOptions options, bool readOnly)
         => MappingStore.Open(ResolveMappingStorePath(), _profile.ProfileName, readOnly, options.AllowUnsafeStore);
 
+    /// <summary>
+    /// Baut die Generatoren und setzt bei <c>dateShift</c> den in der Tabelle
+    /// festgehaltenen Versatz ein (Befund C3). Weicht der aus Salt und
+    /// <c>maxDays</c> abgeleitete Versatz davon ab, wurde die Einstellung nach
+    /// dem ersten Lauf geaendert; es gilt trotzdem der festgehaltene, sonst
+    /// rechnete die Rueckuebersetzung aelterer Dateien falsch zurueck. Der
+    /// Bericht nennt den Versatz selbst nicht: mit ihm liessen sich alle Daten
+    /// zurueckrechnen.
+    /// </summary>
+    private GeneratorRegistry BuildGenerators(SeedDeriver deriver, MappingStore store, RunReport? report)
+    {
+        var generators = GeneratorRegistry.Build(_profile, deriver, _extensions);
+        foreach (var (name, generator) in generators.All)
+        {
+            if (generator is not DateShiftGenerator dateShift || !store.TryGetDateOffset(name, out var stored))
+                continue;
+
+            if (stored != dateShift.OffsetDays)
+                report?.Warn("datumsversatzFestgehalten",
+                    $"Für '{name}' gilt der beim ersten Lauf festgehaltene Datumsversatz; mit den heutigen " +
+                    "Einstellungen (etwa maxDays) ergäbe sich ein anderer. So bleiben ältere Dateien " +
+                    "umkehrbar. Soll ein neuer Versatz gelten, einen neuen Generatoreintrag mit " +
+                    "\"type\": \"dateShift\" anlegen und die Feldregeln darauf umstellen.");
+
+            dateShift.SetOffsetDays(stored);
+        }
+        return generators;
+    }
+
+    /// <summary>
+    /// Haelt nach einem echten Lauf den Versatz jedes benutzten
+    /// <c>dateShift</c>-Namensraums fest, der noch keinen hat (Befund C3).
+    /// </summary>
+    private static void RecordDateOffsets(GeneratorRegistry generators, MappingStore store)
+    {
+        foreach (var (name, generator) in generators.All)
+        {
+            if (generator is DateShiftGenerator { WasUsed: true } dateShift)
+                store.SetDateOffset(name, dateShift.OffsetDays);
+        }
+    }
+
+    private Pseudonymizer CreatePseudonymizer(SeedDeriver deriver, GeneratorRegistry generators, MappingStore store)
+        => new(deriver, generators, store, _profile.Defaults.IsEffectivelyEmpty);
+
     private byte[] RunProcessor(
         byte[] content, string? inputName, RunOptions options, IRecordTransformer transformer,
         RunReport report, IProgress<RunProgress>? progress, CancellationToken cancellationToken)
     {
-        var format = ResolveFormat(options.Format, inputName);
+        var format = ResolveFormat(options.Format, inputName, out var guessed);
+
+        // Mangels bekannter Endung als Freitext: dort wirken weder die
+        // Feldregeln noch 'strict'. Eine CSV namens .dat liefe sonst mit
+        // Erfolgsmeldung unveraendert durch (Befund A6).
+        if (guessed)
+        {
+            var extension = Path.GetExtension(inputName);
+            var shown = string.IsNullOrEmpty(extension) ? "(keine Endung)" : extension;
+            if (options.Strict)
+                throw new ConfigurationException(
+                    $"Die Dateiendung {shown} ist unbekannt; die Datei würde als Freitext verarbeitet, in " +
+                    "dem nur Textregeln greifen. Im strengen Modus wird das nicht stillschweigend " +
+                    "angenommen: auf der Kommandozeile '--format text' (oder csv, json) setzen, oder " +
+                    "die Datei passend umbenennen (.txt, .csv, .json).");
+
+            report.Warn("formatUnbekannt",
+                $"Die Dateiendung {shown} ist unbekannt; die Datei wurde als Freitext verarbeitet. Dort " +
+                "greifen nur Textregeln, keine Feldregeln.");
+        }
 
         return format switch
         {
@@ -400,25 +544,50 @@ public sealed class ObfuscationEngine
 
     /// <summary>Bestimmt das Format aus der Vorgabe oder der Dateiendung.</summary>
     public static DataFormat ResolveFormat(DataFormat requested, string? inputName)
+        => ResolveFormat(requested, inputName, out _);
+
+    /// <summary>Endungen, die ausdruecklich Freitext bezeichnen.</summary>
+    private static readonly string[] TextExtensions = [".txt", ".text", ".md", ".markdown", ".log"];
+
+    /// <summary>
+    /// Wie <see cref="ResolveFormat(DataFormat, string?)"/>.
+    /// <paramref name="guessed"/> sagt, ob Freitext nur mangels bekannter
+    /// Endung gewaehlt wurde -- nicht bei ausdruecklichem Format, bekannter
+    /// Textendung oder der Standardeingabe (kein Dateiname).
+    /// </summary>
+    public static DataFormat ResolveFormat(DataFormat requested, string? inputName, out bool guessed)
     {
+        guessed = false;
         if (requested != DataFormat.Auto)
             return requested;
 
         var extension = string.IsNullOrEmpty(inputName) ? "" : Path.GetExtension(inputName).ToLowerInvariant();
 
-        return extension switch
+        switch (extension)
         {
-            ".csv" or ".tsv" => DataFormat.Csv,
-            ".json" => DataFormat.Json,
-            _ => DataFormat.Text,
-        };
+            case ".csv" or ".tsv":
+                return DataFormat.Csv;
+            case ".json":
+                return DataFormat.Json;
+            default:
+                guessed = !string.IsNullOrEmpty(inputName) && !TextExtensions.Contains(extension);
+                return DataFormat.Text;
+        }
     }
 
-    private RunReport StartReport(string command, string? inputName) => new()
+    private RunReport StartReport(string command, string? inputName)
     {
-        Command = command,
-        Input = inputName,
-    };
+        var report = new RunReport
+        {
+            Command = command,
+            Input = inputName,
+        };
+
+        foreach (var warning in _profileWarnings)
+            report.Warn("unbekannteEigenschaft", warning);
+
+        return report;
+    }
 
     private static void TransferOpenWarnings(MappingStore store, RunReport report)
     {

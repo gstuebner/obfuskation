@@ -1,5 +1,6 @@
 using Obfuskation.Core.Configuration;
 using Obfuskation.Core.Detection;
+using Obfuskation.Core.Generation;
 using Obfuskation.Core.Mapping;
 using Obfuskation.Core.Reporting;
 
@@ -21,6 +22,9 @@ public sealed class DeobfuscateTransformer : IRecordTransformer
     private readonly ReverseTextMapper _reverseMapper;
     private readonly RunReport _report;
 
+    /// <summary>Datumsformat je Feld, aus dem Vorablauf (<see cref="OnFieldValues"/>).</summary>
+    private readonly Dictionary<string, string> _dateFormats = new(StringComparer.Ordinal);
+
     public DeobfuscateTransformer(
         Profile profile,
         FieldRuleResolver resolver,
@@ -35,10 +39,60 @@ public sealed class DeobfuscateTransformer : IRecordTransformer
         _report = report;
     }
 
-    public void OnFields(IReadOnlyList<string> fieldNames)
+    public void OnFields(IReadOnlyList<FieldOccurrence> fields)
     {
-        foreach (var fieldName in fieldNames)
-            _report.FieldActions[fieldName] = _resolver.Resolve(fieldName).Action.ToString().ToLowerInvariant();
+        foreach (var field in fields)
+            _report.FieldActions[field.Name] = _resolver.Resolve(field.Name, field.JsonPath).Action.ToString().ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// Nur Generatoren mit eigener Umkehrung brauchen das Spaltenformat: alle
+    /// anderen schlagen den Wert woertlich in der Tabelle nach.
+    /// </summary>
+    public bool WantsValues(FieldOccurrence field)
+    {
+        var rule = _resolver.Resolve(field.Name, field.JsonPath);
+        var generatorName = rule.Generator ?? "token";
+        return rule.Action == FieldAction.Pseudonymize
+               && _pseudonymizer.HasIntrinsicInverse(generatorName)
+               && _pseudonymizer.DateFormatsOf(generatorName) is not null;
+    }
+
+    public void OnFieldValues(FieldOccurrence field, IReadOnlyCollection<string> values)
+    {
+        var rule = _resolver.Resolve(field.Name, field.JsonPath);
+        var generatorName = rule.Generator ?? "token";
+        var formats = _pseudonymizer.DateFormatsOf(generatorName);
+        if (formats is null)
+            return;
+
+        var relevant = values.Where(value => !_profile.Defaults.IsEffectivelyEmpty(value)).ToList();
+        var format = DateValues.DetermineColumnFormat(relevant, formats, generatorName, field.Name, out var candidates);
+        if (format is null)
+            return;
+
+        _dateFormats[field.Key] = format;
+
+        // Passen mehrere Formate auf die ganze Spalte (etwa "dd.MM.yyyy" und
+        // "d.M.yyyy", wenn kein Tag und kein Monat einstellig ist), steht die
+        // Schreibweise des Originals nicht fest. Das Datum stimmt in jedem
+        // Fall; nur die fuehrenden Nullen koennten abweichen.
+        foreach (var other in candidates.Skip(1))
+        {
+            foreach (var value in relevant)
+            {
+                if (_pseudonymizer.TryReverse(generatorName, value, out var a, format)
+                    && _pseudonymizer.TryReverse(generatorName, value, out var b, other)
+                    && a != b)
+                {
+                    _report.Warn("datumsschreibweiseUnklar",
+                        $"Im Feld '{field.Name}' passen die Datumswerte auf '{format}' und auf '{other}'. " +
+                        $"Zurückgerechnet wird in '{format}'; die Daten stimmen, führende Nullen können " +
+                        $"aber vom Original abweichen. Abhilfe: generators.{generatorName}.formats setzen.");
+                    return;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -61,7 +115,21 @@ public sealed class DeobfuscateTransformer : IRecordTransformer
             case FieldAction.Pseudonymize:
             {
                 var generatorName = rule.Generator ?? "token";
-                if (_pseudonymizer.TryReverse(generatorName, value, out var plaintext))
+                var key = jsonPath is null ? fieldName : JsonPathMatcher.Normalize(jsonPath);
+                _dateFormats.TryGetValue(key, out var dateFormat);
+
+                bool found;
+                string plaintext;
+                try
+                {
+                    found = _pseudonymizer.TryReverse(generatorName, value, out plaintext, dateFormat);
+                }
+                catch (GenerationException ex)
+                {
+                    throw ex.WithLocation(location);
+                }
+
+                if (found)
                 {
                     _report.CountHit(generatorName);
                     return plaintext;
@@ -98,6 +166,18 @@ public sealed class DeobfuscateTransformer : IRecordTransformer
             default:
                 return value;
         }
+    }
+
+    public string TransformNameless(string jsonPath, string value, string location)
+    {
+        var normalized = JsonPathMatcher.Normalize(jsonPath);
+        var rule = _resolver.Resolve(normalized, jsonPath);
+
+        // Ohne eigene Regel liefen namenlose Werte beim Verschleiern durch die
+        // Textregeln; zurueck geht es entsprechend ueber den Freitext.
+        return rule.IsFromDefault
+            ? (_profile.Defaults.IsEffectivelyEmpty(value) ? value : RestoreFreeText(value))
+            : TransformField(normalized, jsonPath, value, location);
     }
 
     public string TransformFreeText(string text, string location) => RestoreFreeText(text);
